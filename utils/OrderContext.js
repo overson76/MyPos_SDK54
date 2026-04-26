@@ -1,6 +1,5 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useMemo,
   useReducer,
@@ -37,18 +36,6 @@ export { PENDING_TABLE_ID };
 
 export function OrderProvider({ children }) {
   const [orders, dispatch] = useReducer(orderReducer, {});
-
-  // setOrders 호환 어댑터 — 마이그레이션 동안 consumer hooks
-  // (useSplits / useGroups / useDeliveryAlerts / useAutoClearDelivery /
-  // useOrderPersistence) 가 setOrders((prev) => next) 패턴을 그대로 사용한다.
-  // 5단계에서 모든 호출처가 정식 action 으로 이전된 후 어댑터 +
-  // 'orders/setOrdersCompat' 액션을 함께 제거 예정.
-  const setOrders = useCallback((updaterOrValue) => {
-    dispatch({
-      type: 'orders/setOrdersCompat',
-      updater: updaterOrValue,
-    });
-  }, []);
 
   const { splits, setSplits, isSplit, toggleSplit } = useSplits({
     orders,
