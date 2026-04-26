@@ -222,8 +222,14 @@ export default function KitchenScreen() {
 
   // 메뉴 id → 메뉴 정의 매핑 (color 추출용)
   const menuById = Object.fromEntries(menuItems.map((m) => [m.id, m]));
-  // 표기용 메뉴명에서 괄호와 그 안의 내용 제거 — 사이드바 가독성 향상
+  // 표기용 메뉴명에서 괄호와 그 안의 내용 제거 — shortName fallback 용
   const stripParens = (s) => (s || '').replace(/\s*\([^)]*\)\s*/g, '').trim();
+  // 주문현황 + 조리대기 표시용 단축명 — 메뉴 정의의 shortName 우선,
+  // 없으면 괄호 제거된 이름으로 fallback. 매장 화면 가독성 + TTS 와 동일한 규칙.
+  const shortMenuName = (item) => {
+    const def = menuById[item?.id];
+    return def?.shortName || stripParens(item?.name) || item?.name || '';
+  };
 
   const renderSidebar = () => (
     <View style={[styles.sidebar, { width: sidebarWidth }]}>
@@ -240,7 +246,7 @@ export default function KitchenScreen() {
             const total = v.normal + v.large;
             const def = menuById[v.id];
             const color = def?.color || '#6b7280';
-            const cleanName = stripParens(v.name) || v.name;
+            const cleanName = shortMenuName(v);
             const optLabels = v.options
               .map((oid) => OPTIONS_CATALOG.find((o) => o.id === oid)?.label)
               .filter(Boolean);
@@ -403,8 +409,9 @@ export default function KitchenScreen() {
                   {addedRows.map((r) => (
                     <View key={`ca-${r.item.slotId || r.item.id}`} style={styles.changeLine}>
                       <Text style={[styles.changeTag, styles.tagAdded]}>추가</Text>
-                      <Text style={styles.changeName} numberOfLines={1}>
-                        {r.item.name}
+                      {/* 변경사항은 매장 운영의 핵심 정보 — 메뉴명/대 표기/수량이 잘리지 않도록 줄바꿈 허용 */}
+                      <Text style={styles.changeName}>
+                        {shortMenuName(r.item)}
                         {(r.item.largeQty || 0) > 0 && (
                           <Text style={styles.largeTag}>
                             {(r.item.largeQty || 0) === r.item.qty
@@ -450,11 +457,11 @@ export default function KitchenScreen() {
                     return (
                       <View key={`cc-${r.item.slotId || r.item.id}`} style={styles.changeLine}>
                         <Text style={[styles.changeTag, styles.tagChanged]}>변경</Text>
+                        {/* 변경 detail (수량/대보통/옵션 +/-) 가 길어도 잘리지 않도록 줄바꿈 허용 */}
                         <Text
                           style={[styles.changeName, styles.changeNameInline]}
-                          numberOfLines={1}
                         >
-                          {r.item.name}
+                          {shortMenuName(r.item)}
                           {detail.length > 0 && (
                             <Text style={styles.changeDetailInline}>
                               {' · '}
@@ -470,9 +477,8 @@ export default function KitchenScreen() {
                       <Text style={[styles.changeTag, styles.tagRemoved]}>취소</Text>
                       <Text
                         style={[styles.changeName, styles.text_removed]}
-                        numberOfLines={1}
                       >
-                        {r.item.name}
+                        {shortMenuName(r.item)}
                       </Text>
                       <Text style={[styles.changeValue, styles.text_removed]}>
                         ×{r.previousQty ?? (r.item.qty || 1)}
@@ -567,15 +573,10 @@ export default function KitchenScreen() {
                           if (allOthersCooked && !hasBothPortions) {
                             speakFullReady({ table: o.table });
                           } else {
-                            // 음성 안내용 단축명 — shortName 우선, 없으면 괄호 제거된 이름
-                            const def = menuById[r.item.id];
-                            const spokenName =
-                              def?.shortName ||
-                              stripParens(r.item.name) ||
-                              r.item.name;
+                            // 음성 안내도 화면 표시와 동일한 shortMenuName 규칙
                             speakPartialReady({
                               table: o.table,
-                              itemName: spokenName,
+                              itemName: shortMenuName(r.item),
                             });
                           }
                         }
@@ -609,7 +610,7 @@ export default function KitchenScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {r.item.name}
+                          {shortMenuName(r.item)}
                           {sizeLabel && (
                             <Text
                               style={
@@ -623,6 +624,7 @@ export default function KitchenScreen() {
                             </Text>
                           )}
                         </Text>
+                        {/* 옵션은 매장 주문 정확도 핵심 — 잘리지 않도록 줄바꿈 허용 */}
                         {optLabels.length > 0 && (
                           <Text
                             style={[
@@ -630,7 +632,6 @@ export default function KitchenScreen() {
                               isPhone && styles.itemOptLinePhone,
                               isCooked && styles.text_cooked,
                             ]}
-                            numberOfLines={2}
                           >
                             {optLabels.join(' · ')}
                           </Text>
@@ -666,7 +667,8 @@ export default function KitchenScreen() {
                     </TouchableOpacity>
                     );
                   };
-                  // 메모는 같은 항목 묶음 최상단에 한 번만 표시
+                  // 메모는 같은 항목 묶음 최상단에 한 번만 표시.
+                  // 매장 운영의 핵심 정보 — 잘리지 않도록 줄바꿈 허용 (numberOfLines 제거).
                   if (r.item.memo) {
                     out.push(
                       <View
@@ -675,7 +677,6 @@ export default function KitchenScreen() {
                       >
                         <Text
                           style={[styles.itemMemoText, isPhone && styles.itemMemoTextPhone]}
-                          numberOfLines={2}
                         >
                           📝 {r.item.memo}
                         </Text>
@@ -710,7 +711,7 @@ export default function KitchenScreen() {
                       style={[styles.itemName, styles.text_removed]}
                       numberOfLines={1}
                     >
-                      {r.item.name}
+                      {shortMenuName(r.item)}
                     </Text>
                     <Text style={[styles.itemQty, styles.text_removed]}>
                       ×{r.previousQty ?? (r.item.qty || 1)}
