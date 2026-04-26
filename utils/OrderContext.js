@@ -66,7 +66,7 @@ export function OrderProvider({ children }) {
 
   useOrderPersistence({
     orders,
-    setOrders,
+    dispatch,
     splits,
     setSplits,
     groups,
@@ -77,8 +77,8 @@ export function OrderProvider({ children }) {
     setAddressBook,
   });
 
-  useDeliveryAlerts({ orders, setOrders });
-  useAutoClearDelivery({ orders, setOrders, setRevenue, bumpAddress });
+  useDeliveryAlerts({ orders, dispatch });
+  useAutoClearDelivery({ orders, dispatch, setRevenue, bumpAddress });
 
   const value = useMemo(() => {
     // 분할 정리 — dispatch 직후의 next orders 를 인자로 받아 #1/#2 둘 다 비었는지 검사.

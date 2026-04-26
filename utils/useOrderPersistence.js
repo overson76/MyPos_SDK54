@@ -8,9 +8,10 @@ import {
 
 // OrderProvider 의 영속화 책임을 캡슐화 — 마운트 1회 hydration + 5개 state 디바운스 저장.
 // 반환된 hydrated 가 true 가 되기 전에는 디스크 쓰기 effect 가 noop 이라 깨끗한 초기 로드 보장.
+// orders 만 reducer 기반이라 dispatch 를 받고, 나머지 4개는 useState 기반이라 setter 그대로.
 export function useOrderPersistence({
   orders,
-  setOrders,
+  dispatch,
   splits,
   setSplits,
   groups,
@@ -34,7 +35,9 @@ export function useOrderPersistence({
         'addressBook',
       ]);
       if (cancelled) return;
-      if (data.orders && typeof data.orders === 'object') setOrders(data.orders);
+      if (data.orders && typeof data.orders === 'object') {
+        dispatch({ type: 'orders/hydrate', payload: data.orders });
+      }
       if (data.splits && typeof data.splits === 'object') setSplits(data.splits);
       if (data.groups && typeof data.groups === 'object') setGroups(data.groups);
       if (data.revenue && typeof data.revenue === 'object') {
