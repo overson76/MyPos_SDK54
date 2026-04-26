@@ -5,6 +5,11 @@ import { registerRootComponent } from 'expo';
 import { initSentry } from './utils/sentry';
 initSentry();
 
+// Firebase 도 App import 전에 초기화 (네이티브 측은 자동 init, JS 측 후처리만).
+// 실패해도 앱 부팅은 계속 — initFirebase 는 fire-and-forget.
+import { initFirebase } from './utils/firebase';
+initFirebase().catch(() => {});
+
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

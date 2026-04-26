@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   Platform,
   StyleSheet,
@@ -15,9 +16,11 @@ import OrderTab from './components/OrderTab';
 import PinchZoom from './components/PinchZoom';
 import KitchenScreen from './screens/KitchenScreen';
 import AdminScreen from './screens/AdminScreen';
+import AuthScreen from './screens/AuthScreen';
 import { OrderProvider } from './utils/OrderContext';
 import { MenuProvider } from './utils/MenuContext';
 import { LockProvider } from './utils/LockContext';
+import { StoreProvider, useStore, STORE_STATE } from './utils/StoreContext';
 import { useResponsive } from './utils/useResponsive';
 import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
@@ -49,7 +52,51 @@ function CrashFallback({ error, resetError }) {
 
 const TAB_KEYS = ['테이블', '주문', '주문현황', '관리자'];
 
+// App 의 최상위는 Provider 트리 + Gate. Gate 가 매장 가입 상태에 따라 분기:
+//   loading                → SplashView
+//   unjoined / pendingApproval → AuthScreen
+//   joined                 → 기존 LockProvider/MenuProvider/OrderProvider + MainApp
+// 가입 안 된 상태에서는 LockProvider 등이 mount 안 됨 → AsyncStorage 읽기 폭주 방지.
 export default function App() {
+  return (
+    <SentryErrorBoundary fallback={CrashFallback}>
+      <SafeAreaProvider>
+        <StoreProvider>
+          <Gate />
+        </StoreProvider>
+      </SafeAreaProvider>
+    </SentryErrorBoundary>
+  );
+}
+
+function Gate() {
+  const { state } = useStore();
+  if (state === STORE_STATE.LOADING) {
+    return <SplashView />;
+  }
+  if (state !== STORE_STATE.JOINED) {
+    return <AuthScreen />;
+  }
+  return (
+    <LockProvider>
+      <MenuProvider>
+        <OrderProvider>
+          <MainApp />
+        </OrderProvider>
+      </MenuProvider>
+    </LockProvider>
+  );
+}
+
+function SplashView() {
+  return (
+    <View style={styles.splash}>
+      <ActivityIndicator size="large" color="#2563eb" />
+    </View>
+  );
+}
+
+function MainApp() {
   const [activeTab, setActiveTab] = useState('테이블');
   const [tableResetSignal, setTableResetSignal] = useState(0);
   const [selectedTable, setSelectedTable] = useState(null);
@@ -111,94 +158,79 @@ export default function App() {
   };
 
   return (
-    <SentryErrorBoundary fallback={CrashFallback}>
-    <SafeAreaProvider>
-      <LockProvider>
-      <MenuProvider>
-      <OrderProvider>
-        <SafeAreaView
-          style={styles.root}
-          edges={['top', 'left', 'right', 'bottom']}
-        >
-          <PinchZoom>
-            <View style={styles.zoomRoot}>
-              <View style={styles.topTabs}>
-                {TAB_KEYS.map((key) => {
-                  const isActive = activeTab === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.tabBtn,
-                        isMobile && styles.tabBtnMobile,
-                        isActive && styles.tabBtnActive,
-                      ]}
-                      onPress={() => handleTabPress(key)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[styles.tabText, isMobile && styles.tabTextMobile, isActive && styles.tabTextActive]}
-                      >
-                        {key}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+      <PinchZoom>
+        <View style={styles.zoomRoot}>
+          <View style={styles.topTabs}>
+            {TAB_KEYS.map((key) => {
+              const isActive = activeTab === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.tabBtn,
+                    isMobile && styles.tabBtnMobile,
+                    isActive && styles.tabBtnActive,
+                  ]}
+                  onPress={() => handleTabPress(key)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.tabText,
+                      isMobile && styles.tabTextMobile,
+                      isActive && styles.tabTextActive,
+                    ]}
+                  >
+                    {key}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-              <View style={styles.body}>
-                <View
-                  style={[
-                    styles.pane,
-                    activeTab !== '테이블' && styles.paneHidden,
-                  ]}
-                >
-                  <OrderFlow
-                    resetSignal={tableResetSignal}
-                    selectedTable={selectedTable}
-                    setSelectedTable={chooseTable}
-                    lastSelectedTableId={lastSelectedTableId}
-                    autoConfirmIntent={autoConfirmIntent}
-                    clearAutoConfirmIntent={() => setAutoConfirmIntent(false)}
-                  />
-                </View>
-                <View
-                  style={[styles.pane, activeTab !== '주문' && styles.paneHidden]}
-                >
-                  <OrderTab
-                    selectedTable={selectedTable}
-                    setSelectedTable={chooseTable}
-                    onGoToTables={() => handleTabPress('테이블')}
-                    onRequestOrderWithTable={requestOrderViaTable}
-                  />
-                </View>
-                <View
-                  style={[
-                    styles.pane,
-                    activeTab !== '주문현황' && styles.paneHidden,
-                  ]}
-                >
-                  <KitchenScreen />
-                </View>
-                <View
-                  style={[
-                    styles.pane,
-                    activeTab !== '관리자' && styles.paneHidden,
-                  ]}
-                >
-                  <AdminScreen />
-                </View>
-              </View>
+          <View style={styles.body}>
+            <View
+              style={[styles.pane, activeTab !== '테이블' && styles.paneHidden]}
+            >
+              <OrderFlow
+                resetSignal={tableResetSignal}
+                selectedTable={selectedTable}
+                setSelectedTable={chooseTable}
+                lastSelectedTableId={lastSelectedTableId}
+                autoConfirmIntent={autoConfirmIntent}
+                clearAutoConfirmIntent={() => setAutoConfirmIntent(false)}
+              />
             </View>
-          </PinchZoom>
+            <View
+              style={[styles.pane, activeTab !== '주문' && styles.paneHidden]}
+            >
+              <OrderTab
+                selectedTable={selectedTable}
+                setSelectedTable={chooseTable}
+                onGoToTables={() => handleTabPress('테이블')}
+                onRequestOrderWithTable={requestOrderViaTable}
+              />
+            </View>
+            <View
+              style={[
+                styles.pane,
+                activeTab !== '주문현황' && styles.paneHidden,
+              ]}
+            >
+              <KitchenScreen />
+            </View>
+            <View
+              style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
+            >
+              <AdminScreen />
+            </View>
+          </View>
+        </View>
+      </PinchZoom>
 
-          <StatusBar style="dark" />
-        </SafeAreaView>
-      </OrderProvider>
-      </MenuProvider>
-      </LockProvider>
-    </SafeAreaProvider>
-    </SentryErrorBoundary>
+      <StatusBar style="dark" />
+    </SafeAreaView>
   );
 }
 
@@ -226,6 +258,13 @@ const styles = StyleSheet.create({
   body: { flex: 1, position: 'relative', backgroundColor: '#fff' },
   pane: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   paneHidden: { display: 'none' },
+
+  splash: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   crashRoot: {
     flex: 1,
