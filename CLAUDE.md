@@ -1,0 +1,188 @@
+# MyPos_SDK54
+
+소형 매장(배달 + 홀)을 위한 Expo / React Native POS 앱.
+
+## 환경
+
+- **Expo SDK 54**, React Native 0.81, React 19. Metro / new architecture (`newArchEnabled: true`).
+- JS 전용 (TypeScript 미사용). 파일 단위 함수형 컴포넌트 + Hooks.
+- 화면 방향 **landscape 고정** (`app.json`).
+- 주요 타깃: iPhone Pro Max (가로 932×430), Android 태블릿/에뮬레이터.
+
+## 실행
+
+```bash
+npm install
+npm start          # Expo Dev
+npm run ios        # iOS 시뮬레이터
+npm run android    # Android 에뮬레이터
+npm run web        # 웹 미리보기 (Pinch zoom 등 일부 동작은 네이티브 전용)
+```
+
+## 최상위 구조
+
+```
+App.js                 # 4탭 라우팅 (테이블/주문/주문현황/관리자) + Provider 트리
+index.js               # Expo 엔트리
+app.json               # Expo manifest
+package.json
+components/            # 재사용 UI (모달, PIN 입력, 핀치줌 등)
+screens/               # 탭 단위 메인 화면
+utils/                 # 도메인 로직 + Context + 영속화 + 알림
+assets/sounds/         # 알림 톤 (네이티브 전용 WAV)
+scripts/gen_sounds.js  # WAV 생성 스크립트
+docs/                  # 스크린샷, 디버그용 HTML (gitignored)
+```
+
+## 탭 구조 (App.js)
+
+```
+SafeAreaProvider
+└─ LockProvider          # PIN 잠금 / 자동 잠금 상태
+   └─ MenuProvider       # 메뉴 카탈로그 + 카테고리
+      └─ OrderProvider   # 테이블별 주문, 매출 history, 배달 주소록
+         └─ PinchZoom    # 손가락 핀치로 전체 줌 인/아웃
+            ├─ 테이블    → screens/TableScreen.js (via components/OrderFlow.js)
+            ├─ 주문      → screens/OrderScreen.js (via components/OrderTab.js)
+            ├─ 주문현황  → screens/KitchenScreen.js
+            └─ 관리자    → screens/AdminScreen.js
+                          ├─ 메뉴 관리 → SettingScreen.js
+                          ├─ 수익 현황 → RevenueScreen.js (LockGate 로 PIN 보호)
+                          └─ 시스템   → AdminScreen 내부 SystemSettingsView
+```
+
+탭은 모두 mount 상태로 두고 `display: none` 토글 — 탭 이동 시 상태 유지를 위해.
+
+## Context 책임
+
+| Context | 파일 | 역할 |
+|---|---|---|
+| `OrderContext` | `utils/OrderContext.js` | 테이블별 주문 슬롯, 확정/미확정 상태, 매출 history, 배달 주소록, 주소록 PII 7일 만료 |
+| `MenuContext` | `utils/MenuContext.js` | 메뉴 카탈로그 (이름/가격/이미지/카테고리), CRUD |
+| `LockContext` | `utils/LockContext.js` | PIN 잠금/해제, 자동 잠금 타이머, 백그라운드 즉시 잠금 |
+
+## 핵심 도메인 개념
+
+- **slot**: 한 메뉴 항목의 한 묶음. 동일 (id + 옵션 + 메모 + cookState) 가 합쳐짐 (`OrderContext` 의 `normalizeSlots`). slotId 는 `genSlotId()` 로 생성.
+- **largeQty / qty**: 한 메뉴를 "대"와 "보통"으로 동시에 주문 가능. 표시는 `utils/itemSplit.js` 가 한 행씩 분리.
+- **confirmed vs current**: 주방으로 넘어간 확정분 vs 작업 중 장바구니. 차이는 `utils/orderDiff.js` 의 `computeDiffRows` 가 added/changed/removed/unchanged 로 분류.
+- **PENDING_TABLE_ID** = `'__pending__'`: 테이블 미선택 상태에서 먼저 담는 가상 테이블.
+
+## 영속화 (utils/persistence.js)
+
+- AsyncStorage. 키 prefix `mypos:v1:` (스키마 버전 포함, 향후 마이그레이션 대비).
+- `loadJSON / loadMany / saveJSON / removeKey` — parse 실패 시 fallback 반환 (절대 throw 안 함).
+- `makeDebouncedSaver(delay)` — 키별 디바운스로 디스크 쓰기 폭주 방지. OrderContext 가 사용.
+- 민감값(PIN) 은 `expo-secure-store` (`utils/pinLock.js`).
+
+## 음성 / 사운드 (utils/notify.js)
+
+- 네이티브: `expo-audio` 가 `assets/sounds/*.wav` 재생.
+- 웹: Web Audio API 로 동일 시퀀스의 사인파 톤 합성.
+- TTS: `expo-speech` (한국어). 웹은 `window.speechSynthesis`.
+- **개인정보 정책**: 배달 주소 음성 안내는 기본 OFF (`_speakAddress`). 매장 스피커로 손님 주소 누설 방지.
+- 볼륨은 모듈 단일 진실 소스 (`_volume`). UI 가 `setVolume()` 로 갱신, AsyncStorage 영속화는 호출부 책임.
+
+## 입력 검증 (utils/validate.js)
+
+- 정책: **가능하면 잘라서 통과(silent clamp), 명백히 잘못된 형식만 무효화**. 앱이 멎지 않게.
+- 길이 상한: 메뉴명 30, 짧은 메뉴명 12, 메뉴 가격 천만원, 배달 주소 200, 이미지 dataURL 2MB.
+- 제어문자(NUL/탭/CR/LF) 제거. 일반 공백/하이픈은 보존.
+
+## 시간 (utils/timeUtil.js)
+
+- 배달 시간 입력: "420" / "4:20" / "1220" / "12:20" + AM/PM → `{h, m, h24, period}`.
+- 12시간 형식만 허용 (`h: 1-12`).
+- `formatKorean12h({h:4,m:20,period:'PM'})` → `"오후 4시 20분"`.
+
+## 반응형 (utils/useResponsive.js)
+
+- breakpoint: xs(<600) / sm(<900) / md(<1200) / lg(>=1200).
+- `isNarrow = width < 900` — 모바일 모드 분기에 가장 자주 사용.
+
+## PIN 잠금 (utils/LockContext.js + utils/pinLock.js)
+
+- 4자리 PIN. `expo-secure-store` 에 해시 저장 (평문 저장 X).
+- 자동 잠금: 비활성 N분 후 (Slider 1-30분, 기본값 LockContext 참조).
+- 백그라운드 진입 시 즉시 잠금 (AppState 리스너).
+- 보호 영역: **수익 현황 / 시스템 설정의 PIN 변경** (`LockGate` 컴포넌트로 감쌈).
+
+## 코딩 컨벤션
+
+- **응답 / 주석 / 커밋 메시지: 한국어** (사용자 메모리).
+- 함수형 컴포넌트 + Hooks. 클래스 컴포넌트 사용 X.
+- 스타일: 컴포넌트 하단 `StyleSheet.create({...})` (RN 표준 패턴).
+- 절대 import X. 항상 상대 경로 (`../utils/...`).
+- 절대 단위는 픽셀, 색상은 hex (`#111827` 등 Tailwind 계열 톤).
+- 주석은 **WHY** 만. WHAT 은 식별자로 충분. 이미 있는 보존성 있는 주석은 그대로 둘 것 (도메인 정책/PII 만료 같은 부분).
+- 외부 통신 / 네트워크 모듈 없음 — 100% 로컬 앱.
+
+## 플랫폼별 주의
+
+- **iOS new architecture**: `<Modal>` + 중첩 `<Pressable>` 호환 이슈 발견됨. `AdminScreen.js` 의 PIN 모달은 absolute 오버레이로 우회.
+- **Android**: `BackHandler` 로 하드웨어 뒤로가기 처리 (`App.js`). 비-테이블 탭 → 테이블 → 선택 해제 → OS 처리 순.
+- **Web**: 일부 네이티브 API 차이 — `notify.js` 가 분기. 핀치줌은 네이티브 우선.
+- SafeArea 인셋 필수 (사용자 메모리: 노치/홈인디케이터 영역 침범 주의).
+
+## 큰 파일 / 분리 패턴
+
+화면별 styles 는 옆 파일로 분리:
+- `screens/OrderScreen.js` (1,491) + `OrderScreen.styles.js` (876)
+- `screens/TableScreen.js` (956) + `TableScreen.styles.js` (471)
+- `screens/KitchenScreen.js` (760) + `KitchenScreen.styles.js` (477)
+
+수정시 두 파일을 같이 봐야 함. import 패턴: `import styles from './<Screen>.styles'`.
+
+OrderContext 의 순수 helper 는 `utils/orderHelpers.js` 로 분리됨 — `normalizeSlots`, `mergeOrderParts`, `sweepHistoryPII`, `genSlotId`, `localDateString`, `normalizeAddressKey`, `capHistory`, `resolveTableForAlert`. Jest 단위 테스트가 `__tests__/orderHelpers.test.js` 에 있으므로 동작 변경시 테스트도 갱신.
+
+추가 분할 후보:
+- `utils/OrderContext.js` — 1,333줄. provider 본체. reducer 분리 / hook 단위 추출 여지.
+- `screens/OrderScreen.js` — 1,491줄. 카테고리/메뉴 그리드 + 옵션 패널 + 확인 모달 분리 가능.
+- `screens/SettingScreen.js` — 880+ 줄.
+
+## 에러 추적 (Sentry)
+
+### 코드 구조
+- `@sentry/react-native` 설치. `app.json` `plugins` 에 `"@sentry/react-native"` 등록.
+- `utils/sentry.js` — 네이티브 init + helper. DSN 은 `process.env.EXPO_PUBLIC_SENTRY_DSN` 에서 로드.
+- `utils/sentry.web.js` — 웹 번들용 no-op 스텁 (metro 의 `@sentry/browser` 해석 이슈 회피).
+- `metro.config.js` — `@sentry/react-native/metro` 의 `getSentryExpoConfig` 로 wrap. source map 자동 업로드용.
+- `index.js` 에서 `App` import 전에 `initSentry()` 호출 → 초기 import 단계 에러도 캡처.
+- `App.js` 최상위에 `<SentryErrorBoundary fallback={CrashFallback}>` — React 렌더 에러 차단 + 한국어 복구 UI.
+- DSN 이 비어있으면 `initSentry()` 조용히 skip — 미설정 상태로도 앱 정상 부팅.
+
+### 헬퍼
+- `reportError(error, extra?)` — try/catch 의 catch 에서 의도한 에러 직접 보고.
+- `addBreadcrumb(message, data?)` — 매장 흐름의 의미있는 액션을 기록. 크래시 시 직전 5~10개 자동 첨부됨.
+- 이미 심어진 breadcrumb (`utils/OrderContext.js`, `utils/LockContext.js`):
+  `order.confirm`, `order.markPaid`, `order.markReady`, `order.clearTable`, `table.moveOrder`, `table.toggleSplit`, `admin.unlockAttempt`, `admin.lock`.
+
+### 환경변수
+- `.env` (gitignored) 에 `EXPO_PUBLIC_SENTRY_DSN=https://...` — 로컬/개발용.
+- `.env.example` (커밋됨) 에 빈 템플릿 — 새 환경 셋업 가이드.
+- `EXPO_PUBLIC_*` prefix 변수는 빌드 시 클라이언트 번들에 inline 됨 (DSN 은 공개 키라 OK).
+- DSN 외 source map 업로드용: `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` — EAS Secret 으로 등록.
+
+### 진단 버튼 (개발 전용)
+- 관리자 → 시스템 → "진단 (개발 빌드)" 섹션에 "🐞 테스트 전송" 버튼.
+- `__DEV__` 가드 — 운영 빌드에서는 자동 숨김.
+
+### EAS / 운영 빌드 셋업
+1. EAS Secret 으로 `SENTRY_AUTH_TOKEN` 등록 (`eas secret:create --name SENTRY_AUTH_TOKEN --value <token>`).
+   - Auth Token 은 Sentry → Settings → Auth Tokens 에서 생성. scope: `project:releases`, `org:read` 필요.
+2. `SENTRY_ORG`, `SENTRY_PROJECT` 도 같은 방식으로 EAS Secret 등록 (또는 `eas.json` 의 `env` 직접 명시).
+3. `eas build` 시 `eas.json` 의 build profile 이 위 변수들을 환경에 매핑 → Sentry plugin 이 자동으로 release 생성 + source map 업로드.
+4. 결과: Sentry Issues 의 stack trace 가 `bundle.js:1:53219` 같은 minified 위치 대신 `screens/OrderScreen.js:847` 같은 원본 위치로 표시됨.
+
+## 테스트
+
+- Jest. `__tests__/` 디렉토리.
+- 우선 순수 로직만: `orderDiff`, `validate`, `itemSplit`, `persistence`, `timeUtil`.
+- React Native 컴포넌트 테스트는 `@testing-library/react-native` 가 필요하면 추후 도입.
+- 실행: `npm test`.
+
+## Git
+
+- 메인 브랜치: `main`. 작업 브랜치: 자유 (`master` 등 사용 중).
+- 디버그 산출물(`docs/screenshots/`, `android-*.png`, `expo-qr.png`) 은 `.gitignore`.
+- `.idea/`, `.expo/` 도 ignored.

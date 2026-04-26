@@ -1,0 +1,59 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files — DSN, secrets 등.
+# .env.example 은 비밀값 없는 템플릿이라 커밋 OK.
+.env
+.env.*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# debug screenshots / scratch artifacts
+docs/screenshots/
+docs/*.html
+android-*.png
+expo-qr.png
+
+# editor / OS
+.idea/
+Thumbs.db
+
+# Claude Code 사용자별 설정 — launch.json 만 공유, 나머지는 로컬
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/

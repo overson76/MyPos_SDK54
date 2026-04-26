@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "MyPos_SDK54",
+    "slug": "MyPos_SDK54",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-audio",
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "메뉴 이미지를 변경하기 위해 사진 라이브러리에 접근합니다.",
+          "cameraPermission": "메뉴 이미지를 촬영하기 위해 카메라를 사용합니다."
+        }
+      ],
+      "expo-secure-store",
+      "@sentry/react-native"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "375f34f1-9693-4b5a-9ed4-eaa143edf2bb"
+      }
+    },
+    "owner": "cadpia"
+  }
+}
