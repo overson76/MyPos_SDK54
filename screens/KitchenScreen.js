@@ -270,11 +270,16 @@ export default function KitchenScreen() {
               >
                 <View style={[styles.sidebarColorDot, { backgroundColor: color }]} />
                 <View style={styles.sidebarRowTextWrap}>
-                  <Text style={styles.sidebarRowName} numberOfLines={1}>
+                  {/* 메뉴명 + 대 라벨 inline. 메뉴명이 길면 줄바꿈 허용 (numberOfLines 제거). */}
+                  <Text style={styles.sidebarRowName}>
                     {cleanName}
+                    {v.large > 0 && (
+                      <Text style={styles.largeTag}> 대</Text>
+                    )}
                   </Text>
+                  {/* 옵션은 매장 식별 핵심 — 잘리지 않도록 줄바꿈 허용 */}
                   {hasOpts && (
-                    <Text style={styles.sidebarRowOpts} numberOfLines={2}>
+                    <Text style={styles.sidebarRowOpts}>
                       {optLabels.join(' · ')}
                     </Text>
                   )}
