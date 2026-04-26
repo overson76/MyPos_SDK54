@@ -8,7 +8,7 @@
 //   CREATED        — 매장 생성 직후: 매장 코드 큰 글씨로 표시 (직원에게 전달용)
 //   (state === PENDING_APPROVAL 시 별도 대기 화면)
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import {
   formatStoreCode,
   normalizeStoreCode,
 } from '../utils/storeOps';
+import { migrateLocalToCloud } from '../utils/migrateLocalToCloud';
 
 const MODE = {
   HOME: 'home',
@@ -38,6 +39,7 @@ const MODE = {
   JOIN_INPUT: 'joinInput',
   JOIN_CONFIRM: 'joinConfirm',
   CREATED: 'created',
+  MIGRATING: 'migrating',
 };
 
 export default function AuthScreen() {
@@ -171,7 +173,10 @@ export default function AuthScreen() {
             />
           )}
           {mode === MODE.CREATED && createdResult && (
-            <CreatedView result={createdResult} onContinue={() => markJoined(createdResult)} />
+            <CreatedView result={createdResult} onContinue={() => setMode(MODE.MIGRATING)} />
+          )}
+          {mode === MODE.MIGRATING && createdResult && (
+            <MigratingView result={createdResult} onDone={() => markJoined(createdResult)} />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -362,6 +367,81 @@ function CreatedView({ result, onContinue }) {
   );
 }
 
+// ── 매장 생성 직후: 기존 로컬 데이터 → Firestore 업로드 ─────────
+// 진행률 표시. 완료되면 onDone() → markJoined → 메인 앱 진입.
+// 실패 시에도 "그래도 시작" 버튼으로 빈 매장 진입 허용 (매장 자체는 이미 생성됨).
+function MigratingView({ result, onDone }) {
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [error, setError] = useState(null);
+  const [finished, setFinished] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await migrateLocalToCloud({
+          storeId: result.storeId,
+          onProgress: (p) => {
+            if (!cancelled) setProgress(p);
+          },
+        });
+        if (cancelled) return;
+        setFinished(true);
+        // 완료 표시를 잠깐 보여주고 입장
+        setTimeout(() => {
+          if (!cancelled) onDone();
+        }, 700);
+      } catch (e) {
+        if (!cancelled) setError(e?.message || '데이터 업로드 실패');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [result.storeId, onDone]);
+
+  if (error) {
+    return (
+      <View style={styles.formCenter}>
+        <Text style={styles.errorTitle}>업로드 실패</Text>
+        <Text style={styles.note}>{error}</Text>
+        <Text style={styles.note}>
+          매장은 이미 만들어졌습니다. 그대로 시작하면 빈 매장으로 들어가며, 메뉴/매출 등은 새로
+          입력해야 합니다.
+        </Text>
+        <TouchableOpacity style={styles.submitBtn} onPress={onDone}>
+          <Text style={styles.submitBtnText}>그래도 시작</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  return (
+    <View style={styles.formCenter}>
+      <Text style={styles.formTitle}>
+        {finished ? '업로드 완료' : '기존 데이터 업로드 중...'}
+      </Text>
+      <Text style={styles.formSub}>
+        {finished
+          ? '잠시 후 시작합니다'
+          : progress.total > 0
+            ? `${progress.done} / ${progress.total} 항목 (${pct}%)`
+            : '준비 중...'}
+      </Text>
+      {!finished && (
+        <ActivityIndicator size="large" color="#2563eb" style={{ marginTop: 16 }} />
+      )}
+      {progress.total > 0 && (
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${pct}%` }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
 function BackBtn({ onPress }) {
   return (
     <TouchableOpacity style={styles.backBtn} onPress={onPress} activeOpacity={0.7}>
@@ -523,4 +603,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   cancelBtnText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
+
+  errorTitle: { fontSize: 20, fontWeight: '800', color: '#b91c1c', marginBottom: 12 },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    marginTop: 20,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#2563eb',
+    borderRadius: 4,
+  },
 });
