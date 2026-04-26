@@ -18,6 +18,7 @@ import {
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
 import { useOrderPersistence } from './useOrderPersistence';
+import { useOrderFirestoreSync } from './useOrderFirestoreSync';
 import { useDeliveryAlerts } from './useDeliveryAlerts';
 import { useAutoClearDelivery } from './useAutoClearDelivery';
 import { useAddressBook } from './useAddressBook';
@@ -63,6 +64,21 @@ export function OrderProvider({ children }) {
   } = useAddressBook();
 
   useOrderPersistence({
+    orders,
+    setOrders,
+    splits,
+    setSplits,
+    groups,
+    setGroups,
+    revenue,
+    setRevenue,
+    addressBook,
+    setAddressBook,
+  });
+
+  // 매장 단위 클라우드 동기화 — orders / splits / groups / revenue / addressBook 전부.
+  // AsyncStorage(useOrderPersistence) 와 듀얼로 동작 (안전 우선).
+  useOrderFirestoreSync({
     orders,
     setOrders,
     splits,

@@ -51,8 +51,9 @@ async function storeDelete(key) {
   } catch (e) {}
 }
 
-function genSalt() {
-  // 16바이트 랜덤 salt → 32-char hex
+// 16바이트 랜덤 salt → 32-char hex.
+// 기기 PIN 과 매장 공유 수익 PIN 양쪽에서 재사용 (revenuePin.js 도 import).
+export function genSalt() {
   const bytes = new Uint8Array(16);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(bytes);
@@ -66,7 +67,7 @@ function genSalt() {
     .join('');
 }
 
-async function hashPin(pin, salt) {
+export async function hashPin(pin, salt) {
   // SHA-256(salt + pin) → hex 문자열
   const input = `${salt}:${pin}`;
   return Crypto.digestStringAsync(

@@ -97,6 +97,9 @@ export function StoreProvider({ children }) {
           ownerId: store?.ownerId || null,
           role: member.role,
           displayName: member.displayName || null,
+          // 매장 공유 수익 PIN — 미설정 시 null. RevenueLockGate 가 검증에 사용.
+          revenuePinHash: store?.revenuePinHash || null,
+          revenuePinSalt: store?.revenuePinSalt || null,
         };
         setStoreInfo(next);
         await saveJSON(CACHE_KEY, { storeId, role: member.role });

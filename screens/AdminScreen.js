@@ -15,6 +15,8 @@ import Slider from '@react-native-community/slider';
 import SettingScreen from './SettingScreen';
 import RevenueScreen from './RevenueScreen';
 import LockGate from '../components/LockGate';
+import RevenueLockGate from '../components/RevenueLockGate';
+import StoreManagementSection from '../components/StoreManagementSection';
 import PinEntry from '../components/PinEntry';
 import {
   getSpeakAddress,
@@ -169,8 +171,11 @@ function SystemSettingsView() {
       contentContainerStyle={{ paddingBottom: 24 }}
       showsVerticalScrollIndicator
     >
-      {/* === 보안 / PIN 잠금 === */}
-      <Text style={sysStyles.sectionTitle}>보안 / 관리자 잠금</Text>
+      {/* === 매장 관리 (매장 정보 + 수익 PIN, 대표 전용 항목 포함) === */}
+      <StoreManagementSection />
+
+      {/* === 보안 / PIN 잠금 (기기 PIN — 자동 잠금) === */}
+      <Text style={sysStyles.sectionTitle}>기기 잠금 / 자동 잠금</Text>
       <View style={sysStyles.row}>
         <View style={sysStyles.rowText}>
           <Text style={sysStyles.label}>
@@ -402,13 +407,9 @@ export default function AdminScreen() {
         {section === 'menu' ? (
           <SettingScreen />
         ) : section === 'revenue' ? (
-          <LockGate
-            title="수익 현황 잠금"
-            subtitle="관리자 PIN 4자리 입력"
-            length={PIN_LENGTH}
-          >
+          <RevenueLockGate length={PIN_LENGTH}>
             <RevenueScreen />
-          </LockGate>
+          </RevenueLockGate>
         ) : (
           <SystemSettingsView />
         )}
