@@ -9,9 +9,10 @@ import {
   sanitizeDeliveryTimeRaw,
 } from './validate';
 import {
+  appendHistory,
+  buildHistoryEntry,
+  computeItemsTotal,
   genSlotId,
-  localDateString,
-  normalizeAddressKey,
   normalizeSlots,
   resolveTableForAlert,
 } from './orderHelpers';
@@ -20,7 +21,7 @@ import { useOrderPersistence } from './useOrderPersistence';
 import { useDeliveryAlerts } from './useDeliveryAlerts';
 import { useAutoClearDelivery } from './useAutoClearDelivery';
 import { useAddressBook } from './useAddressBook';
-import { appendHistory, buildHistoryEntry, useRevenue } from './useRevenue';
+import { useRevenue } from './useRevenue';
 import { useSplits } from './useSplits';
 import { useGroups } from './useGroups';
 
@@ -55,6 +56,7 @@ export function OrderProvider({ children }) {
     addressBook,
     setAddressBook,
     bumpAddress,
+    markAddressDeliveredToday,
     pinAddress,
     deleteAddress,
     setAutoRemember,
@@ -74,7 +76,7 @@ export function OrderProvider({ children }) {
   });
 
   useDeliveryAlerts({ orders, setOrders });
-  useAutoClearDelivery({ orders, setOrders, setRevenue, setAddressBook });
+  useAutoClearDelivery({ orders, setOrders, setRevenue, bumpAddress });
 
   const value = useMemo(() => {
     const addItem = (tableId, menuItem, preferredSlotId) => {
@@ -211,11 +213,7 @@ export function OrderProvider({ children }) {
       }
       const existing = orders[targetId];
       if (existing && (existing.items || []).length > 0) {
-        const total = existing.items.reduce(
-          (s, i) =>
-            s + i.price * i.qty + (i.sizeUpcharge || 0) * (i.largeQty || 0),
-          0
-        );
+        const total = computeItemsTotal(existing.items);
         setRevenue((prev) =>
           appendHistory(
             prev,
@@ -234,55 +232,7 @@ export function OrderProvider({ children }) {
         if (existing.deliveryAddress) {
           const tbl = resolveTableForAlert(targetId);
           if (tbl && tbl.type === 'delivery') {
-            const safe = sanitizeDeliveryAddress(existing.deliveryAddress);
-            const key = normalizeAddressKey(safe);
-            if (key) {
-              setAddressBook((prevBook) => {
-                if (!prevBook.autoRemember) {
-                  if (!prevBook.entries[key]) return prevBook;
-                  if (prevBook.todayDeliveredKeys.includes(key)) return prevBook;
-                  return {
-                    ...prevBook,
-                    todayDeliveredKeys: [
-                      ...prevBook.todayDeliveredKeys,
-                      key,
-                    ],
-                  };
-                }
-                const now = Date.now();
-                const today = localDateString(now);
-                const existingEntry = prevBook.entries[key];
-                const nextEntry = existingEntry
-                  ? {
-                      ...existingEntry,
-                      count: (existingEntry.count || 0) + 1,
-                      lastUsedAt: now,
-                    }
-                  : {
-                      key,
-                      label: safe,
-                      count: 1,
-                      pinned: false,
-                      firstSeenAt: now,
-                      lastUsedAt: now,
-                    };
-                const todayDate =
-                  prevBook.todayDate === today ? prevBook.todayDate : today;
-                const baseTodayKeys =
-                  prevBook.todayDate === today
-                    ? prevBook.todayDeliveredKeys
-                    : [];
-                const todayDeliveredKeys = baseTodayKeys.includes(key)
-                  ? baseTodayKeys
-                  : [...baseTodayKeys, key];
-                return {
-                  ...prevBook,
-                  entries: { ...prevBook.entries, [key]: nextEntry },
-                  todayDate,
-                  todayDeliveredKeys,
-                };
-              });
-            }
+            bumpAddress(existing.deliveryAddress);
           }
         }
       }
@@ -691,21 +641,7 @@ export function OrderProvider({ children }) {
       if (ex0?.deliveryAddress) {
         const tbl = resolveTableForAlert(tableId);
         if (tbl?.type === 'delivery') {
-          const safe = sanitizeDeliveryAddress(ex0.deliveryAddress);
-          const key = normalizeAddressKey(safe);
-          if (key) {
-            setAddressBook((prevBook) => {
-              const today = localDateString();
-              const baseKeys =
-                prevBook.todayDate === today ? prevBook.todayDeliveredKeys : [];
-              if (baseKeys.includes(key)) return prevBook;
-              return {
-                ...prevBook,
-                todayDate: today,
-                todayDeliveredKeys: [...baseKeys, key],
-              };
-            });
-          }
+          markAddressDeliveredToday(ex0.deliveryAddress);
         }
       }
       setOrders((prev) => {
@@ -801,14 +737,8 @@ export function OrderProvider({ children }) {
 
     const getOrder = (tableId) => orders[tableId] || emptyOrder;
 
-    const getOrderTotal = (tableId) => {
-      const items = orders[tableId]?.items || [];
-      return items.reduce(
-        (s, i) =>
-          s + i.price * i.qty + (i.sizeUpcharge || 0) * (i.largeQty || 0),
-        0
-      );
-    };
+    const getOrderTotal = (tableId) =>
+      computeItemsTotal(orders[tableId]?.items);
 
     const getOrderQty = (tableId) => {
       const items = orders[tableId]?.items || [];
@@ -819,12 +749,7 @@ export function OrderProvider({ children }) {
     const getCartTotal = (tableId) => {
       const o = orders[tableId];
       if (!o) return 0;
-      const cart = o.cartItems ?? o.items ?? [];
-      return cart.reduce(
-        (s, i) =>
-          s + i.price * i.qty + (i.sizeUpcharge || 0) * (i.largeQty || 0),
-        0
-      );
+      return computeItemsTotal(o.cartItems ?? o.items);
     };
 
     const getCartQty = (tableId) => {

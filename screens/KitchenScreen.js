@@ -19,6 +19,7 @@ import {
   speakReady,
 } from '../utils/notify';
 import { computeDiffRows } from '../utils/orderDiff';
+import { computeItemsTotal } from '../utils/orderHelpers';
 
 const typeLabels = {
   regular: '매장',
@@ -322,11 +323,7 @@ export default function KitchenScreen() {
         </View>
       {activeOrders.map((o, idx) => {
         const color = tableTypeColors[o.table.type] || '#6b7280';
-        const total = o.items.reduce(
-          (s, i) =>
-            s + i.price * i.qty + (i.sizeUpcharge || 0) * (i.largeQty || 0),
-          0
-        );
+        const total = computeItemsTotal(o.items);
         const qty = o.items.reduce((s, i) => s + i.qty, 0);
         const isReady = o.status === 'ready';
         const confirmed = o.confirmedItems || [];

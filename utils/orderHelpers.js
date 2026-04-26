@@ -8,6 +8,49 @@ export function capHistory(h) {
   return h.length > REVENUE_HISTORY_CAP ? h.slice(-REVENUE_HISTORY_CAP) : h;
 }
 
+// 주문 항목 총액 — 보통가 × qty + (대 가산금 × largeQty).
+// 옵션 가산금 정책 변경시 여기 한 곳만 손대도록 도메인 헬퍼화.
+export function computeItemsTotal(items) {
+  return (items || []).reduce(
+    (s, i) =>
+      s + i.price * i.qty + (i.sizeUpcharge || 0) * (i.largeQty || 0),
+    0
+  );
+}
+
+// 매출 history 한 건 빌더 — 정리(clearTable) / 자동 배달 정리에서 동일 모양으로 push.
+// extraFields 로 autoDelivered 같은 옵션 필드 병합.
+export function buildHistoryEntry({
+  tableId,
+  items,
+  options,
+  deliveryAddress,
+  deliveryTime,
+  paymentStatus,
+  total,
+  extraFields,
+}) {
+  return {
+    id: `${tableId}-${Date.now()}`,
+    tableId,
+    items: (items || []).map((i) => ({ ...i })),
+    options: [...(options || [])],
+    deliveryAddress: deliveryAddress || '',
+    deliveryTime: deliveryTime || '',
+    paymentStatus,
+    total,
+    clearedAt: Date.now(),
+    ...(extraFields || {}),
+  };
+}
+
+export function appendHistory(prev, entry) {
+  return {
+    total: prev.total + entry.total,
+    history: capHistory([...prev.history, entry]),
+  };
+}
+
 // 배달 주소록 키 정규화.
 // 보수적: trim + 연속 공백 1개로 축소 + 소문자화. 하이픈/숫자/한글은 보존.
 export function normalizeAddressKey(label) {

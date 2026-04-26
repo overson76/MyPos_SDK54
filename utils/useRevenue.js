@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { capHistory, sweepHistoryPII } from './orderHelpers';
+import { sweepHistoryPII } from './orderHelpers';
 
 // 매출 도메인 — 누적 total + history 배열 + 1시간 주기 PII sweep.
 // state/setter 둘 다 노출 — 외부 도메인(주문 정리/자동 배달 정리)이 setRevenue 로 history 항목 추가.
@@ -21,37 +21,4 @@ export function useRevenue() {
   }, []);
 
   return { revenue, setRevenue };
-}
-
-// 매출 history 한 건 추가 헬퍼 — clearTable / useAutoClearDelivery 가 같은 모양으로 push.
-// extraFields 로 autoDelivered 같은 옵션 필드 병합.
-export function buildHistoryEntry({
-  tableId,
-  items,
-  options,
-  deliveryAddress,
-  deliveryTime,
-  paymentStatus,
-  total,
-  extraFields,
-}) {
-  return {
-    id: `${tableId}-${Date.now()}`,
-    tableId,
-    items: (items || []).map((i) => ({ ...i })),
-    options: [...(options || [])],
-    deliveryAddress: deliveryAddress || '',
-    deliveryTime: deliveryTime || '',
-    paymentStatus,
-    total,
-    clearedAt: Date.now(),
-    ...(extraFields || {}),
-  };
-}
-
-export function appendHistory(prev, entry) {
-  return {
-    total: prev.total + entry.total,
-    history: capHistory([...prev.history, entry]),
-  };
 }

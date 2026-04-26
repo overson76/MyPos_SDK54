@@ -79,6 +79,26 @@ export function useAddressBook() {
     });
   }, []);
 
+  // 주문 확정 시점 — entry 존재 여부 무관, count 안 늘리고 todayDeliveredKeys 만 마크.
+  // 같은 주소로 또 주문하지 않게 칩에서 즉시 회색 처리하는 UX 용.
+  const markAddressDeliveredToday = useCallback((label) => {
+    const safe = sanitizeDeliveryAddress(label);
+    if (!safe) return;
+    const key = normalizeAddressKey(safe);
+    if (!key) return;
+    setAddressBook((prev) => {
+      const today = localDateString();
+      const baseKeys =
+        prev.todayDate === today ? prev.todayDeliveredKeys : [];
+      if (baseKeys.includes(key)) return prev;
+      return {
+        ...prev,
+        todayDate: today,
+        todayDeliveredKeys: [...baseKeys, key],
+      };
+    });
+  }, []);
+
   const pinAddress = useCallback((key, pinned) => {
     setAddressBook((prev) => {
       const ex = prev.entries[key];
@@ -112,6 +132,7 @@ export function useAddressBook() {
     addressBook,
     setAddressBook,
     bumpAddress,
+    markAddressDeliveredToday,
     pinAddress,
     deleteAddress,
     setAutoRemember,
