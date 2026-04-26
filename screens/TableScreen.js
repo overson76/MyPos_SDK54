@@ -363,7 +363,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               ) : null}
               {(() => {
                 const shown = order.items.slice(0, ITEMS_VISIBLE_LIMIT);
-                const rendered = shown.flatMap((i) => {
+                // idx 를 key 에 합쳐 같은 i.id 다른 슬롯 (옛 데이터에 slotId 누락) 의 충돌 방지.
+                const rendered = shown.flatMap((i, idx) => {
                   const lq = i.largeQty || 0;
                   const nq = i.qty - lq;
                   const tileHasLarge = order.items.some(
@@ -388,7 +389,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     const itemCooked = nState === 'cooked';
                     const itemCooking = nState === 'cooking';
                     rows.push(
-                      <View key={`${i.slotId || i.id}-n`}>
+                      <View key={`${i.slotId || i.id}-${idx}-n`}>
                         {i.memo ? (
                           <Text
                             style={[styles.itemMemo, isSplitPart && styles.textTiny]}
@@ -442,7 +443,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     // 보통 행이 이미 메모를 표기했으면 중복 방지
                     const memoAlreadyShown = nq > 0;
                     rows.push(
-                      <View key={`${i.slotId || i.id}-l`}>
+                      <View key={`${i.slotId || i.id}-${idx}-l`}>
                         {i.memo && !memoAlreadyShown ? (
                           <Text
                             style={[styles.itemMemo, isSplitPart && styles.textTiny]}
@@ -828,7 +829,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     style={styles.modalBody}
                     contentContainerStyle={{ paddingBottom: 12 }}
                   >
-                    {expItems.map((i) => {
+                    {expItems.map((i, idx) => {
                       const lq = i.largeQty || 0;
                       const nq = (i.qty || 0) - lq;
                       const optLabels = (i.options || [])
@@ -850,7 +851,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                         const itemCooked = nState === 'cooked';
                         const itemCooking = nState === 'cooking';
                         rows.push(
-                          <View key={`${i.slotId || i.id}-n`}>
+                          <View key={`${i.slotId || i.id}-${idx}-n`}>
                             {i.memo ? (
                               <Text style={styles.itemMemoModal} numberOfLines={2}>
                                 📝 {i.memo}
@@ -897,7 +898,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                         const itemCooking = lState === 'cooking';
                         const memoAlreadyShown = nq > 0;
                         rows.push(
-                          <View key={`${i.slotId || i.id}-l`}>
+                          <View key={`${i.slotId || i.id}-${idx}-l`}>
                             {i.memo && !memoAlreadyShown ? (
                               <Text style={styles.itemMemoModal} numberOfLines={2}>
                                 📝 {i.memo}
