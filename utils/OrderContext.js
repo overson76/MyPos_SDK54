@@ -50,9 +50,12 @@ export function OrderProvider({ children }) {
     });
   }, []);
 
-  const { splits, setSplits, isSplit, toggleSplit } = useSplits({ setOrders });
+  const { splits, setSplits, isSplit, toggleSplit } = useSplits({
+    orders,
+    dispatch,
+  });
   const { groups, setGroups, getGroupFor, dissolveGroup, createGroup } =
-    useGroups({ setOrders });
+    useGroups({ orders, dispatch });
   const { revenue, setRevenue } = useRevenue();
   const {
     addressBook,
