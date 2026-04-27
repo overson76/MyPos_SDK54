@@ -9,6 +9,8 @@ import {
   normalizeSlots,
   resolveTableForAlert,
   mergeOrderParts,
+  detectDynamicSlotPrefix,
+  compactSlotsByPrefix,
 } from '../utils/orderHelpers';
 
 describe('capHistory', () => {
@@ -217,5 +219,91 @@ describe('mergeOrderParts', () => {
       { items: [{ id: 'a', qty: 1 }], options: ['포장', '봉투'] }
     );
     expect(merged.options.sort()).toEqual(['봉투', '포장']);
+  });
+});
+
+describe('detectDynamicSlotPrefix', () => {
+  test('예약/포장/배달 슬롯 prefix 인식', () => {
+    expect(detectDynamicSlotPrefix('y1')).toBe('y');
+    expect(detectDynamicSlotPrefix('y10')).toBe('y');
+    expect(detectDynamicSlotPrefix('p3')).toBe('p');
+    expect(detectDynamicSlotPrefix('d5')).toBe('d');
+  });
+
+  test('일반 테이블/방/분할 슬롯은 null', () => {
+    expect(detectDynamicSlotPrefix('t01')).toBeNull();
+    expect(detectDynamicSlotPrefix('r10')).toBeNull();
+    expect(detectDynamicSlotPrefix('y2#1')).toBeNull();
+    expect(detectDynamicSlotPrefix('')).toBeNull();
+    expect(detectDynamicSlotPrefix(null)).toBeNull();
+  });
+});
+
+describe('compactSlotsByPrefix', () => {
+  const A = { items: [{ id: 'a', qty: 1 }] };
+  const B = { items: [{ id: 'b', qty: 2 }] };
+  const C = { items: [{ id: 'c', qty: 3 }] };
+  const T = { items: [{ id: 't', qty: 1 }] }; // 일반 테이블 — 영향 받지 않아야 함
+
+  test('빈자리 없으면 변경 없음', () => {
+    const orders = { y1: A, y2: B };
+    const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
+    expect(next).toBe(orders);
+    expect(mapping.size).toBe(0);
+  });
+
+  test('y2 가 비고 y3 가 차 있으면 y3 → y2', () => {
+    const orders = { y1: A, y3: C, t05: T };
+    const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
+    expect(next.y1).toBe(A);
+    expect(next.y2).toBe(C);
+    expect(next.y3).toBeUndefined();
+    expect(next.t05).toBe(T); // 다른 prefix 보존
+    expect(mapping.get(3)).toBe(2);
+  });
+
+  test('y1 이 비고 y2/y3 가 차 있으면 y2→y1, y3→y2', () => {
+    const orders = { y2: B, y3: C };
+    const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
+    expect(next.y1).toBe(B);
+    expect(next.y2).toBe(C);
+    expect(next.y3).toBeUndefined();
+    expect(mapping.get(2)).toBe(1);
+    expect(mapping.get(3)).toBe(2);
+  });
+
+  test('포장 prefix 도 동일하게 동작', () => {
+    const orders = { p1: A, p3: C };
+    const { orders: next } = compactSlotsByPrefix(orders, 'p');
+    expect(next.p1).toBe(A);
+    expect(next.p2).toBe(C);
+    expect(next.p3).toBeUndefined();
+  });
+
+  test('배달 prefix 도 동일하게 동작 (10 이상 자리수도 정렬 정상)', () => {
+    const orders = { d1: A, d2: B, d10: C };
+    const { orders: next } = compactSlotsByPrefix(orders, 'd');
+    expect(next.d1).toBe(A);
+    expect(next.d2).toBe(B);
+    expect(next.d3).toBe(C);
+    expect(next.d10).toBeUndefined();
+  });
+
+  test('분할 슬롯(y2#1) 은 영향 없음 — 그대로 유지', () => {
+    const split = { items: [{ id: 's', qty: 1 }] };
+    const orders = { y1: A, 'y2#1': split, y3: C };
+    const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
+    expect(next.y1).toBe(A);
+    expect(next.y2).toBe(C); // y3 → y2
+    expect(next['y2#1']).toBe(split); // 분할은 그대로
+    expect(next.y3).toBeUndefined();
+    expect(mapping.get(3)).toBe(2);
+  });
+
+  test('빈 dict 는 변경 없음', () => {
+    const orders = {};
+    const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
+    expect(next).toBe(orders);
+    expect(mapping.size).toBe(0);
   });
 });

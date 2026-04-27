@@ -59,6 +59,8 @@ export function useAutoClearDelivery({
         if (ex.deliveryAddress) bumpAddress(ex.deliveryAddress);
       }
       dispatch({ type: 'orders/autoClearDelivery', tableIds: toClear });
+      // 배달 슬롯 빈자리 메꿈 — d3 가 자동 정리되면 d4 → d3 등으로 재키잉.
+      dispatch({ type: 'orders/compactSlots', prefix: 'd' });
     };
     const interval = setInterval(check, 30000);
     check();

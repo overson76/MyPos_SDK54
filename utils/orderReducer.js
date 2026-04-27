@@ -3,7 +3,7 @@
 // cross-domain 부수효과 (revenue, addressBook, splits, groups 갱신 / breadcrumb / sentry) 는
 // 여기 담지 않고 wrapper 레벨에서 dispatch 전후로 처리.
 
-import { genSlotId, normalizeSlots } from './orderHelpers';
+import { compactSlotsByPrefix, genSlotId, normalizeSlots } from './orderHelpers';
 
 // 주문 탭에서 테이블 선택 없이 먼저 담는 장바구니용 가상 tableId
 export const PENDING_TABLE_ID = '__pending__';
@@ -255,6 +255,15 @@ export function orderReducer(state, action) {
       next[toId] = { ...state[fromId] };
       delete next[fromId];
       return next;
+    }
+
+    // 동적 슬롯 빈자리 메꿈 — 예약/포장/배달 prefix 의 번호를 1부터 빈자리 없이 재정렬.
+    // moveOrder/markPaid/autoClearDelivery 직후 wrapper 가 호출.
+    case 'orders/compactSlots': {
+      const { prefix } = action;
+      if (!prefix) return state;
+      const { orders: nextOrders } = compactSlotsByPrefix(state, prefix);
+      return nextOrders === state ? state : nextOrders;
     }
 
     case 'orders/cycleItemCookState': {

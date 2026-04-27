@@ -91,6 +91,49 @@ export function genSlotId() {
     .slice(2, 8)}`;
 }
 
+// 동적 슬롯(예약 y / 포장 p / 배달 d) prefix 인식.
+// 'y3' → 'y', 'p10' → 'p', 't01' → null, 'y2#1' → null (분할 슬롯 제외).
+// utils/tableData.js 의 DYNAMIC_SLOT_PREFIX 와 키 정합.
+export function detectDynamicSlotPrefix(tableId) {
+  if (!tableId) return null;
+  const m = /^([ypd])(\d+)$/.exec(tableId);
+  return m ? m[1] : null;
+}
+
+// 동적 슬롯 빈자리 메꿈(compact). y2 가 비고 y3 가 차 있으면 y3 → y2.
+// 분할(y2#1) / 그룹은 본 helper 가 건드리지 않음 — 해당 슬롯 자체는 mapping 에서 제외돼
+// 원래 키로 유지됨. 추후 필요시 확장.
+// 반환: { orders: 새 dict, mapping: Map(oldNum → newNum) }.
+export function compactSlotsByPrefix(orders, prefix) {
+  const re = new RegExp(`^${prefix}(\\d+)$`);
+  const occupied = Object.keys(orders)
+    .map((k) => {
+      const m = re.exec(k);
+      return m ? { key: k, n: parseInt(m[1], 10), order: orders[k] } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.n - b.n);
+
+  const mapping = new Map();
+  occupied.forEach((entry, i) => {
+    const newN = i + 1;
+    if (entry.n !== newN) mapping.set(entry.n, newN);
+  });
+
+  if (mapping.size === 0) return { orders, mapping };
+
+  const next = { ...orders };
+  for (const entry of occupied) {
+    if (mapping.has(entry.n)) delete next[entry.key];
+  }
+  for (const entry of occupied) {
+    if (mapping.has(entry.n)) {
+      next[`${prefix}${mapping.get(entry.n)}`] = entry.order;
+    }
+  }
+  return { orders: next, mapping };
+}
+
 // 동일한 (id, options, cookState/portion states)을 가진 슬롯들을 qty/largeQty 합산하여 병합
 export function normalizeSlots(items) {
   const result = [];

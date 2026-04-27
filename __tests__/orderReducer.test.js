@@ -250,6 +250,34 @@ describe('orderReducer · moveOrder', () => {
   });
 });
 
+describe('orderReducer · compactSlots', () => {
+  test('y2 가 비고 y3 차 있으면 y3 → y2', () => {
+    const A = makeOrder({ items: [{ slotId: 's1', qty: 1 }] });
+    const C = makeOrder({ items: [{ slotId: 's3', qty: 3 }] });
+    const next = orderReducer(
+      { y1: A, y3: C },
+      { type: 'orders/compactSlots', prefix: 'y' }
+    );
+    expect(next.y1).toBe(A);
+    expect(next.y2).toBe(C);
+    expect(next.y3).toBeUndefined();
+  });
+
+  test('빈자리 없으면 동일 객체 반환', () => {
+    const A = makeOrder({ items: [{ slotId: 's1', qty: 1 }] });
+    const B = makeOrder({ items: [{ slotId: 's2', qty: 2 }] });
+    const s = { y1: A, y2: B };
+    expect(
+      orderReducer(s, { type: 'orders/compactSlots', prefix: 'y' })
+    ).toBe(s);
+  });
+
+  test('prefix 없으면 변화 없음', () => {
+    const s = { y1: makeOrder({ items: [{ slotId: 's', qty: 1 }] }) };
+    expect(orderReducer(s, { type: 'orders/compactSlots' })).toBe(s);
+  });
+});
+
 describe('orderReducer · cycleItemCookState', () => {
   test('pending → cooking', () => {
     const s = {
