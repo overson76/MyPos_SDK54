@@ -8,11 +8,14 @@ import {
   View,
 } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
+import { useResponsive } from '../utils/useResponsive';
 
 // 자주 쓰는 배달 주소 상위 N개를 가로 스크롤 칩으로 노출.
 // 정렬: pinned 우선 → 오늘 미완료 우선(완료된 것은 뒤로) → count desc → lastUsedAt desc.
 // 당일 배송 완료된 주소는 회색 + 우측으로 밀려나지만 눌러서 입력은 가능.
 export default function AddressChips({ onSelect, max = 8, compact = false, inline = false }) {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const { addressBook } = useOrders();
   const scrollRef = useRef(null);
   // 드래그 거리 추적 — 5px 미만 이동은 클릭으로 간주 (칩 onPress 보존)
@@ -159,7 +162,10 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -182,13 +188,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   label: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#9a3412',
     fontWeight: '800',
     flexShrink: 0,
     marginRight: 2,
   },
-  labelCompact: { fontSize: 10 },
+  labelCompact: { fontSize: fp(10) },
   row: { gap: 6, alignItems: 'center', paddingRight: 8 },
   // 웹: 마우스 드래그용 cursor + 사용자가 텍스트 선택 못 하게 방지
   scrollWeb: { cursor: 'grab', userSelect: 'none' },
@@ -211,13 +217,14 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     opacity: 0.65,
   },
-  pinIcon: { fontSize: 11 },
-  chipText: { fontSize: 12, fontWeight: '700', color: '#7f1d1d', flexShrink: 1 },
-  chipTextCompact: { fontSize: 10 },
+  pinIcon: { fontSize: fp(11) },
+  chipText: { fontSize: fp(12), fontWeight: '700', color: '#7f1d1d', flexShrink: 1 },
+  chipTextCompact: { fontSize: fp(10) },
   chipTextToday: {
     color: '#6b7280',
     textDecorationLine: 'line-through',
   },
-  chipCount: { fontSize: 10, fontWeight: '900', color: '#dc2626' },
+  chipCount: { fontSize: fp(10), fontWeight: '900', color: '#dc2626' },
   chipCountToday: { color: '#9ca3af' },
-});
+  });
+}

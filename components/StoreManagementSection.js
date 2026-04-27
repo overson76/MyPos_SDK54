@@ -3,7 +3,7 @@
 // - 수익 PIN 설정/변경/제거 (대표만, stores/{sid}.revenuePinHash)
 // - 가입 요청 / 멤버 관리는 Phase 5-2 다음 단계에서 추가 예정.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import PinEntry from './PinEntry';
 import { useStore } from '../utils/StoreContext';
+import { useResponsive } from '../utils/useResponsive';
 import {
   clearRevenuePin,
   hasRevenuePin,
@@ -34,6 +35,8 @@ import {
 const PIN_LENGTH = 4;
 
 export default function StoreManagementSection() {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const { storeInfo, isOwner } = useStore();
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
   const [joinRequests, setJoinRequests] = useState([]);
@@ -364,6 +367,8 @@ export default function StoreManagementSection() {
 // 수익 PIN 설정/변경/해제 모달.
 // AdminScreen 의 PinManageModal 과 동일 패턴 — 매장 PIN 함수만 다르게.
 function RevenuePinModal({ mode, storeInfo, onClose, onDone }) {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const [step, setStep] = useState(
     mode === 'change' || mode === 'clear' ? 'old' : 'new'
   );
@@ -445,9 +450,12 @@ function RevenuePinModal({ mode, storeInfo, onClose, onDone }) {
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   sectionTitle: {
-    fontSize: 14,
+    fontSize: fp(14),
     fontWeight: '800',
     color: '#111827',
     marginTop: 16,
@@ -466,16 +474,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rowText: { flex: 1 },
-  label: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  value: { fontSize: 15, color: '#111827', marginTop: 2 },
+  label: { fontSize: fp(13), fontWeight: '700', color: '#111827' },
+  value: { fontSize: fp(15), color: '#111827', marginTop: 2 },
   codeValue: {
-    fontSize: 22,
+    fontSize: fp(22),
     fontWeight: '900',
     color: '#2563eb',
     letterSpacing: 3,
     marginTop: 4,
   },
-  helper: { fontSize: 11, color: '#6b7280', marginTop: 4, lineHeight: 15 },
+  helper: { fontSize: fp(11), color: '#6b7280', marginTop: 4, lineHeight: fp(15) },
 
   btnPrimary: {
     backgroundColor: '#2563eb',
@@ -483,7 +491,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  btnPrimaryText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
   btnSecondary: {
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -492,7 +500,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  btnSecondaryText: { color: '#374151', fontSize: 13, fontWeight: '600' },
+  btnSecondaryText: { color: '#374151', fontSize: fp(13), fontWeight: '600' },
   btnDanger: {
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -501,9 +509,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  btnDangerText: { color: '#b91c1c', fontSize: 13, fontWeight: '600' },
+  btnDangerText: { color: '#b91c1c', fontSize: fp(13), fontWeight: '600' },
   btnDisabled: { opacity: 0.4 },
-  roleTag: { fontSize: 11, color: '#6b7280', fontWeight: '600' },
+  roleTag: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
 });
 
 // Firestore Timestamp → "2026-04-26 14:30" 식 표시.
@@ -543,6 +551,7 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#111827' },
-  close: { fontSize: 18, color: '#6b7280', paddingHorizontal: 8 },
-});
+  headerTitle: { fontSize: fp(16), fontWeight: '800', color: '#111827' },
+  close: { fontSize: fp(18), color: '#6b7280', paddingHorizontal: 8 },
+  });
+}

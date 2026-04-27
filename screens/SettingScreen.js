@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   ImageBackground,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useMenu } from '../utils/MenuContext';
+import { useResponsive } from '../utils/useResponsive';
 import { useOrders } from '../utils/OrderContext';
 
 // 웹: <input type=file> + FileReader → data URL
@@ -92,6 +93,8 @@ function confirmDialog(title, message) {
 }
 
 export default function SettingScreen() {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const {
     items,
     rows,
@@ -547,7 +550,10 @@ export default function SettingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). SettingScreen 에서 useMemo 로 호출.
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
     padding: 16,
@@ -555,8 +561,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#fafafa',
   },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
+  title: { fontSize: fp(20), fontWeight: '700', color: '#111827' },
+  subtitle: { fontSize: fp(12), color: '#6b7280', marginTop: 4 },
 
   filterBar: {
     flexDirection: 'row',
@@ -575,7 +581,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   filterBtnActive: { backgroundColor: '#111827' },
-  filterText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  filterText: { fontSize: fp(12), color: '#374151', fontWeight: '600' },
   filterTextActive: { color: '#fff' },
   addBtn: {
     paddingHorizontal: 12,
@@ -583,7 +589,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#2563eb',
   },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  addBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
 
   list: { padding: 10, gap: 8 },
   row: {
@@ -606,7 +612,7 @@ const styles = StyleSheet.create({
 
   info: { flex: 1, gap: 6 },
   nameInput: {
-    fontSize: 15,
+    fontSize: fp(15),
     fontWeight: '700',
     color: '#111827',
     borderWidth: 1,
@@ -621,19 +627,19 @@ const styles = StyleSheet.create({
     gap: 4,
     flexWrap: 'wrap',
   },
-  label: { fontSize: 12, color: '#6b7280' },
+  label: { fontSize: fp(12), color: '#6b7280' },
   priceInput: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    fontSize: 13,
+    fontSize: fp(13),
     width: 80,
     textAlign: 'right',
     color: '#111827',
   },
-  won: { fontSize: 12, color: '#374151' },
+  won: { fontSize: fp(12), color: '#374151' },
   catBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -642,7 +648,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c7d2fe',
   },
-  catText: { fontSize: 11, color: '#3730a3', fontWeight: '700' },
+  catText: { fontSize: fp(11), color: '#3730a3', fontWeight: '700' },
   favBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -652,7 +658,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   favBtnActive: { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
-  favText: { fontSize: 11, color: '#6b7280', fontWeight: '600' },
+  favText: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
   favTextActive: { color: '#92400e', fontWeight: '700' },
 
   moveRow: {
@@ -662,7 +668,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   moveLabel: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#3730a3',
     fontWeight: '700',
     paddingHorizontal: 6,
@@ -671,7 +677,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   moveLabelFav: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#92400e',
     fontWeight: '700',
     paddingHorizontal: 6,
@@ -695,7 +701,7 @@ const styles = StyleSheet.create({
     borderColor: '#fcd34d',
   },
   moveBtnDisabled: { opacity: 0.3 },
-  moveBtnText: { fontSize: 12, color: '#1f2937', fontWeight: '700' },
+  moveBtnText: { fontSize: fp(12), color: '#1f2937', fontWeight: '700' },
 
   shortInput: {
     borderWidth: 1,
@@ -703,7 +709,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#374151',
   },
 
@@ -715,7 +721,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
     alignItems: 'center',
   },
-  btnPrimaryText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  btnPrimaryText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
   btnSecondary: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -725,7 +731,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     alignItems: 'center',
   },
-  btnSecondaryText: { color: '#374151', fontSize: 11, fontWeight: '600' },
+  btnSecondaryText: { color: '#374151', fontSize: fp(11), fontWeight: '600' },
   btnDanger: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -735,7 +741,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca',
     alignItems: 'center',
   },
-  btnDangerText: { color: '#b91c1c', fontSize: 11, fontWeight: '700' },
+  btnDangerText: { color: '#b91c1c', fontSize: fp(11), fontWeight: '700' },
 
   // 모달
   modalBackdrop: {
@@ -766,15 +772,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalCloseText: { fontSize: 20, color: '#6b7280' },
+  modalCloseText: { fontSize: fp(20), color: '#6b7280' },
   modalTitle: {
-    fontSize: 18,
+    fontSize: fp(18),
     fontWeight: '800',
     color: '#111827',
     marginBottom: 8,
   },
   modalLabel: {
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#374151',
     fontWeight: '700',
     marginTop: 6,
@@ -785,7 +791,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#111827',
     backgroundColor: '#fff',
   },
@@ -804,7 +810,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   catChipActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  catChipText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  catChipText: { fontSize: fp(12), color: '#374151', fontWeight: '600' },
   catChipTextActive: { color: '#fff', fontWeight: '800' },
   posRow: {
     flexDirection: 'row',
@@ -820,9 +826,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c7d2fe',
   },
-  posBtnText: { fontSize: 13, color: '#1e3a8a', fontWeight: '700' },
+  posBtnText: { fontSize: fp(13), color: '#1e3a8a', fontWeight: '700' },
   posLabel: {
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#111827',
     fontWeight: '800',
     minWidth: 64,
@@ -842,14 +848,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
   },
-  modalCancelText: { fontSize: 14, color: '#374151', fontWeight: '700' },
+  modalCancelText: { fontSize: fp(14), color: '#374151', fontWeight: '700' },
   modalConfirmBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 6,
     backgroundColor: '#2563eb',
   },
-  modalConfirmText: { fontSize: 14, color: '#fff', fontWeight: '800' },
+  modalConfirmText: { fontSize: fp(14), color: '#fff', fontWeight: '800' },
   prefRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -863,8 +869,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   prefTextWrap: { flex: 1, minWidth: 0 },
-  prefTitle: { fontSize: 14, fontWeight: '800', color: '#92400e' },
-  prefDesc: { fontSize: 11, color: '#78716c', marginTop: 2 },
+  prefTitle: { fontSize: fp(14), fontWeight: '800', color: '#92400e' },
+  prefDesc: { fontSize: fp(11), color: '#78716c', marginTop: 2 },
   toggleTrack: {
     width: 44,
     height: 24,
@@ -886,4 +892,5 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   toggleKnobOn: { transform: [{ translateX: 20 }] },
-});
+  });
+}

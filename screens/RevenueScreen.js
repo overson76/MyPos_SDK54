@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
+import { useResponsive } from '../utils/useResponsive';
 
 function formatDateTime(ts) {
   if (!ts) return '';
@@ -21,6 +23,8 @@ function ymLabel(key) {
 }
 
 export default function RevenueScreen() {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const { revenue } = useOrders();
   const history = revenue?.history || [];
 
@@ -171,7 +175,10 @@ export default function RevenueScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). RevenueScreen 에서 useMemo 로 호출.
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   summaryRow: { flexDirection: 'row', gap: 12, padding: 16 },
   summaryCard: {
@@ -182,17 +189,17 @@ const styles = StyleSheet.create({
   },
   cardToday: { backgroundColor: '#2563eb' },
   cardMonth: { backgroundColor: '#7c3aed' },
-  summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  summaryLabel: { fontSize: fp(12), color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
   summaryValue: {
-    fontSize: 26,
+    fontSize: fp(26),
     color: '#fff',
     fontWeight: '800',
     marginTop: 4,
   },
-  summarySub: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+  summarySub: { fontSize: fp(11), color: 'rgba(255,255,255,0.7)' },
 
   sectionTitle: {
-    fontSize: 15,
+    fontSize: fp(15),
     fontWeight: '800',
     color: '#111827',
     paddingHorizontal: 16,
@@ -201,8 +208,8 @@ const styles = StyleSheet.create({
   },
 
   empty: { alignItems: 'center', padding: 40, gap: 8 },
-  emptyText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
-  emptyHint: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
+  emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
+  emptyHint: { fontSize: fp(12), color: '#9ca3af', textAlign: 'center' },
 
   monthRow: {
     flexDirection: 'row',
@@ -220,16 +227,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#faf5ff',
     borderWidth: 2,
   },
-  monthLabel: { fontSize: 15, color: '#111827', fontWeight: '700' },
+  monthLabel: { fontSize: fp(15), color: '#111827', fontWeight: '700' },
   monthLabelCurrent: { color: '#5b21b6' },
   monthTag: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#fff',
     fontWeight: '800',
     backgroundColor: '#7c3aed',
   },
-  monthCount: { fontSize: 11, color: '#6b7280', marginTop: 2 },
-  monthTotal: { fontSize: 17, color: '#111827', fontWeight: '800' },
+  monthCount: { fontSize: fp(11), color: '#6b7280', marginTop: 2 },
+  monthTotal: { fontSize: fp(17), color: '#111827', fontWeight: '800' },
   monthTotalCurrent: { color: '#5b21b6' },
 
   historyRow: {
@@ -244,7 +251,7 @@ const styles = StyleSheet.create({
   },
   historyHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   historyTable: {
-    fontSize: 13,
+    fontSize: fp(13),
     fontWeight: '800',
     color: '#111827',
     backgroundColor: '#eef2ff',
@@ -253,9 +260,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
-  historyTime: { fontSize: 11, color: '#6b7280', flex: 1 },
+  historyTime: { fontSize: fp(11), color: '#6b7280', flex: 1 },
   historyPay: {
-    fontSize: 10,
+    fontSize: fp(10),
     fontWeight: '700',
     color: '#374151',
     backgroundColor: '#f3f4f6',
@@ -266,12 +273,13 @@ const styles = StyleSheet.create({
   },
   historyPayPaid: { color: '#fff', backgroundColor: '#2563eb' },
   historyItems: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  historyItem: { fontSize: 11, color: '#374151' },
-  historyAddr: { fontSize: 10, color: '#dc2626', fontWeight: '600' },
+  historyItem: { fontSize: fp(11), color: '#374151' },
+  historyAddr: { fontSize: fp(10), color: '#dc2626', fontWeight: '600' },
   historyTotal: {
-    fontSize: 14,
+    fontSize: fp(14),
     fontWeight: '800',
     color: '#111827',
     textAlign: 'right',
   },
-});
+  });
+}

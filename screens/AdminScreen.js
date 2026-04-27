@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -29,6 +29,7 @@ import { loadJSON, saveJSON } from '../utils/persistence';
 import { useLock } from '../utils/LockContext';
 import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
+import { useResponsive } from '../utils/useResponsive';
 
 const SECTIONS = [
   { key: 'menu', label: '메뉴 관리' },
@@ -41,6 +42,8 @@ const PIN_LENGTH = 4;
 // PIN 설정 / 변경 / 해제 모달.
 // mode: 'set' (신규) | 'change' (변경 — old + new) | 'clear' (해제 — old 검증)
 function PinManageModal({ mode, onClose, onDone }) {
+  const { scale } = useResponsive();
+  const pinStyles = useMemo(() => makePinStyles(scale), [scale]);
   const [step, setStep] = useState(mode === 'change' || mode === 'clear' ? 'old' : 'new');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -124,6 +127,8 @@ function PinManageModal({ mode, onClose, onDone }) {
 }
 
 function SystemSettingsView() {
+  const { scale } = useResponsive();
+  const sysStyles = useMemo(() => makeSysStyles(scale), [scale]);
   const lock = useLock();
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
@@ -325,6 +330,8 @@ function SystemSettingsView() {
 }
 
 export default function AdminScreen() {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const [section, setSection] = useState('menu');
   const [volume, setVolumeState] = useState(() => getVolume());
 
@@ -418,142 +425,152 @@ export default function AdminScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  subTabBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  subTabBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
-  },
-  subTabBtnActive: { borderBottomColor: '#2563eb', backgroundColor: '#fff' },
-  subTabText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
-  subTabTextActive: { color: '#111827', fontWeight: '800' },
-  volumeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 8,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-  },
-  volumeIcon: { fontSize: 16, marginRight: 4 },
-  slider: { width: 120, height: 28 },
-  volumeText: {
-    fontSize: 12,
-    color: '#374151',
-    fontWeight: '600',
-    minWidth: 36,
-    textAlign: 'right',
-  },
-  testBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-  },
-  testBtnText: { fontSize: 13, color: '#374151', fontWeight: '600' },
-});
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). 각 컴포넌트가 useMemo 로 호출.
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#fff' },
+    subTabBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f3f4f6',
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+    },
+    subTabBtn: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 3,
+      borderBottomColor: 'transparent',
+    },
+    subTabBtnActive: { borderBottomColor: '#2563eb', backgroundColor: '#fff' },
+    subTabText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
+    subTabTextActive: { color: '#111827', fontWeight: '800' },
+    volumeBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginRight: 8,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      borderRadius: 8,
+    },
+    volumeIcon: { fontSize: fp(16), marginRight: 4 },
+    slider: { width: 120, height: 28 },
+    volumeText: {
+      fontSize: fp(12),
+      color: '#374151',
+      fontWeight: '600',
+      minWidth: 36,
+      textAlign: 'right',
+    },
+    testBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginRight: 12,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      borderRadius: 8,
+    },
+    testBtnText: { fontSize: fp(13), color: '#374151', fontWeight: '600' },
+  });
+}
 
-const sysStyles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  rowText: { flex: 1, paddingRight: 16 },
-  label: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  helper: { fontSize: 12, color: '#6b7280', lineHeight: 18 },
-  sliderValue: {
-    minWidth: 36,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    textAlign: 'right',
-  },
-  btnPrimary: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  btnSecondary: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  btnSecondaryText: { color: '#374151', fontSize: 13, fontWeight: '600' },
-  note: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-  },
-  noteText: { fontSize: 12, color: '#374151', lineHeight: 20 },
-});
+function makeSysStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
+    container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+    sectionTitle: {
+      fontSize: fp(16),
+      fontWeight: '800',
+      color: '#111827',
+      marginBottom: 12,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: '#e5e7eb',
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+    },
+    rowText: { flex: 1, paddingRight: 16 },
+    label: { fontSize: fp(14), fontWeight: '700', color: '#111827', marginBottom: 4 },
+    helper: { fontSize: fp(12), color: '#6b7280', lineHeight: fp(18) },
+    sliderValue: {
+      minWidth: 36,
+      fontSize: fp(12),
+      fontWeight: '700',
+      color: '#374151',
+      textAlign: 'right',
+    },
+    btnPrimary: {
+      backgroundColor: '#2563eb',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    btnPrimaryText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
+    btnSecondary: {
+      backgroundColor: '#fff',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+    },
+    btnSecondaryText: { color: '#374151', fontSize: fp(13), fontWeight: '600' },
+    note: {
+      marginTop: 16,
+      padding: 12,
+      backgroundColor: '#f9fafb',
+      borderRadius: 8,
+    },
+    noteText: { fontSize: fp(12), color: '#374151', lineHeight: fp(20) },
+  });
+}
 
-const pinStyles = StyleSheet.create({
-  // <Modal> 대체용 풀스크린 absolute 오버레이
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerTitle: { fontSize: 14, fontWeight: '800', color: '#111827' },
-  close: { fontSize: 18, color: '#6b7280', paddingHorizontal: 4 },
-});
+function makePinStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
+    // <Modal> 대체용 풀스크린 absolute 오버레이
+    overlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+      elevation: 9999,
+    },
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
+    },
+    card: {
+      width: '100%',
+      maxWidth: 380,
+      backgroundColor: '#fff',
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+    },
+    headerTitle: { fontSize: fp(14), fontWeight: '800', color: '#111827' },
+    close: { fontSize: fp(18), color: '#6b7280', paddingHorizontal: 4 },
+  });
+}

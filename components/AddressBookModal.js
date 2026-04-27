@@ -10,11 +10,14 @@ import {
   View,
 } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
+import { useResponsive } from '../utils/useResponsive';
 
 // 배달 주소록 — 검색 / 핀 / 삭제 / 선택.
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
 // 당일 배송 완료된 항목은 회색 처리(별도 섹션 분리하지는 않음 — 한 리스트에서 시각적으로만 구분).
 export default function AddressBookModal({ visible, onClose, onSelect }) {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const { addressBook, pinAddress, deleteAddress } = useOrders();
   const [query, setQuery] = useState('');
 
@@ -153,7 +156,10 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -182,8 +188,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#ef4444',
   },
-  title: { fontSize: 16, fontWeight: '900', color: '#fff' },
-  closeBtn: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  title: { fontSize: fp(16), fontWeight: '900', color: '#fff' },
+  closeBtn: { fontSize: fp(13), fontWeight: '700', color: '#fff' },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -193,23 +199,23 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     gap: 6,
   },
-  searchIcon: { fontSize: 14 },
+  searchIcon: { fontSize: fp(14) },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#111827',
     paddingVertical: 6,
     outlineStyle: 'none',
   },
   clearBtn: {
-    fontSize: 18,
+    fontSize: fp(18),
     fontWeight: '700',
     color: '#9ca3af',
     paddingHorizontal: 6,
   },
   empty: { padding: 32, alignItems: 'center', gap: 6 },
-  emptyText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
-  emptyHint: { fontSize: 11, color: '#9ca3af' },
+  emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
+  emptyHint: { fontSize: fp(11), color: '#9ca3af' },
   list: { maxHeight: 420 },
   row: {
     flexDirection: 'row',
@@ -222,7 +228,7 @@ const styles = StyleSheet.create({
   },
   rowToday: { backgroundColor: '#f9fafb' },
   rowMain: { flex: 1, minWidth: 0, paddingHorizontal: 4, paddingVertical: 2 },
-  rowLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  rowLabel: { fontSize: fp(13), fontWeight: '700', color: '#111827' },
   rowLabelToday: {
     color: '#9ca3af',
     textDecorationLine: 'line-through',
@@ -233,9 +239,9 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
-  rowCount: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
+  rowCount: { fontSize: fp(11), fontWeight: '700', color: '#dc2626' },
   todayBadge: {
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#fff',
     fontWeight: '900',
     backgroundColor: '#9ca3af',
@@ -248,7 +254,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
-  iconText: { fontSize: 16, opacity: 0.5 },
+  iconText: { fontSize: fp(16), opacity: 0.5 },
   iconTextActive: { opacity: 1 },
-  deleteText: { fontSize: 14, opacity: 0.6 },
-});
+  deleteText: { fontSize: fp(14), opacity: 0.6 },
+  });
+}

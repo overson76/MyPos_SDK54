@@ -1,8 +1,9 @@
 // 숫자 키패드 PIN 입력 컴포넌트.
 // onSubmit(pin: string) 이 호출되면 부모가 검증하고 결과 전달.
 // length: PIN 자릿수 (기본 4)
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useResponsive } from '../utils/useResponsive';
 
 const KEYS = [
   ['1', '2', '3'],
@@ -19,6 +20,8 @@ export default function PinEntry({
   onSubmit,
   autoSubmit = true,
 }) {
+  const { scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const [pin, setPin] = useState('');
   // 동일 pin 값에 대해 한 번만 submit. 부모가 onSubmit 을 매 렌더 새로 만들어
   // 이펙트가 재발화 되더라도 같은 입력으로 두 번 처리되지 않도록 방어.
@@ -105,20 +108,23 @@ export default function PinEntry({
   );
 }
 
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
+function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   root: {
     padding: 12,
     alignItems: 'center',
     backgroundColor: '#fff',
   },
   title: {
-    fontSize: 14,
+    fontSize: fp(14),
     fontWeight: '800',
     color: '#111827',
     marginBottom: 2,
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#6b7280',
     marginBottom: 8,
     textAlign: 'center',
@@ -141,7 +147,7 @@ const styles = StyleSheet.create({
     borderColor: '#111827',
   },
   error: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#dc2626',
     marginTop: 4,
     marginBottom: 2,
@@ -161,9 +167,10 @@ const styles = StyleSheet.create({
   },
   keyEmpty: { backgroundColor: 'transparent' },
   keyText: {
-    fontSize: 18,
+    fontSize: fp(18),
     color: '#111827',
     fontWeight: '600',
   },
-  keyTextDelete: { fontSize: 16, color: '#6b7280' },
-});
+  keyTextDelete: { fontSize: fp(16), color: '#6b7280' },
+  });
+}
