@@ -196,6 +196,12 @@ export function OrderProvider({ children }) {
       const { [targetId]: _, ...nextOrders } = orders;
       dispatch({ type: 'orders/removeTable', tableId: targetId });
       maybeUnsplitAfter(targetId, nextOrders);
+      // 동적 슬롯(예약/포장/배달) 이면 빈 번호 메꿈 —
+      // 자리이동·포장결제완료·배달자동정리 경로와 동일한 처리. 분할 슬롯('y2#1') 은 prefix 매칭에서 자연 제외.
+      const prefix = detectDynamicSlotPrefix(targetId);
+      if (prefix) {
+        dispatch({ type: 'orders/compactSlots', prefix });
+      }
       if (groupLeaderToDissolve) {
         setGroups((prev) => {
           if (!prev[groupLeaderToDissolve]) return prev;
