@@ -1,7 +1,11 @@
 import { StyleSheet } from 'react-native';
 
 // KitchenScreen.js 에서 분리된 스타일 시트.
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). PC/대형 태블릿 가독성 향상용.
+//        주방 디스플레이는 멀리서 보는 용도라 가독성 효과가 가장 큰 화면.
+export default function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   // 카드 영역(좌) + 조리 대기 사이드바(우) 가로 분할
   bodyRow: {
     flex: 1,
@@ -40,12 +44,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#c2410c',
   },
   sidebarHeaderIcon: {
-    fontSize: 14,
+    fontSize: fp(14),
   },
   sidebarTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 13,
+    fontSize: fp(13),
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 0,
@@ -54,7 +58,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   sidebarTotalQty: {
-    fontSize: 12,
+    fontSize: fp(12),
     fontWeight: '900',
     color: '#7c2d12',
     backgroundColor: '#fde68a',
@@ -67,7 +71,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sidebarEmpty: {
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#9ca3af',
     textAlign: 'center',
     paddingVertical: 24,
@@ -103,12 +107,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   sidebarRowName: {
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#111827',
     fontWeight: '800',
   },
   sidebarRowOpts: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#1d4ed8',
     fontWeight: '700',
     marginTop: 1,
@@ -120,7 +124,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sidebarRowLargeBadge: {
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#fff',
     fontWeight: '900',
     backgroundColor: '#dc2626',
@@ -130,7 +134,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sidebarRowNormalBadge: {
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#1e3a8a',
     fontWeight: '900',
     backgroundColor: '#dbeafe',
@@ -140,7 +144,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sidebarRowQty: {
-    fontSize: 14,
+    fontSize: fp(14),
     fontWeight: '900',
     color: '#b91c1c',
     fontVariant: ['tabular-nums'],
@@ -154,9 +158,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 24,
   },
-  emptyTitle: { fontSize: 22, fontWeight: '700', color: '#111827', marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#6b7280' },
-  versionMark: { fontSize: 10, color: '#9ca3af', marginTop: 12 },
+  emptyTitle: { fontSize: fp(22), fontWeight: '700', color: '#111827', marginBottom: 8 },
+  emptyText: { fontSize: fp(14), color: '#6b7280' },
+  versionMark: { fontSize: fp(10), color: '#9ca3af', marginTop: 12 },
   versionBar: {
     width: '100%',
     paddingVertical: 4,
@@ -164,7 +168,7 @@ const styles = StyleSheet.create({
     marginBottom: -8,
   },
   versionText: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#9ca3af',
     fontWeight: '600',
   },
@@ -201,7 +205,7 @@ const styles = StyleSheet.create({
   },
   cardDimmed: { opacity: 0.35 },
   highlightBadge: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#7c2d12',
     fontWeight: '900',
     backgroundColor: '#facc15',
@@ -212,7 +216,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   changedBadge: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#111827',
     fontWeight: '800',
     backgroundColor: '#fde68a',
@@ -222,7 +226,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   freshBadge: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#fff',
     fontWeight: '800',
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -239,13 +243,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   deliveryBarLabel: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#991b1b',
     fontWeight: '800',
     marginBottom: 2,
   },
   deliveryBarText: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#7f1d1d',
     fontWeight: '600',
   },
@@ -258,7 +262,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   changeBoxTitle: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#b45309',
     fontWeight: '800',
     marginBottom: 4,
@@ -274,7 +278,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   changeTag: {
-    fontSize: 10,
+    fontSize: fp(10),
     fontWeight: '800',
     color: '#fff',
     paddingHorizontal: 6,
@@ -287,23 +291,23 @@ const styles = StyleSheet.create({
   tagAdded: { backgroundColor: '#10b981' },
   tagChanged: { backgroundColor: '#d97706' },
   tagRemoved: { backgroundColor: '#dc2626' },
-  changeName: { flex: 1, fontSize: 13, color: '#111827', fontWeight: '600' },
+  changeName: { flex: 1, fontSize: fp(13), color: '#111827', fontWeight: '600' },
   changeNameInline: { minWidth: 0 },
   changeDetailInline: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#92400e',
     fontWeight: '700',
   },
-  changeValue: { fontSize: 13, color: '#374151', fontWeight: '700' },
+  changeValue: { fontSize: fp(13), color: '#374151', fontWeight: '700' },
   changeDetail: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#92400e',
     fontWeight: '700',
     marginTop: 1,
   },
   largeTag: { color: '#dc2626', fontWeight: '800' },
   normalTag: { color: '#6b7280', fontWeight: '700' },
-  optTag: { color: '#2563eb', fontWeight: '700', fontSize: 10 },
+  optTag: { color: '#2563eb', fontWeight: '700', fontSize: fp(10) },
   // 메모 — 항목 위 최상단에 노란 강조 박스
   itemMemoLine: {
     backgroundColor: '#fffbeb',
@@ -315,13 +319,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   itemMemoText: {
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#92400e',
     fontWeight: '700',
   },
-  itemMemoTextPhone: { fontSize: 10 },
+  itemMemoTextPhone: { fontSize: fp(10) },
   sectionLabel: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#9ca3af',
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -332,7 +336,7 @@ const styles = StyleSheet.create({
   row_removed: { backgroundColor: '#fee2e2', borderRadius: 4, paddingHorizontal: 4 },
   row_changed: { backgroundColor: '#fef3c7', borderRadius: 4, paddingHorizontal: 4 },
   inlineTag: {
-    fontSize: 10,
+    fontSize: fp(10),
     fontWeight: '800',
     color: '#fff',
     paddingHorizontal: 6,
@@ -372,7 +376,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardHeaderPhone: { paddingHorizontal: 6, paddingVertical: 4 },
-  cardLabelPhone: { fontSize: 13 },
+  cardLabelPhone: { fontSize: fp(13) },
   // flex: 1 + minWidth: 0 + overflow: hidden 으로 자식들이 cardTime 영역 침범 못 함.
   // 뱃지들이 너무 많으면 우측이 잘리고, cardTime 은 항상 우측에 보임.
   headerLeft: {
@@ -384,7 +388,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   seqBadge: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: 'rgba(0,0,0,0.25)',
@@ -393,9 +397,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
-  cardLabel: { fontSize: 16, color: '#fff', fontWeight: '800' },
+  cardLabel: { fontSize: fp(16), color: '#fff', fontWeight: '800' },
   cardType: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: 'rgba(255,255,255,0.25)',
@@ -407,7 +411,7 @@ const styles = StyleSheet.create({
   // flexShrink: 0 으로 시간이 항상 한 줄로 보이게 (두 자리 분도 안 잘림)
   cardTime: {
     flexShrink: 0,
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#fff',
     fontWeight: '600',
   },
@@ -421,31 +425,31 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   itemNameWrap: { flex: 1, minWidth: 0 },
-  itemName: { fontSize: 14, color: '#111827', fontWeight: '600' },
+  itemName: { fontSize: fp(14), color: '#111827', fontWeight: '600' },
   // 폰 화면에서도 변경사항 영역(changeName: 13px)과 동일한 크기로 통일
-  itemNamePhone: { fontSize: 13 },
+  itemNamePhone: { fontSize: fp(13) },
   itemOptLine: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#1d4ed8',
     fontWeight: '700',
     marginTop: 1,
   },
-  itemOptLinePhone: { fontSize: 11 },
+  itemOptLinePhone: { fontSize: fp(11) },
   itemQty: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#374151',
     fontWeight: '700',
     minWidth: 32,
     textAlign: 'right',
   },
-  itemQtyPhone: { fontSize: 13, minWidth: 28 },
+  itemQtyPhone: { fontSize: fp(13), minWidth: 28 },
   itemSubtotal: {
-    fontSize: 12,
+    fontSize: fp(12),
     color: '#6b7280',
     minWidth: 60,
     textAlign: 'right',
   },
-  itemSubtotalPhone: { fontSize: 12, minWidth: 50 },
+  itemSubtotalPhone: { fontSize: fp(12), minWidth: 50 },
 
   cardFooter: {
     flexDirection: 'row',
@@ -458,9 +462,9 @@ const styles = StyleSheet.create({
   },
   cardFooterPhone: { padding: 6, gap: 4 },
   totalWrap: { flex: 1 },
-  totalLabel: { fontSize: 11, color: '#6b7280' },
-  totalValue: { fontSize: 15, color: '#111827', fontWeight: '800' },
-  totalValuePhone: { fontSize: 12 },
+  totalLabel: { fontSize: fp(11), color: '#6b7280' },
+  totalValue: { fontSize: fp(15), color: '#111827', fontWeight: '800' },
+  totalValuePhone: { fontSize: fp(12) },
   doneBtn: {
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -469,9 +473,8 @@ const styles = StyleSheet.create({
   },
   doneBtnPhone: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4 },
   doneBtnReady: { backgroundColor: '#10b981' },
-  doneBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  doneBtnTextPhone: { fontSize: 11 },
+  doneBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
+  doneBtnTextPhone: { fontSize: fp(11) },
   doneBtnTextReady: { color: '#fff' },
-});
-
-export default styles;
+  });
+}
