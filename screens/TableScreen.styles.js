@@ -1,7 +1,11 @@
 import { StyleSheet } from 'react-native';
 
 // TableScreen.js 에서 분리된 스타일 시트.
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). PC/대형 태블릿 가독성 향상용.
+//        fontSize / lineHeight 에만 곱함 — padding / borderRadius 등 레이아웃은 미변경.
+export default function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
   topBar: {
@@ -25,8 +29,8 @@ const styles = StyleSheet.create({
   },
   subTabPhone: { paddingVertical: 4, paddingHorizontal: 2, borderBottomWidth: 2 },
   subTabActive: { borderBottomColor: '#111827' },
-  subTabText: { fontSize: 8, color: '#9ca3af', fontWeight: '500' },
-  subTabTextPhone: { fontSize: 8 },
+  subTabText: { fontSize: fp(8), color: '#9ca3af', fontWeight: '500' },
+  subTabTextPhone: { fontSize: fp(8) },
   subTabTextActive: { color: '#111827', fontWeight: '700' },
 
   actions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
@@ -39,12 +43,12 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   actionBtnPhone: { paddingVertical: 3, paddingHorizontal: 6 },
-  actionBtnText: { fontSize: 8, color: '#374151', fontWeight: '500' },
-  actionBtnTextPhone: { fontSize: 8 },
+  actionBtnText: { fontSize: fp(8), color: '#374151', fontWeight: '500' },
+  actionBtnTextPhone: { fontSize: fp(8) },
   actionBtnActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   actionBtnTextActive: { color: '#fff', fontWeight: '700' },
   settingBtn: { padding: 6, marginLeft: 4 },
-  settingIcon: { fontSize: 8, color: '#6b7280' },
+  settingIcon: { fontSize: fp(8), color: '#6b7280' },
 
   hintBar: {
     paddingVertical: 8,
@@ -53,14 +57,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#bfdbfe',
   },
-  hintText: { color: '#1e3a8a', fontSize: 8, fontWeight: '600' },
+  hintText: { color: '#1e3a8a', fontSize: fp(8), fontWeight: '600' },
   moveHint: { backgroundColor: '#fef3c7', borderBottomColor: '#fcd34d' },
-  moveHintText: { color: '#92400e', fontSize: 8, fontWeight: '700' },
+  moveHintText: { color: '#92400e', fontSize: fp(8), fontWeight: '700' },
   groupHint: { backgroundColor: '#ede9fe', borderBottomColor: '#c4b5fd' },
-  groupHintText: { color: '#5b21b6', fontSize: 8, fontWeight: '700' },
+  groupHintText: { color: '#5b21b6', fontSize: fp(8), fontWeight: '700' },
   groupHintSelected: {
     color: '#6d28d9',
-    fontSize: 8,
+    fontSize: fp(8),
     fontWeight: '800',
     marginTop: 2,
   },
@@ -130,11 +134,11 @@ const styles = StyleSheet.create({
 
   // 일반 테이블 라벨 — 총가격(11px)과 동일한 크기로 통일.
   // flexShrink: 0 — 라벨은 절대 잘리지 않도록 (총가격이 ellipsize 됨).
-  tileLabel: { fontSize: 11, color: '#374151', fontWeight: '700', flexShrink: 0 },
-  tileLabelTiny: { fontSize: 8, color: '#374151', fontWeight: '700', flexShrink: 0 },
+  tileLabel: { fontSize: fp(11), color: '#374151', fontWeight: '700', flexShrink: 0 },
+  tileLabelTiny: { fontSize: fp(8), color: '#374151', fontWeight: '700', flexShrink: 0 },
   // 주문 없는 빈(대기) 테이블 — 식별이 쉽도록 라벨을 키움
-  tileLabelEmpty: { fontSize: 15, color: '#374151', fontWeight: '900' },
-  textTiny: { fontSize: 9 },
+  tileLabelEmpty: { fontSize: fp(15), color: '#374151', fontWeight: '900' },
+  textTiny: { fontSize: fp(9) },
 
   tileTopRow: {
     flexDirection: 'row',
@@ -152,22 +156,22 @@ const styles = StyleSheet.create({
   },
   // 테이블 라벨 우측에 가독성 있게 표시되는 총 금액
   tileTopTotal: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#dc2626',
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
   tileTopTotalTiny: {
-    fontSize: 9,
+    fontSize: fp(9),
   },
   tileTopTotalPaid: {
     color: '#10b981',
   },
   // 주문 진행 중 테이블 — 총가격(11px) 옆 라벨도 동일 크기. 라벨 잘림 방지.
-  tileLabelSmall: { fontSize: 11, color: '#111827', fontWeight: '800', flexShrink: 0 },
+  tileLabelSmall: { fontSize: fp(11), color: '#111827', fontWeight: '800', flexShrink: 0 },
   badgesWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   tileQtyBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: '#dc2626',
@@ -177,7 +181,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tileReadyBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: '#10b981',
@@ -187,7 +191,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tileCookingBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: '#f97316',
@@ -197,7 +201,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tilePaidBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: '#2563eb',
@@ -207,7 +211,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tileDeliveringBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '700',
     backgroundColor: '#a855f7',
@@ -230,7 +234,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tileOrderingBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '800',
     backgroundColor: '#f59e0b',
@@ -240,7 +244,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tileGroupBadge: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#fff',
     fontWeight: '800',
     backgroundColor: '#7c3aed',
@@ -251,8 +255,8 @@ const styles = StyleSheet.create({
   },
 
   deliveryAddr: {
-    fontSize: 9,
-    lineHeight: 11,
+    fontSize: fp(9),
+    lineHeight: fp(11),
     color: '#dc2626',
     fontWeight: '700',
     marginTop: 1,
@@ -272,7 +276,7 @@ const styles = StyleSheet.create({
     gap: 1,
     flexShrink: 0,
     flexGrow: 0,
-    minHeight: 55,
+    minHeight: fp(13) * 4 + 3,
   },
   orderItemRow: {
     flexDirection: 'row',
@@ -280,13 +284,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  orderItemName: { fontSize: 10, color: '#374151', flex: 1, lineHeight: 13 },
+  orderItemName: { fontSize: fp(10), color: '#374151', flex: 1, lineHeight: fp(13) },
   largeTag: { color: '#dc2626', fontWeight: '800' },
   normalTag: { color: '#6b7280', fontWeight: '600' },
-  optTag: { color: '#2563eb', fontWeight: '700', fontSize: 8 },
+  optTag: { color: '#2563eb', fontWeight: '700', fontSize: fp(8) },
   // 메모는 항목 위 최상단에 작은 강조 박스로 — 옵션보다 더 눈에 띄게
   itemMemo: {
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#92400e',
     fontWeight: '700',
     backgroundColor: '#fffbeb',
@@ -298,7 +302,7 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   itemMemoModal: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#92400e',
     fontWeight: '700',
     backgroundColor: '#fffbeb',
@@ -315,7 +319,7 @@ const styles = StyleSheet.create({
   },
   itemCookedBadge: {
     color: '#065f46',
-    fontSize: 9,
+    fontSize: fp(9),
     fontWeight: '800',
   },
   itemCookingText: {
@@ -324,12 +328,12 @@ const styles = StyleSheet.create({
   },
   itemCookingBadge: {
     color: '#9a3412',
-    fontSize: 9,
+    fontSize: fp(9),
     fontWeight: '800',
   },
-  orderItemQty: { fontSize: 10, color: '#6b7280', fontWeight: '700' },
+  orderItemQty: { fontSize: fp(10), color: '#6b7280', fontWeight: '700' },
   orderItemsMore: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#6b7280',
     fontStyle: 'italic',
     fontWeight: '600',
@@ -346,7 +350,7 @@ const styles = StyleSheet.create({
     borderColor: '#c7d2fe',
   },
   expandChipText: {
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#3730a3',
     fontWeight: '700',
   },
@@ -362,7 +366,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   expandBtnText: {
-    fontSize: 8,
+    fontSize: fp(8),
     color: '#3730a3',
     fontWeight: '700',
   },
@@ -406,9 +410,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  modalTitle: { fontSize: 14, fontWeight: '800', color: '#111827' },
+  modalTitle: { fontSize: fp(14), fontWeight: '800', color: '#111827' },
   modalCloseHint: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#9ca3af',
     fontStyle: 'italic',
   },
@@ -421,18 +425,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  modalItemName: { flex: 1, fontSize: 12, color: '#111827', fontWeight: '600' },
+  modalItemName: { flex: 1, fontSize: fp(12), color: '#111827', fontWeight: '600' },
   modalItemQty: {
     minWidth: 36,
     textAlign: 'right',
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#6b7280',
     fontWeight: '600',
   },
   modalItemSubtotal: {
     minWidth: 72,
     textAlign: 'right',
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#111827',
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -447,18 +451,18 @@ const styles = StyleSheet.create({
     borderTopColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  modalTotalLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
-  modalTotalValue: { fontSize: 13, fontWeight: '800', color: '#111827' },
+  modalTotalLabel: { fontSize: fp(12), color: '#6b7280', fontWeight: '600' },
+  modalTotalValue: { fontSize: fp(13), fontWeight: '800', color: '#111827' },
   orderTotal: {
     marginTop: 'auto',
     paddingTop: 2,
-    fontSize: 9,
+    fontSize: fp(9),
     color: '#111827',
     fontWeight: '700',
     textAlign: 'right',
     flexShrink: 0,
   },
-  orderTotalTiny: { fontSize: 9 },
+  orderTotalTiny: { fontSize: fp(9) },
 
   clearTableBtn: {
     marginTop: 6,
@@ -467,7 +471,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
     alignItems: 'center',
   },
-  clearTableBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-});
-
-export default styles;
+  clearTableBtnText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
+  });
+}
