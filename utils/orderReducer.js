@@ -62,13 +62,6 @@ export function orderReducer(state, action) {
         : state;
     }
 
-    // 마이그레이션 동안 setOrders((prev) => ...) 패턴을 그대로 dispatch 로 흘려보내기 위한 임시 어댑터.
-    // 5단계에서 모든 호출처가 정식 action 으로 이전된 후 제거.
-    case 'orders/setOrdersCompat': {
-      const { updater } = action;
-      return typeof updater === 'function' ? updater(state) : updater;
-    }
-
     case 'orders/addItem': {
       const { tableId, menuItem, preferredSlotId } = action;
       if (!tableId) return state;

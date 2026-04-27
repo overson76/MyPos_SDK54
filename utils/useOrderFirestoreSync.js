@@ -33,7 +33,7 @@ function safeDocId(key) {
 
 export function useOrderFirestoreSync({
   orders,
-  setOrders,
+  dispatch,
   splits,
   setSplits,
   groups,
@@ -76,7 +76,7 @@ export function useOrderFirestoreSync({
         snap.docs.forEach((d) => {
           next[d.id] = d.data();
         });
-        setOrders(next);
+        dispatch({ type: 'orders/hydrate', payload: next });
         lastSyncedOrdersRef.current = next;
       },
       (err) => reportError(err, { ctx: 'orders.listener' })
@@ -192,7 +192,7 @@ export function useOrderFirestoreSync({
       unsubAddrEntries();
       unsubAddrMeta();
     };
-  }, [storeId, setOrders, setSplits, setGroups, setRevenue, setAddressBook]);
+  }, [storeId, dispatch, setSplits, setGroups, setRevenue, setAddressBook]);
 
   // ── orders write (diff + 디바운스) ──────────────────────────
   useEffect(() => {

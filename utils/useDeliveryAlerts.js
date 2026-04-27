@@ -4,8 +4,8 @@ import { parseDeliveryTime, deliveryDateFromParsed } from './timeUtil';
 import { resolveTableForAlert } from './orderHelpers';
 
 // 배달 시간 10분 전 / 5분 전 음성 + 사운드 알림.
-// 두 단계로 나눠 두 번 발화하도록 deliveryAlerted10/5 플래그 사용.
-export function useDeliveryAlerts({ orders, setOrders }) {
+// 두 단계로 나눠 두 번 발화하도록 deliveryAlerted10/5 플래그를 reducer 가 관리.
+export function useDeliveryAlerts({ orders, dispatch }) {
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
 
@@ -21,13 +21,7 @@ export function useDeliveryAlerts({ orders, setOrders }) {
       });
       const flagKey =
         stageMinutes === 10 ? 'deliveryAlerted10' : 'deliveryAlerted5';
-      setOrders((prev) => {
-        if (!prev[tableId] || prev[tableId][flagKey]) return prev;
-        return {
-          ...prev,
-          [tableId]: { ...prev[tableId], [flagKey]: true },
-        };
-      });
+      dispatch({ type: 'orders/markDeliveryAlerted', tableId, flagKey });
     };
 
     const check = () => {
@@ -53,7 +47,7 @@ export function useDeliveryAlerts({ orders, setOrders }) {
     const interval = setInterval(check, 30000);
     check();
     return () => clearInterval(interval);
-    // setOrders 는 안정적, ordersRef 로 최신 orders 접근.
+    // dispatch 는 안정적, ordersRef 로 최신 orders 접근.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

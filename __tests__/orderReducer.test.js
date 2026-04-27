@@ -38,22 +38,6 @@ describe('orderReducer · default / hydrate', () => {
     expect(orderReducer(s, { type: 'orders/hydrate' })).toBe(s);
   });
 
-  test('setOrdersCompat 가 updater 함수 호출', () => {
-    const s = { t1: makeOrder() };
-    const next = orderReducer(s, {
-      type: 'orders/setOrdersCompat',
-      updater: (prev) => ({ ...prev, t2: makeOrder() }),
-    });
-    expect(Object.keys(next)).toEqual(['t1', 't2']);
-  });
-
-  test('setOrdersCompat 가 직접 값도 받음', () => {
-    const next = orderReducer({}, {
-      type: 'orders/setOrdersCompat',
-      updater: { t9: makeOrder() },
-    });
-    expect(next).toEqual({ t9: makeOrder() });
-  });
 });
 
 describe('orderReducer · addItem', () => {

@@ -198,32 +198,68 @@ export default function KitchenScreen() {
         }
       }
     }
-    // 메뉴 그룹 단위로 합쳐 많은 순서대로, 같은 메뉴 안에서는 옵션 없음 → 옵션 순.
+    // 메뉴 그룹 단위로 합쳐 많은 순서대로, 같은 메뉴 안에서는 옵션 순.
+    const groups = Array.from(map.values()).filter(
+      (v) => v.normal + v.large > 0
+    );
     const menuTotals = new Map();
-    for (const v of map.values()) {
+    const menuHasLarge = new Map();
+    for (const v of groups) {
       menuTotals.set(v.id, (menuTotals.get(v.id) || 0) + v.normal + v.large);
+      if (v.large > 0) menuHasLarge.set(v.id, true);
     }
-    return Array.from(map.values())
-      .filter((v) => v.normal + v.large > 0)
-      .sort((a, b) => {
-        const ta = menuTotals.get(a.id) || 0;
-        const tb = menuTotals.get(b.id) || 0;
-        if (ta !== tb) return tb - ta;
-        if (a.id !== b.id) return a.id - b.id;
-        if (a.options.length !== b.options.length)
-          return a.options.length - b.options.length;
-        return a.options.join(',').localeCompare(b.options.join(','));
-      });
+    // 한 그룹을 보통/대 entry 두 개로 분리 — 사이드바에서 각각 별도 row 로.
+    // showNormalLabel: 같은 메뉴 id 에 대 entry 가 있을 때만 보통 entry 에 '보통' 라벨.
+    // (대 없는 메뉴는 그냥 메뉴명만 → 사용자가 보통으로 자동 인지)
+    const entries = [];
+    for (const v of groups) {
+      if (v.normal > 0) {
+        entries.push({
+          key: `${v.key}#normal`,
+          id: v.id,
+          name: v.name,
+          options: v.options,
+          qty: v.normal,
+          portion: 'normal',
+          showNormalLabel: !!menuHasLarge.get(v.id),
+        });
+      }
+      if (v.large > 0) {
+        entries.push({
+          key: `${v.key}#large`,
+          id: v.id,
+          name: v.name,
+          options: v.options,
+          qty: v.large,
+          portion: 'large',
+          showNormalLabel: false,
+        });
+      }
+    }
+    // 정렬: 메뉴 total desc → 같은 메뉴 안에서는 보통 먼저, 대 다음 → 옵션 순
+    return entries.sort((a, b) => {
+      const ta = menuTotals.get(a.id) || 0;
+      const tb = menuTotals.get(b.id) || 0;
+      if (ta !== tb) return tb - ta;
+      if (a.id !== b.id) return a.id - b.id;
+      if (a.portion !== b.portion) return a.portion === 'normal' ? -1 : 1;
+      if (a.options.length !== b.options.length)
+        return a.options.length - b.options.length;
+      return a.options.join(',').localeCompare(b.options.join(','));
+    });
   })();
-  const pendingTotalQty = pendingByMenu.reduce(
-    (s, v) => s + v.normal + v.large,
-    0
-  );
+  const pendingTotalQty = pendingByMenu.reduce((s, v) => s + v.qty, 0);
 
   // 메뉴 id → 메뉴 정의 매핑 (color 추출용)
   const menuById = Object.fromEntries(menuItems.map((m) => [m.id, m]));
-  // 표기용 메뉴명에서 괄호와 그 안의 내용 제거 — 사이드바 가독성 향상
+  // 표기용 메뉴명에서 괄호와 그 안의 내용 제거 — shortName fallback 용
   const stripParens = (s) => (s || '').replace(/\s*\([^)]*\)\s*/g, '').trim();
+  // 주문현황 + 조리대기 표시용 단축명 — 메뉴 정의의 shortName 우선,
+  // 없으면 괄호 제거된 이름으로 fallback. 매장 화면 가독성 + TTS 와 동일한 규칙.
+  const shortMenuName = (item) => {
+    const def = menuById[item?.id];
+    return def?.shortName || stripParens(item?.name) || item?.name || '';
+  };
 
   const renderSidebar = () => (
     <View style={[styles.sidebar, { width: sidebarWidth }]}>
@@ -237,15 +273,15 @@ export default function KitchenScreen() {
           <Text style={styles.sidebarEmpty}>대기 항목 없음</Text>
         ) : (
           pendingByMenu.map((v) => {
-            const total = v.normal + v.large;
             const def = menuById[v.id];
             const color = def?.color || '#6b7280';
-            const cleanName = stripParens(v.name) || v.name;
+            const cleanName = shortMenuName(v);
             const optLabels = v.options
               .map((oid) => OPTIONS_CATALOG.find((o) => o.id === oid)?.label)
               .filter(Boolean);
             const hasOpts = optLabels.length > 0;
             const isActive = highlightMenuId === v.id;
+            const isLarge = v.portion === 'large';
             return (
               <TouchableOpacity
                 key={`pm-${v.key}`}
@@ -264,27 +300,27 @@ export default function KitchenScreen() {
               >
                 <View style={[styles.sidebarColorDot, { backgroundColor: color }]} />
                 <View style={styles.sidebarRowTextWrap}>
-                  <Text style={styles.sidebarRowName} numberOfLines={1}>
+                  {/* 메뉴명 + 사이즈 라벨 inline.
+                      - 대: 항상 ' 대' 표시 (빨강 강조)
+                      - 보통: 같은 메뉴에 대 entry 가 함께 있을 때만 ' 보통' (회색)
+                      - 대 없는 메뉴는 라벨 X — 자동 보통으로 인지 */}
+                  <Text style={styles.sidebarRowName}>
                     {cleanName}
+                    {isLarge && (
+                      <Text style={styles.largeTag}> 대</Text>
+                    )}
+                    {!isLarge && v.showNormalLabel && (
+                      <Text style={styles.normalTag}> 보통</Text>
+                    )}
                   </Text>
                   {hasOpts && (
-                    <Text style={styles.sidebarRowOpts} numberOfLines={2}>
+                    <Text style={styles.sidebarRowOpts}>
                       {optLabels.join(' · ')}
                     </Text>
                   )}
                 </View>
                 <View style={styles.sidebarRowQtyWrap}>
-                  {v.large > 0 && (
-                    <Text style={styles.sidebarRowLargeBadge}>
-                      대{v.large}
-                    </Text>
-                  )}
-                  {v.normal > 0 && v.large > 0 && (
-                    <Text style={styles.sidebarRowNormalBadge}>
-                      보통{v.normal}
-                    </Text>
-                  )}
-                  <Text style={styles.sidebarRowQty}>×{total}</Text>
+                  <Text style={styles.sidebarRowQty}>×{v.qty}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -403,8 +439,9 @@ export default function KitchenScreen() {
                   {addedRows.map((r) => (
                     <View key={`ca-${r.item.slotId || r.item.id}`} style={styles.changeLine}>
                       <Text style={[styles.changeTag, styles.tagAdded]}>추가</Text>
-                      <Text style={styles.changeName} numberOfLines={1}>
-                        {r.item.name}
+                      {/* 변경사항은 매장 운영의 핵심 정보 — 메뉴명/대 표기/수량이 잘리지 않도록 줄바꿈 허용 */}
+                      <Text style={styles.changeName}>
+                        {shortMenuName(r.item)}
                         {(r.item.largeQty || 0) > 0 && (
                           <Text style={styles.largeTag}>
                             {(r.item.largeQty || 0) === r.item.qty
@@ -450,11 +487,11 @@ export default function KitchenScreen() {
                     return (
                       <View key={`cc-${r.item.slotId || r.item.id}`} style={styles.changeLine}>
                         <Text style={[styles.changeTag, styles.tagChanged]}>변경</Text>
+                        {/* 변경 detail (수량/대보통/옵션 +/-) 가 길어도 잘리지 않도록 줄바꿈 허용 */}
                         <Text
                           style={[styles.changeName, styles.changeNameInline]}
-                          numberOfLines={1}
                         >
-                          {r.item.name}
+                          {shortMenuName(r.item)}
                           {detail.length > 0 && (
                             <Text style={styles.changeDetailInline}>
                               {' · '}
@@ -470,9 +507,8 @@ export default function KitchenScreen() {
                       <Text style={[styles.changeTag, styles.tagRemoved]}>취소</Text>
                       <Text
                         style={[styles.changeName, styles.text_removed]}
-                        numberOfLines={1}
                       >
-                        {r.item.name}
+                        {shortMenuName(r.item)}
                       </Text>
                       <Text style={[styles.changeValue, styles.text_removed]}>
                         ×{r.previousQty ?? (r.item.qty || 1)}
@@ -567,15 +603,10 @@ export default function KitchenScreen() {
                           if (allOthersCooked && !hasBothPortions) {
                             speakFullReady({ table: o.table });
                           } else {
-                            // 음성 안내용 단축명 — shortName 우선, 없으면 괄호 제거된 이름
-                            const def = menuById[r.item.id];
-                            const spokenName =
-                              def?.shortName ||
-                              stripParens(r.item.name) ||
-                              r.item.name;
+                            // 음성 안내도 화면 표시와 동일한 shortMenuName 규칙
                             speakPartialReady({
                               table: o.table,
-                              itemName: spokenName,
+                              itemName: shortMenuName(r.item),
                             });
                           }
                         }
@@ -609,7 +640,7 @@ export default function KitchenScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {r.item.name}
+                          {shortMenuName(r.item)}
                           {sizeLabel && (
                             <Text
                               style={
@@ -623,6 +654,7 @@ export default function KitchenScreen() {
                             </Text>
                           )}
                         </Text>
+                        {/* 옵션은 매장 주문 정확도 핵심 — 잘리지 않도록 줄바꿈 허용 */}
                         {optLabels.length > 0 && (
                           <Text
                             style={[
@@ -630,7 +662,6 @@ export default function KitchenScreen() {
                               isPhone && styles.itemOptLinePhone,
                               isCooked && styles.text_cooked,
                             ]}
-                            numberOfLines={2}
                           >
                             {optLabels.join(' · ')}
                           </Text>
@@ -666,7 +697,8 @@ export default function KitchenScreen() {
                     </TouchableOpacity>
                     );
                   };
-                  // 메모는 같은 항목 묶음 최상단에 한 번만 표시
+                  // 메모는 같은 항목 묶음 최상단에 한 번만 표시.
+                  // 매장 운영의 핵심 정보 — 잘리지 않도록 줄바꿈 허용 (numberOfLines 제거).
                   if (r.item.memo) {
                     out.push(
                       <View
@@ -675,7 +707,6 @@ export default function KitchenScreen() {
                       >
                         <Text
                           style={[styles.itemMemoText, isPhone && styles.itemMemoTextPhone]}
-                          numberOfLines={2}
                         >
                           📝 {r.item.memo}
                         </Text>
@@ -710,7 +741,7 @@ export default function KitchenScreen() {
                       style={[styles.itemName, styles.text_removed]}
                       numberOfLines={1}
                     >
-                      {r.item.name}
+                      {shortMenuName(r.item)}
                     </Text>
                     <Text style={[styles.itemQty, styles.text_removed]}>
                       ×{r.previousQty ?? (r.item.qty || 1)}
