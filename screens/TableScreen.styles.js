@@ -128,12 +128,13 @@ const styles = StyleSheet.create({
   },
   tilePartPhone: { borderRadius: 6, padding: 3 },
 
-  // 일반 테이블 라벨 — 총가격(11px)과 동일한 크기로 통일
-  tileLabel: { fontSize: 11, color: '#374151', fontWeight: '700' },
-  tileLabelTiny: { fontSize: 8, color: '#374151', fontWeight: '700' },
+  // 일반 테이블 라벨 — 총가격(11px)과 동일한 크기로 통일.
+  // flexShrink: 0 — 라벨은 절대 잘리지 않도록 (총가격이 ellipsize 됨).
+  tileLabel: { fontSize: 11, color: '#374151', fontWeight: '700', flexShrink: 0 },
+  tileLabelTiny: { fontSize: 8, color: '#374151', fontWeight: '700', flexShrink: 0 },
   // 주문 없는 빈(대기) 테이블 — 식별이 쉽도록 라벨을 키움
   tileLabelEmpty: { fontSize: 15, color: '#374151', fontWeight: '900' },
-  textTiny: { fontSize: 8 },
+  textTiny: { fontSize: 9 },
 
   tileTopRow: {
     flexDirection: 'row',
@@ -162,8 +163,8 @@ const styles = StyleSheet.create({
   tileTopTotalPaid: {
     color: '#10b981',
   },
-  // 주문 진행 중 테이블 — 총가격(11px) 옆 라벨도 동일 크기
-  tileLabelSmall: { fontSize: 11, color: '#111827', fontWeight: '800' },
+  // 주문 진행 중 테이블 — 총가격(11px) 옆 라벨도 동일 크기. 라벨 잘림 방지.
+  tileLabelSmall: { fontSize: 11, color: '#111827', fontWeight: '800', flexShrink: 0 },
   badgesWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   tileQtyBadge: {
     fontSize: 8,
@@ -262,7 +263,7 @@ const styles = StyleSheet.create({
     // flex 부모 안에서 다른 항목에 의해 압축되어 0 높이로 가려지는 것 방지
     flexShrink: 0,
   },
-  // 4행 무조건 보장: lineHeight 10 × 4 + gap 1 × 3 = 43.
+  // 4행 무조건 보장: lineHeight 13 × 4 + gap 1 × 3 = 55.
   // flexShrink: 0 으로 다른 요소가 공간을 뺏지 못하게 막음.
   // 다른 요소 (delivery / total) 가 잘릴 수는 있어도 메뉴 4개는 반드시 표시.
   orderItemsList: {
@@ -271,7 +272,7 @@ const styles = StyleSheet.create({
     gap: 1,
     flexShrink: 0,
     flexGrow: 0,
-    minHeight: 43,
+    minHeight: 55,
   },
   orderItemRow: {
     flexDirection: 'row',
@@ -279,20 +280,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  orderItemName: { fontSize: 8, color: '#374151', flex: 1, lineHeight: 10 },
+  orderItemName: { fontSize: 10, color: '#374151', flex: 1, lineHeight: 13 },
   largeTag: { color: '#dc2626', fontWeight: '800' },
   normalTag: { color: '#6b7280', fontWeight: '600' },
-  optTag: { color: '#2563eb', fontWeight: '700', fontSize: 7 },
+  optTag: { color: '#2563eb', fontWeight: '700', fontSize: 8 },
   // 메모는 항목 위 최상단에 작은 강조 박스로 — 옵션보다 더 눈에 띄게
   itemMemo: {
-    fontSize: 7,
+    fontSize: 9,
     color: '#92400e',
     fontWeight: '700',
     backgroundColor: '#fffbeb',
     borderLeftWidth: 2,
     borderLeftColor: '#f59e0b',
     paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingVertical: 2,
     borderRadius: 3,
     marginBottom: 1,
   },
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
   },
   itemCookedBadge: {
     color: '#065f46',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
   },
   itemCookingText: {
@@ -323,28 +324,29 @@ const styles = StyleSheet.create({
   },
   itemCookingBadge: {
     color: '#9a3412',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
   },
-  orderItemQty: { fontSize: 8, color: '#6b7280', fontWeight: '600' },
+  orderItemQty: { fontSize: 10, color: '#6b7280', fontWeight: '700' },
   orderItemsMore: {
-    fontSize: 8,
+    fontSize: 10,
     color: '#6b7280',
     fontStyle: 'italic',
     fontWeight: '600',
     marginTop: 2,
   },
-  // top row 뱃지 영역에 들어가는 작은 펼쳐보기 칩 (구 expandBtn 대체)
+  // top row 뱃지 영역에 들어가는 펼쳐보기 칩 — 라벨/총가격 침범 안 하도록 좁게,
+  // 단 패딩은 1~2 확보해 손가락 탭 영역 유지. 원본(4/0/7px) 대비 패딩+폰트 모두 향상.
   expandChip: {
     paddingHorizontal: 4,
-    paddingVertical: 0,
+    paddingVertical: 1,
     borderRadius: 6,
     backgroundColor: '#eef2ff',
     borderWidth: 1,
     borderColor: '#c7d2fe',
   },
   expandChipText: {
-    fontSize: 7,
+    fontSize: 9,
     color: '#3730a3',
     fontWeight: '700',
   },
@@ -404,9 +406,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  modalTitle: { fontSize: 8, fontWeight: '800', color: '#111827' },
+  modalTitle: { fontSize: 14, fontWeight: '800', color: '#111827' },
   modalCloseHint: {
-    fontSize: 8,
+    fontSize: 11,
     color: '#9ca3af',
     fontStyle: 'italic',
   },
@@ -419,18 +421,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  modalItemName: { flex: 1, fontSize: 8, color: '#111827', fontWeight: '600' },
+  modalItemName: { flex: 1, fontSize: 12, color: '#111827', fontWeight: '600' },
   modalItemQty: {
     minWidth: 36,
     textAlign: 'right',
-    fontSize: 8,
+    fontSize: 11,
     color: '#6b7280',
     fontWeight: '600',
   },
   modalItemSubtotal: {
     minWidth: 72,
     textAlign: 'right',
-    fontSize: 8,
+    fontSize: 11,
     color: '#111827',
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -445,27 +447,27 @@ const styles = StyleSheet.create({
     borderTopColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  modalTotalLabel: { fontSize: 8, color: '#6b7280', fontWeight: '600' },
-  modalTotalValue: { fontSize: 8, fontWeight: '800', color: '#111827' },
+  modalTotalLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  modalTotalValue: { fontSize: 13, fontWeight: '800', color: '#111827' },
   orderTotal: {
     marginTop: 'auto',
     paddingTop: 2,
-    fontSize: 7,
+    fontSize: 9,
     color: '#111827',
     fontWeight: '700',
     textAlign: 'right',
     flexShrink: 0,
   },
-  orderTotalTiny: { fontSize: 8 },
+  orderTotalTiny: { fontSize: 9 },
 
   clearTableBtn: {
     marginTop: 6,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 4,
     backgroundColor: '#10b981',
     alignItems: 'center',
   },
-  clearTableBtnText: { color: '#fff', fontSize: 8, fontWeight: '700' },
+  clearTableBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 });
 
 export default styles;

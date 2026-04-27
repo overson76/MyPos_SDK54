@@ -12,6 +12,7 @@ import {
   appendHistory,
   buildHistoryEntry,
   computeItemsTotal,
+  detectDynamicSlotPrefix,
   resolveTableForAlert,
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
@@ -248,6 +249,12 @@ export function OrderProvider({ children }) {
           (dst.confirmedItems || []).length === 0);
       if (!dstEmpty) return false;
       dispatch({ type: 'orders/moveOrder', fromId, toId });
+      // 자리이동 출처가 동적 슬롯(예약/포장/배달) 이면 빈 번호 메꿈.
+      // 예: y2 가 t05 로 이동하면 y3 → y2, y4 → y3 ... 으로 재키잉.
+      const prefix = detectDynamicSlotPrefix(fromId);
+      if (prefix) {
+        dispatch({ type: 'orders/compactSlots', prefix });
+      }
       return true;
     };
 
@@ -340,6 +347,30 @@ export function OrderProvider({ children }) {
 
     const markPaid = (tableId) => {
       addBreadcrumb('order.markPaid', { tableId });
+      // 포장(p prefix) 은 결제 완료 = 픽업 종료 → 매출 기록 + 슬롯 제거 + compact.
+      // 그 외(일반/배달/예약/분할) 는 기존 동작: paymentStatus 만 'paid' 로 변경.
+      const prefix = detectDynamicSlotPrefix(tableId);
+      if (prefix === 'p') {
+        const existing = orders[tableId];
+        if (existing && (existing.items || []).length > 0) {
+          const total = computeItemsTotal(existing.items);
+          setRevenue((prev) =>
+            appendHistory(
+              prev,
+              buildHistoryEntry({
+                tableId,
+                items: existing.items,
+                options: existing.options,
+                paymentStatus: 'paid',
+                total,
+              })
+            )
+          );
+        }
+        dispatch({ type: 'orders/removeTable', tableId });
+        dispatch({ type: 'orders/compactSlots', prefix: 'p' });
+        return;
+      }
       dispatch({ type: 'orders/markPaid', tableId });
     };
 
