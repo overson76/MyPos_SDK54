@@ -100,17 +100,39 @@ function WebInsetsOverride({ children }) {
 //   unjoined / pendingApproval → AuthScreen
 //   joined                 → 기존 LockProvider/MenuProvider/OrderProvider + MainApp
 // 가입 안 된 상태에서는 LockProvider 등이 mount 안 됨 → AsyncStorage 읽기 폭주 방지.
+//
+// web 미리보기는 디자인/레이아웃 검증용이며 매장 가입(Phone Auth) 흐름은 native 에서만
+// 검증한다. 따라서 web 에서는 StoreProvider/Gate 자체를 mount 하지 않고 바로 메인 트리로
+// 진입 — Firebase 의 web 부분동작으로 SplashView 무한 로딩 되는 문제를 우회한다.
 export default function App() {
   return (
     <SentryErrorBoundary fallback={CrashFallback}>
       <SafeAreaProvider initialMetrics={SIMULATED_INITIAL_METRICS}>
         <WebInsetsOverride>
+          {/* StoreProvider 는 web 에서도 mount — useOrderFirestoreSync 등이
+              useStore() 를 호출하므로 context 자체는 항상 살아있어야 한다.
+              firebase.web.js stub 이 null 만 반환해 subscribe 는 자동 noop.
+              Gate 분기만 우회해 web 에선 가입 흐름 건너뛰고 메인 트리 진입. */}
           <StoreProvider>
-            <Gate />
+            {Platform.OS === 'web' ? <JoinedAppTree /> : <Gate />}
           </StoreProvider>
         </WebInsetsOverride>
       </SafeAreaProvider>
     </SentryErrorBoundary>
+  );
+}
+
+// joined 상태에서 mount 되는 Provider 트리 + MainApp. Gate 의 joined 분기와 web 분기에서
+// 같은 트리를 공유하기 위해 별도 컴포넌트로 분리.
+function JoinedAppTree() {
+  return (
+    <LockProvider>
+      <MenuProvider>
+        <OrderProvider>
+          <MainApp />
+        </OrderProvider>
+      </MenuProvider>
+    </LockProvider>
   );
 }
 
@@ -122,15 +144,7 @@ function Gate() {
   if (state !== STORE_STATE.JOINED) {
     return <AuthScreen />;
   }
-  return (
-    <LockProvider>
-      <MenuProvider>
-        <OrderProvider>
-          <MainApp />
-        </OrderProvider>
-      </MenuProvider>
-    </LockProvider>
-  );
+  return <JoinedAppTree />;
 }
 
 function SplashView() {
