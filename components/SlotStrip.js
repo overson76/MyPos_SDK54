@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useResponsive } from '../utils/useResponsive';
 
 // 그리드의 일부 셀 자리를 차지하는 가로 스와이프 영역.
 // 처음 baseCount 개의 슬롯은 영역 폭에 정확히 fit (그리드 셀과 같은 폭),
@@ -18,6 +19,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 //   baseCount: number  영역 폭에 fit 시킬 기본 슬롯 수 (예약 2, 포장 2, 배달 5)
 //   gap: number  슬롯 간 간격 (그리드 gap 과 동일하게)
 export default function SlotStrip({ slots, renderItem, baseCount, gap = 4 }) {
+  const { scale } = useResponsive();
+  const chevronFont = { fontSize: Math.round(14 * scale) };
   const scrollRef = useRef(null);
   const dragRef = useRef({ down: false, startX: 0, startScroll: 0, moved: 0 });
   const [innerW, setInnerW] = useState(0);
@@ -142,7 +145,7 @@ export default function SlotStrip({ slots, renderItem, baseCount, gap = 4 }) {
           end={{ x: 1, y: 0.5 }}
           style={styles.fadeLeft}
         >
-          <Text style={styles.chevronLeft}>❮</Text>
+          <Text style={[styles.chevronLeft, chevronFont]}>❮</Text>
         </LinearGradient>
       )}
       {edges.canRight && (
@@ -153,7 +156,7 @@ export default function SlotStrip({ slots, renderItem, baseCount, gap = 4 }) {
           end={{ x: 1, y: 0.5 }}
           style={styles.fadeRight}
         >
-          <Text style={styles.chevronRight}>❯</Text>
+          <Text style={[styles.chevronRight, chevronFont]}>❯</Text>
         </LinearGradient>
       )}
     </View>

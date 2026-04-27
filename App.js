@@ -164,8 +164,10 @@ function MainApp() {
   const [lastSelectedTableId, setLastSelectedTableId] = useState(null);
   // 주문 탭에서 '주문' 클릭 후 테이블 선택 시 자동 확정하기 위한 의도 플래그
   const [autoConfirmIntent, setAutoConfirmIntent] = useState(false);
-  const { isNarrow } = useResponsive();
+  const { isNarrow, scale } = useResponsive();
   const isMobile = isNarrow;
+  // 4탭 헤더 폰트도 PC(>=1200)에서 1.3 배. styles.tabText 는 정적이라 인라인으로만 곱함.
+  const tabFontSize = Math.round((isMobile ? 11 : 13) * scale);
 
   // iOS 무음 스위치 무시 + 오디오 세션 구성, 저장된 볼륨 / 개인정보 토글 hydrate. 1회.
   useEffect(() => {
@@ -240,6 +242,7 @@ function MainApp() {
                       styles.tabText,
                       isMobile && styles.tabTextMobile,
                       isActive && styles.tabTextActive,
+                      { fontSize: tabFontSize },
                     ]}
                   >
                     {key}
