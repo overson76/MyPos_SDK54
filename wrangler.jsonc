@@ -1,0 +1,11 @@
+{
+  // Cloudflare Workers 정적 자산 호스팅 설정.
+  // 빌드 산출물(`dist/`) 을 SPA 로 서빙 — 모든 경로를 index.html 로 라우팅해
+  // 새로고침/딥링크 시 404 안 뜨도록.
+  "name": "mypos-sdk54",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
