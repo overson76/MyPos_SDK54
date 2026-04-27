@@ -56,12 +56,13 @@ function CrashFallback({ error, resetError }) {
 
 const TAB_KEYS = ['테이블', '주문', '주문현황', '관리자'];
 
-// web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을 강제 주입.
-// 실 iPhone 에서는 OS 가 보고하므로 native 빌드는 그대로 동작.
+// dev 모드 web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을
+// 강제 주입. 실 iPhone 에서는 OS 가 보고하므로 native 빌드는 그대로 동작.
+// production web 빌드(매장 PC 운영용)에서는 시뮬을 꺼서 풀스크린으로 그려지게 한다.
 // SafeAreaProvider 의 initialMetrics 와 안쪽 SafeAreaInsetsContext.Provider 를 같은 값으로
 // 두 곳에 주입하는 이유: SafeAreaProvider 가 web 측정값(0)을 동적으로 덮어쓰기 때문에
 // 안쪽 Provider 한 겹 더 두어 시뮬 값이 유지되게 한다.
-const SIMULATE_IPHONE_WEB_INSETS = Platform.OS === 'web';
+const SIMULATE_IPHONE_WEB_INSETS = Platform.OS === 'web' && __DEV__;
 const IPHONE_15_PROMAX_LANDSCAPE_INSETS = {
   top: 0,
   bottom: 21,
