@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import styles from './TableScreen.styles';
+import makeStyles from './TableScreen.styles';
 import {
   DYNAMIC_SLOT_PREFIX,
   tableActions,
@@ -45,7 +45,9 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       clearInterval(timeId);
     };
   }, []);
-  const { width, height, isXS, isSM, isMD } = useResponsive();
+  const { width, height, isXS, isSM, isMD, scale } = useResponsive();
+  // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   // 모든 화면을 한 화면에 Fit — 항상 5 × 4 그리드로 표시
   const isCompact = width < 1200 || height < 700;
   const cols = 5;
