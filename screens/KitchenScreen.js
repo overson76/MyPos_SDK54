@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 // (useRef 는 dragRef/cleanupRef 용으로 유지)
 import {
   Platform,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import styles from './KitchenScreen.styles';
+import makeStyles from './KitchenScreen.styles';
 import { useResponsive } from '../utils/useResponsive';
 import { tables, tableTypeColors, resolveAnyTable } from '../utils/tableData';
 import { useOrders } from '../utils/OrderContext';
@@ -100,7 +100,8 @@ export default function KitchenScreen() {
       window.removeEventListener('mouseup', onUp);
     };
   };
-  const { width, height, isXS, isSM, isMD } = useResponsive();
+  const { width, height, isXS, isSM, isMD, scale } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   const isCompact = width < 1200 || height < 700;
   const isPhone = isCompact;
   // 그리드 컨테이너 padding/gap — 스타일과 동일 값. 카드 폭 계산이 어긋나면 wrap 됨.

@@ -1,7 +1,10 @@
 import { StyleSheet } from 'react-native';
 
 // OrderScreen.js 에서 분리된 스타일 시트.
-const styles = StyleSheet.create({
+// scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0). PC/대형 태블릿 가독성 향상용.
+export default function makeStyles(scale = 1) {
+  const fp = (n) => Math.round(n * scale);
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
   tableHeader: {
@@ -16,9 +19,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   backBtn: { paddingVertical: 4, paddingHorizontal: 8, width: 72 },
-  backText: { fontSize: 14, color: '#374151', fontWeight: '600' },
-  tableHeaderHint: { fontSize: 11, color: '#6b7280' },
-  tableLabel: { fontSize: 16, color: '#111827', fontWeight: '700', flexShrink: 0 },
+  backText: { fontSize: fp(14), color: '#374151', fontWeight: '600' },
+  tableHeaderHint: { fontSize: fp(11), color: '#6b7280' },
+  tableLabel: { fontSize: fp(16), color: '#111827', fontWeight: '700', flexShrink: 0 },
   headerAddressWrap: {
     flex: 1,
     minWidth: 0,
@@ -39,7 +42,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   deliveryLabel: {
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#991b1b',
     fontWeight: '800',
   },
@@ -50,7 +53,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#111827',
   },
   deliveryInputFlex: { flex: 1, minWidth: 120 },
@@ -60,16 +63,16 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    fontSize: 12,
+    fontSize: fp(12),
   },
   deliveryTimeInputCompact: {
     width: 60,
     paddingVertical: 4,
     paddingHorizontal: 6,
-    fontSize: 12,
+    fontSize: fp(12),
   },
   deliveryLabelTight: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#991b1b',
     fontWeight: '800',
     marginLeft: 4,
@@ -83,7 +86,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   addressBookBtnText: {
-    fontSize: 12,
+    fontSize: fp(12),
     fontWeight: '900',
     color: '#991b1b',
   },
@@ -94,14 +97,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 8,
     paddingVertical: 6,
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#111827',
     width: 72,
     textAlign: 'center',
     fontWeight: '700',
   },
   deliveryHint: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#991b1b',
     fontStyle: 'italic',
   },
@@ -128,7 +131,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   ampmBtnActive: { backgroundColor: '#dc2626' },
-  ampmText: { fontSize: 12, fontWeight: '700', color: '#991b1b' },
+  ampmText: { fontSize: fp(12), fontWeight: '700', color: '#991b1b' },
   ampmTextActive: { color: '#fff' },
 
   body: { flex: 1, flexDirection: 'row', minHeight: 0 },
@@ -160,8 +163,8 @@ const styles = StyleSheet.create({
   },
   categoryTabPhone: { paddingHorizontal: 8, paddingVertical: 4, borderBottomWidth: 2 },
   categoryTabActive: { borderBottomColor: '#dc2626' },
-  categoryText: { fontSize: 15, color: '#6b7280', fontWeight: '500' },
-  categoryTextPhone: { fontSize: 11 },
+  categoryText: { fontSize: fp(15), color: '#6b7280', fontWeight: '500' },
+  categoryTextPhone: { fontSize: fp(11) },
   categoryTextActive: { color: '#111827', fontWeight: '700' },
 
   grid: {
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.02)',
   },
   favDragHint: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#6b7280',
     fontWeight: '600',
     paddingHorizontal: 12,
@@ -230,22 +233,22 @@ const styles = StyleSheet.create({
   tileScrimBottomPhone: { paddingHorizontal: 4, paddingVertical: 2 },
   tileName: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: fp(14),
     fontWeight: '700',
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  tileNamePhone: { fontSize: 10 },
+  tileNamePhone: { fontSize: fp(10) },
   tilePrice: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: fp(13),
     fontWeight: '700',
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  tilePricePhone: { fontSize: 10 },
+  tilePricePhone: { fontSize: fp(10) },
 
   optionsSection: {
     padding: 12,
@@ -254,8 +257,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   optionsSectionPhone: { padding: 4 },
-  optionsTitle: { fontSize: 13, color: '#374151', marginBottom: 8, fontWeight: '600' },
-  optionsTitlePhone: { fontSize: 10, marginBottom: 2 },
+  optionsTitle: { fontSize: fp(13), color: '#374151', marginBottom: 8, fontWeight: '600' },
+  optionsTitlePhone: { fontSize: fp(10), marginBottom: 2 },
   optionsTitleFlex: { flex: 1, marginBottom: 0 },
   optionsHeaderRow: {
     flexDirection: 'row',
@@ -278,11 +281,11 @@ const styles = StyleSheet.create({
   },
   memoBtnDisabled: { opacity: 0.4 },
   memoBtnText: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#374151',
     fontWeight: '700',
   },
-  memoBtnTextPhone: { fontSize: 9 },
+  memoBtnTextPhone: { fontSize: fp(9) },
   memoBtnTextDisabled: { color: '#9ca3af' },
   optionsEditBtn: {
     paddingHorizontal: 8,
@@ -297,8 +300,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  optionsEditBtnText: { fontSize: 12 },
-  optionsEditBtnTextPhone: { fontSize: 10 },
+  optionsEditBtnText: { fontSize: fp(12) },
+  optionsEditBtnTextPhone: { fontSize: fp(10) },
   // 메모 입력 영역
   memoInput: {
     width: '100%',
@@ -310,7 +313,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#111827',
     textAlignVertical: 'top',
   },
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
   },
-  memoClearBtnText: { color: '#374151', fontSize: 13, fontWeight: '700' },
+  memoClearBtnText: { color: '#374151', fontSize: fp(13), fontWeight: '700' },
   // 옵션 편집 모달
   optionsEditCard: {
     width: '100%',
@@ -338,7 +341,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   optionsEditHint: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#6b7280',
     textAlign: 'center',
     marginBottom: 2,
@@ -360,7 +363,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#111827',
   },
   optionsEditMoveBtn: {
@@ -375,13 +378,13 @@ const styles = StyleSheet.create({
   },
   optionsEditMoveBtnDisabled: { opacity: 0.35 },
   optionsEditMoveBtnText: {
-    fontSize: 14,
+    fontSize: fp(14),
     color: '#374151',
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: fp(16),
   },
   cartItemMemo: {
-    fontSize: 7,
+    fontSize: fp(7),
     color: '#92400e',
     fontWeight: '600',
     backgroundColor: '#fffbeb',
@@ -451,15 +454,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sizeModalCloseText: { fontSize: 20, color: '#6b7280' },
+  sizeModalCloseText: { fontSize: fp(20), color: '#6b7280' },
   sizeModalLine1: {
-    fontSize: 15,
+    fontSize: fp(15),
     color: '#374151',
     fontWeight: '600',
     marginTop: 8,
   },
   sizeModalLine2: {
-    fontSize: 17,
+    fontSize: fp(17),
     color: '#111827',
     fontWeight: '800',
     textAlign: 'center',
@@ -487,13 +490,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sizeStepBtnText: {
-    fontSize: 18,
+    fontSize: fp(18),
     color: '#374151',
     fontWeight: '700',
-    lineHeight: 20,
+    lineHeight: fp(20),
   },
   sizeStepValue: {
-    fontSize: 16,
+    fontSize: fp(16),
     color: '#111827',
     fontWeight: '800',
     minWidth: 40,
@@ -511,13 +514,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#2563eb',
   },
-  sizeConfirmText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  sizeProgress: { fontSize: 11, color: '#9ca3af', marginTop: 6 },
-  optionLabel: { fontSize: 11, color: '#374151', fontWeight: '600', textAlign: 'center' },
-  optionLabelPhone: { fontSize: 9 },
+  sizeConfirmText: { color: '#fff', fontSize: fp(13), fontWeight: '800' },
+  sizeProgress: { fontSize: fp(11), color: '#9ca3af', marginTop: 6 },
+  optionLabel: { fontSize: fp(11), color: '#374151', fontWeight: '600', textAlign: 'center' },
+  optionLabelPhone: { fontSize: fp(9) },
   optionLabelActive: { color: '#fff' },
-  optionPrice: { fontSize: 10, color: '#6b7280', marginTop: 1 },
-  optionPricePhone: { fontSize: 8, marginTop: 0 },
+  optionPrice: { fontSize: fp(10), color: '#6b7280', marginTop: 1 },
+  optionPricePhone: { fontSize: fp(8), marginTop: 0 },
 
   cartHeader: {
     flexDirection: 'row',
@@ -529,8 +532,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#fff',
   },
-  cartTitle: { fontSize: 10, color: '#111827', fontWeight: '700' },
-  cartSubtitle: { fontSize: 9, color: '#6b7280', fontWeight: '600' },
+  cartTitle: { fontSize: fp(10), color: '#111827', fontWeight: '700' },
+  cartSubtitle: { fontSize: fp(9), color: '#6b7280', fontWeight: '600' },
   cartHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   micBtn: {
     width: 22,
@@ -544,7 +547,7 @@ const styles = StyleSheet.create({
   },
   micBtnActive: { backgroundColor: '#fee2e2', borderColor: '#dc2626' },
   micBtnDisabled: { opacity: 0.4 },
-  micIcon: { fontSize: 11 },
+  micIcon: { fontSize: fp(11) },
 
   listeningBar: {
     paddingHorizontal: 14,
@@ -554,16 +557,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#fecaca',
   },
   listeningTitle: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#991b1b',
     fontWeight: '700',
     marginBottom: 2,
   },
-  listeningText: { fontSize: 12, color: '#7f1d1d' },
+  listeningText: { fontSize: fp(12), color: '#7f1d1d' },
 
   cartList: { flex: 1 },
   cartEmpty: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#9ca3af',
     textAlign: 'center',
     marginTop: 40,
@@ -590,13 +593,13 @@ const styles = StyleSheet.create({
   cartItemName: {
     flex: 1,
     minWidth: 0,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: fp(8),
+    lineHeight: fp(11),
     color: '#111827',
     fontWeight: '600',
   },
-  largeBadge: { color: '#dc2626', fontSize: 7, fontWeight: '800' },
-  normalInlineTag: { color: '#6b7280', fontSize: 7, fontWeight: '700' },
+  largeBadge: { color: '#dc2626', fontSize: fp(7), fontWeight: '800' },
+  normalInlineTag: { color: '#6b7280', fontSize: fp(7), fontWeight: '700' },
   cartItemSelected: {
     backgroundColor: '#eff6ff',
     borderLeftWidth: 3,
@@ -604,12 +607,12 @@ const styles = StyleSheet.create({
     paddingLeft: 5,
   },
   cartItemOptions: {
-    fontSize: 7,
+    fontSize: fp(7),
     color: '#2563eb',
     fontWeight: '600',
   },
   cartItemPrice: {
-    fontSize: 7,
+    fontSize: fp(7),
     color: '#6b7280',
     fontVariant: ['tabular-nums'],
   },
@@ -631,16 +634,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   qtyBtnText: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#374151',
     fontWeight: '700',
-    lineHeight: 12,
+    lineHeight: fp(12),
   },
   qtyNum: {
     minWidth: 18,
     paddingHorizontal: 2,
     textAlign: 'center',
-    fontSize: 7,
+    fontSize: fp(7),
     lineHeight: 16,
     fontWeight: '700',
     color: '#111827',
@@ -650,7 +653,7 @@ const styles = StyleSheet.create({
   },
   cartItemSubtotal: {
     textAlign: 'right',
-    fontSize: 8,
+    fontSize: fp(8),
     fontWeight: '700',
     color: '#111827',
     fontVariant: ['tabular-nums'],
@@ -667,28 +670,28 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 3,
   },
-  textCompact: { fontSize: 12 },
-  totalValuePhone: { fontSize: 15 },
+  textCompact: { fontSize: fp(12) },
+  totalValuePhone: { fontSize: fp(15) },
   selectedTableBarPhone: {
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderWidth: 1,
     borderRadius: 7,
   },
-  selectedTableLabelPhone: { fontSize: 12 },
-  selectedTableValuePhone: { fontSize: 13 },
+  selectedTableLabelPhone: { fontSize: fp(12) },
+  selectedTableValuePhone: { fontSize: fp(13) },
   payBtnPhone: {
     paddingVertical: 5,
     borderRadius: 5,
   },
-  payBtnTextPhone: { fontSize: 11 },
+  payBtnTextPhone: { fontSize: fp(11) },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  totalLabel: { fontSize: 12, color: '#374151', fontWeight: '600' },
-  totalValue: { fontSize: 15, color: '#dc2626', fontWeight: '800' },
+  totalLabel: { fontSize: fp(12), color: '#374151', fontWeight: '600' },
+  totalValue: { fontSize: fp(15), color: '#dc2626', fontWeight: '800' },
   changeRow: {
     paddingVertical: 2,
     paddingHorizontal: 6,
@@ -697,8 +700,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fde68a',
   },
-  changeText: { fontSize: 10, color: '#92400e', fontWeight: '600' },
-  changeAmount: { color: '#dc2626', fontWeight: '800', fontSize: 11 },
+  changeText: { fontSize: fp(10), color: '#92400e', fontWeight: '600' },
+  changeAmount: { color: '#dc2626', fontWeight: '800', fontSize: fp(11) },
   changeShortage: { color: '#dc2626', fontWeight: '800' },
   clearBtn: {
     paddingVertical: 10,
@@ -709,7 +712,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clearBtnDisabled: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' },
-  clearBtnText: { fontSize: 11, color: '#fff', fontWeight: '700' },
+  clearBtnText: { fontSize: fp(11), color: '#fff', fontWeight: '700' },
   clearBtnTextDisabled: { color: '#9ca3af' },
 
   paidBadge: {
@@ -720,7 +723,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
   },
-  paidBadgeText: { fontSize: 13, color: '#065f46', fontWeight: '700' },
+  paidBadgeText: { fontSize: fp(13), color: '#065f46', fontWeight: '700' },
 
   pendingNotice: {
     backgroundColor: '#fef3c7',
@@ -732,7 +735,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pendingNoticeText: {
-    fontSize: 10,
+    fontSize: fp(10),
     color: '#92400e',
     fontWeight: '700',
     textAlign: 'center',
@@ -763,12 +766,12 @@ const styles = StyleSheet.create({
     borderColor: '#7c3aed',
   },
   selectedTableLabel: {
-    fontSize: 13,
+    fontSize: fp(13),
     color: '#1e3a8a',
     fontWeight: '700',
   },
   selectedTableValue: {
-    fontSize: 15,
+    fontSize: fp(15),
     color: '#1d4ed8',
     fontWeight: '900',
     flexShrink: 1,
@@ -778,13 +781,13 @@ const styles = StyleSheet.create({
     color: '#b45309',
   },
   selectedTableHint: {
-    fontSize: 11,
+    fontSize: fp(11),
     color: '#1d4ed8',
     fontWeight: '700',
     opacity: 0.75,
   },
   selectedTableHintPhone: {
-    fontSize: 10,
+    fontSize: fp(10),
   },
 
   // 결제 버튼 행 — B 풀솔리드 스타일 + 사용자 지정 색상
@@ -858,7 +861,7 @@ const styles = StyleSheet.create({
   payBtnDisabled: { opacity: 0.35 },
   payBtnText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: fp(11),
     fontWeight: '700',
   },
   // 후불(노랑) 위에는 검정 글자가 가독성 좋음
@@ -870,7 +873,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
     alignItems: 'center',
   },
-  clearTableBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-});
-
-export default styles;
+  clearTableBtnText: { color: '#fff', fontSize: fp(14), fontWeight: '700' },
+  });
+}

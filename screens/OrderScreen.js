@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ImageBackground,
@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import styles from './OrderScreen.styles';
+import makeStyles from './OrderScreen.styles';
 import { categories } from '../utils/menuData';
 import { useMenu } from '../utils/MenuContext';
 import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
@@ -59,7 +59,9 @@ export default function OrderScreen({
     width: _screenW,
     height: _screenH,
     isPortrait: _screenIsPortrait,
+    scale,
   } = useResponsive();
+  const styles = useMemo(() => makeStyles(scale), [scale]);
   // 실제 컨테이너 크기 — SafeAreaView/노치(아이폰 Pro Max 가로 등)가 useWindowDimensions 보다
   // 좁아지므로 onLayout 으로 측정한 실측치를 우선 사용해 6번째 메뉴 타일이 카트 영역으로
   // 흘러나오는 문제를 방지.
