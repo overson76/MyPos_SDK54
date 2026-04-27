@@ -9,7 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaInsetsContext,
+  SafeAreaProvider,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 
 import OrderFlow from './components/OrderFlow';
 import OrderTab from './components/OrderTab';
@@ -52,6 +56,45 @@ function CrashFallback({ error, resetError }) {
 
 const TAB_KEYS = ['테이블', '주문', '주문현황', '관리자'];
 
+// web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을 강제 주입.
+// 실 iPhone 에서는 OS 가 보고하므로 native 빌드는 그대로 동작.
+// SafeAreaProvider 의 initialMetrics 와 안쪽 SafeAreaInsetsContext.Provider 를 같은 값으로
+// 두 곳에 주입하는 이유: SafeAreaProvider 가 web 측정값(0)을 동적으로 덮어쓰기 때문에
+// 안쪽 Provider 한 겹 더 두어 시뮬 값이 유지되게 한다.
+const SIMULATE_IPHONE_WEB_INSETS = Platform.OS === 'web';
+const IPHONE_15_PROMAX_LANDSCAPE_INSETS = {
+  top: 0,
+  bottom: 21,
+  left: 59,
+  right: 59,
+};
+const IPHONE_15_PROMAX_LANDSCAPE_FRAME = {
+  x: 0,
+  y: 0,
+  width: 932,
+  height: 430,
+};
+const SIMULATED_INITIAL_METRICS = SIMULATE_IPHONE_WEB_INSETS
+  ? {
+      frame: IPHONE_15_PROMAX_LANDSCAPE_FRAME,
+      insets: IPHONE_15_PROMAX_LANDSCAPE_INSETS,
+    }
+  : undefined;
+
+// web 에서는 SafeAreaView 가 자체 padding 으로 inset 영역을 만든다. 외부 wrapper 는
+// 검은 배경만 깔아두어 그 padding 영역에 비쳐 노치/홈인디케이터 시뮬이 그려지게 한다.
+// 직접 padding 을 주면 SafeAreaView 와 이중 차감되어 컨텐츠 폭이 너무 작아짐.
+function WebInsetsOverride({ children }) {
+  if (!SIMULATE_IPHONE_WEB_INSETS) return children;
+  return (
+    <View style={styles.webInsetsBezel}>
+      <SafeAreaInsetsContext.Provider value={IPHONE_15_PROMAX_LANDSCAPE_INSETS}>
+        {children}
+      </SafeAreaInsetsContext.Provider>
+    </View>
+  );
+}
+
 // App 의 최상위는 Provider 트리 + Gate. Gate 가 매장 가입 상태에 따라 분기:
 //   loading                → SplashView
 //   unjoined / pendingApproval → AuthScreen
@@ -60,10 +103,12 @@ const TAB_KEYS = ['테이블', '주문', '주문현황', '관리자'];
 export default function App() {
   return (
     <SentryErrorBoundary fallback={CrashFallback}>
-      <SafeAreaProvider>
-        <StoreProvider>
-          <Gate />
-        </StoreProvider>
+      <SafeAreaProvider initialMetrics={SIMULATED_INITIAL_METRICS}>
+        <WebInsetsOverride>
+          <StoreProvider>
+            <Gate />
+          </StoreProvider>
+        </WebInsetsOverride>
       </SafeAreaProvider>
     </SentryErrorBoundary>
   );
@@ -237,6 +282,10 @@ function MainApp() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff' },
   zoomRoot: { flex: 1, backgroundColor: '#fff' },
+  // 검은 배경만 깔아두면 안쪽 SafeAreaView 가 자체 padding 으로 inset 영역을 만들 때
+  // 그 영역에 이 검은 배경이 비쳐 노치/홈인디케이터 시뮬이 자연스럽게 그려진다.
+  // 직접 padding 을 주면 SafeAreaView 와 이중으로 차감되어 컨텐츠 폭이 너무 작아진다.
+  webInsetsBezel: { flex: 1, backgroundColor: '#000' },
   topTabs: {
     flexDirection: 'row',
     backgroundColor: '#f3f4f6',
