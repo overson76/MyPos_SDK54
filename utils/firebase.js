@@ -66,6 +66,10 @@ export function getCurrentUid() {
 }
 
 // Firestore Timestamp 헬퍼 — 매장/멤버/주문 문서에 createdAt/updatedAt 박을 때 사용.
+// @react-native-firebase v22+ 에서 namespace API (FieldValue.serverTimestamp) 의 sentinel 직렬화가
+// "Nested arrays are not supported" 로 거부되는 케이스가 있어, 클라이언트 Date 객체로 우회.
+// Firestore 가 자동으로 Timestamp 로 변환해줌. 폰 시계 기반이라 약간 오차 가능 — 본격 운영 시
+// modular API (`import { serverTimestamp } from '...'`) 또는 Cloud Function 으로 전환 검토.
 export function serverTimestamp() {
-  return firestore.FieldValue.serverTimestamp();
+  return new Date();
 }
