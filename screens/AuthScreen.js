@@ -14,7 +14,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   ScrollView,
   ActivityIndicator,
   StyleSheet,
@@ -32,6 +31,8 @@ import {
   normalizeStoreCode,
 } from '../utils/storeOps';
 import { migrateLocalToCloud } from '../utils/migrateLocalToCloud';
+// RN Alert.alert 가 web 에서 silent no-op → 가입 흐름 에러가 사용자에게 안 보이는 문제 회피.
+import { alert as showAlert } from '../utils/alertCompat';
 
 const MODE = {
   HOME: 'home',
@@ -94,7 +95,7 @@ export default function AuthScreen() {
       setCreatedResult(result);
       setMode(MODE.CREATED);
     } catch (e) {
-      Alert.alert('오류', e.message || '매장 생성에 실패했습니다.');
+      showAlert('오류', e.message || '매장 생성에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -108,7 +109,7 @@ export default function AuthScreen() {
       setPreviewStore(store);
       setMode(MODE.JOIN_CONFIRM);
     } catch (e) {
-      Alert.alert('매장 없음', e.message || '매장을 찾을 수 없습니다.');
+      showAlert('매장 없음', e.message || '매장을 찾을 수 없습니다.');
     } finally {
       setBusy(false);
     }
@@ -121,7 +122,7 @@ export default function AuthScreen() {
       await requestJoin({ storeId: previewStore.storeId, displayName: staffName });
       markPending({ storeId: previewStore.storeId, displayName: staffName });
     } catch (e) {
-      Alert.alert('오류', e.message || '가입 요청에 실패했습니다.');
+      showAlert('오류', e.message || '가입 요청에 실패했습니다.');
     } finally {
       setBusy(false);
     }
