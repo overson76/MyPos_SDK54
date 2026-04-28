@@ -39,7 +39,10 @@ service cloud.firestore {
     // 단, 매장 정보 자체는 storeCodes 에 노출하지 않음 — id 만.
     match /storeCodes/{code} {
       allow read: if isSignedIn();
-      allow write: if false; // 클라이언트 직접 쓰기 금지 (매장 생성 트랜잭션에서만 처리)
+      // 매장 생성 트랜잭션 안에서 인증된 사용자가 새 코드 등록.
+      // 이미 존재하는 코드는 createStore 가 미리 exists 검사로 충돌 회피 (storeOps.js).
+      allow create: if isSignedIn();
+      allow update, delete: if false; // 코드 회전/삭제 X
     }
 
     // ── 매장 문서 ─────────────────────────────────────────────
@@ -96,6 +99,11 @@ service cloud.firestore {
         allow read, write: if isMember(storeId);
       }
       match /addresses/{addrKey} {
+        allow read, write: if isMember(storeId);
+      }
+      // 매장 단위 단일 문서 상태들 (splits/groups/revenueTotal/menu_rows/editable_options/addressBookMeta).
+      // useOrderFirestoreSync.js 와 MenuContext.js 가 사용.
+      match /state/{stateId} {
         allow read, write: if isMember(storeId);
       }
     }

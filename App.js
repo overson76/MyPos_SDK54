@@ -102,20 +102,24 @@ function WebInsetsOverride({ children }) {
 //   joined                 → 기존 LockProvider/MenuProvider/OrderProvider + MainApp
 // 가입 안 된 상태에서는 LockProvider 등이 mount 안 됨 → AsyncStorage 읽기 폭주 방지.
 //
-// web 미리보기는 디자인/레이아웃 검증용이며 매장 가입(Phone Auth) 흐름은 native 에서만
-// 검증한다. 따라서 web 에서는 StoreProvider/Gate 자체를 mount 하지 않고 바로 메인 트리로
-// 진입 — Firebase 의 web 부분동작으로 SplashView 무한 로딩 되는 문제를 우회한다.
+// web 의 Gate 토글:
+//   - .env 에 EXPO_PUBLIC_FIREBASE_API_KEY 가 있으면 = 실 매장 운영 모드 (카운터 PC).
+//     Gate 활성 → 매장 가입 화면 → 폰들과 동기화.
+//   - 키가 없으면 = 디자인/레이아웃 검증 모드. Gate 우회해서 데모 데이터로 메인 트리 진입.
+// native(iOS/Android) 는 google-services 파일이 자동 init 하므로 항상 Gate.
+const WEB_FIREBASE_ENABLED = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+const USE_GATE = Platform.OS !== 'web' || WEB_FIREBASE_ENABLED;
+
 export default function App() {
   return (
     <SentryErrorBoundary fallback={CrashFallback}>
       <SafeAreaProvider initialMetrics={SIMULATED_INITIAL_METRICS}>
         <WebInsetsOverride>
-          {/* StoreProvider 는 web 에서도 mount — useOrderFirestoreSync 등이
-              useStore() 를 호출하므로 context 자체는 항상 살아있어야 한다.
-              firebase.web.js stub 이 null 만 반환해 subscribe 는 자동 noop.
-              Gate 분기만 우회해 web 에선 가입 흐름 건너뛰고 메인 트리 진입. */}
+          {/* StoreProvider 는 web 에서도 항상 mount — useOrderFirestoreSync 등이
+              useStore() 를 호출하므로 context 자체는 살아있어야 한다.
+              Firebase 미설정 web 에서는 firebase.web.js 가 null 반환 → subscribe noop. */}
           <StoreProvider>
-            {Platform.OS === 'web' ? <JoinedAppTree /> : <Gate />}
+            {USE_GATE ? <Gate /> : <JoinedAppTree />}
           </StoreProvider>
         </WebInsetsOverride>
       </SafeAreaProvider>
