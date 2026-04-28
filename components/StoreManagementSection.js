@@ -512,18 +512,21 @@ function makeStyles(scale = 1) {
   btnDangerText: { color: '#b91c1c', fontSize: fp(13), fontWeight: '600' },
   btnDisabled: { opacity: 0.4 },
   roleTag: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
-});
+  });
+}
 
 // Firestore Timestamp → "2026-04-26 14:30" 식 표시.
-// serverTimestamp() 가 아직 commit 안 됐으면 null 일 수 있음 — 그땐 빈 문자열.
+// module 레벨 — makeStyles 안에 있으면 return 이후 unreachable 이라 ReferenceError.
 function formatJoinedAt(ts) {
   if (!ts) return '';
-  const d = typeof ts.toDate === 'function' ? ts.toDate() : null;
-  if (!d) return '';
+  const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+  if (!d || isNaN(d.getTime())) return '';
   const pad = (n) => String(n).padStart(2, '0');
   return `가입 ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// module 레벨 — makeStyles 밖에 있어야 RevenuePinModal 이 접근 가능.
+// fp(scale) 의존성 제거 — 모바일 기본 scale=1.0 이므로 고정값과 동일.
 const modalStyles = StyleSheet.create({
   overlay: {
     position: 'absolute',
@@ -551,7 +554,6 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  headerTitle: { fontSize: fp(16), fontWeight: '800', color: '#111827' },
-  close: { fontSize: fp(18), color: '#6b7280', paddingHorizontal: 8 },
-  });
-}
+  headerTitle: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  close: { fontSize: 18, color: '#6b7280', paddingHorizontal: 8 },
+});
