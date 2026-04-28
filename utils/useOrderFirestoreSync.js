@@ -20,6 +20,7 @@ import { useEffect, useRef } from 'react';
 import { useStore } from './StoreContext';
 import { getFirestore } from './firebase';
 import { reportError } from './sentry';
+import { snapExists } from './firestoreCompat';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -87,7 +88,7 @@ export function useOrderFirestoreSync({
       .doc('splits')
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) return;
+          if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
             setSplits(data.value);
@@ -102,7 +103,7 @@ export function useOrderFirestoreSync({
       .doc('groups')
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) return;
+          if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
             setGroups(data.value);
@@ -117,7 +118,7 @@ export function useOrderFirestoreSync({
       .doc('revenueTotal')
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) return;
+          if (!snapExists(snap)) return;
           const data = snap.data();
           if (typeof data?.total === 'number') {
             setRevenue((prev) =>
@@ -161,7 +162,7 @@ export function useOrderFirestoreSync({
       .doc('addressBookMeta')
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) return;
+          if (!snapExists(snap)) return;
           const meta = snap.data() || {};
           setAddressBook((prev) => ({
             ...prev,

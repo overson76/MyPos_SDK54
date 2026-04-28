@@ -8,6 +8,7 @@
 
 import { getFirestore, getCurrentUid, serverTimestamp } from './firebase';
 import { addBreadcrumb } from './sentry';
+import { snapExists } from './firestoreCompat';
 
 // 매장 코드 알파벳 — 헷갈리는 글자(0/O, 1/I/L) 제외.
 // 31^8 ≈ 8.5조 가지 → 충돌 거의 없음.
@@ -62,7 +63,7 @@ export async function createStore({ name, displayName }) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = generateStoreCode();
     const snap = await db.collection('storeCodes').doc(candidate).get();
-    if (!snap.exists) {
+    if (!snapExists(snap)) {
       code = candidate;
       break;
     }
@@ -109,12 +110,12 @@ export async function findStoreByCode(rawCode) {
     throw new Error('매장 코드는 8자리입니다.');
   }
   const codeSnap = await db.collection('storeCodes').doc(code).get();
-  if (!codeSnap.exists) {
+  if (!snapExists(codeSnap)) {
     throw new Error('매장 코드를 찾을 수 없습니다. 대표에게 다시 확인하세요.');
   }
   const { storeId } = codeSnap.data();
   const storeSnap = await db.collection('stores').doc(storeId).get();
-  if (!storeSnap.exists) {
+  if (!snapExists(storeSnap)) {
     throw new Error('매장 정보를 불러올 수 없습니다.');
   }
   const store = storeSnap.data();
@@ -161,7 +162,7 @@ export async function approveJoinRequest({ storeId, requestUid }) {
 
   await db.runTransaction(async (tx) => {
     const reqSnap = await tx.get(requestRef);
-    if (!reqSnap.exists) throw new Error('이미 처리되었거나 취소된 요청입니다.');
+    if (!snapExists(reqSnap)) throw new Error('이미 처리되었거나 취소된 요청입니다.');
     const { displayName } = reqSnap.data();
     tx.set(memberRef, {
       role: 'staff',

@@ -19,6 +19,7 @@ import {
 import { loadJSON, saveJSON, removeKey } from './persistence';
 import { getFirestore, getCurrentUid } from './firebase';
 import { reportError } from './sentry';
+import { snapExists } from './firestoreCompat';
 
 const StoreContext = createContext(null);
 
@@ -75,7 +76,7 @@ export function StoreProvider({ children }) {
     if (memberUnsubRef.current) memberUnsubRef.current();
     memberUnsubRef.current = memberRef.onSnapshot(
       async (snap) => {
-        if (!snap.exists) {
+        if (!snapExists(snap)) {
           // 멤버 제거됨 (대표가 강퇴 또는 본인 탈퇴)
           await removeKey(CACHE_KEY);
           setStoreInfo(null);
@@ -86,7 +87,7 @@ export function StoreProvider({ children }) {
         let store = null;
         try {
           const storeSnap = await storeRef.get();
-          store = storeSnap.exists ? storeSnap.data() : null;
+          store = snapExists(storeSnap) ? storeSnap.data() : null;
         } catch (e) {
           // 매장 문서 읽기 실패 — 멤버 정보만으로 진행
         }
@@ -123,7 +124,7 @@ export function StoreProvider({ children }) {
       if (requestUnsubRef.current) requestUnsubRef.current();
       requestUnsubRef.current = memberRef.onSnapshot(
         async (snap) => {
-          if (snap.exists) {
+          if (snapExists(snap)) {
             // 승인됨!
             await removeKey(PENDING_KEY);
             if (requestUnsubRef.current) {
