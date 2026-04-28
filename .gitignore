@@ -53,6 +53,10 @@ expo-qr.png
 .idea/
 Thumbs.db
 
+# Firebase Admin 서비스 계정 키 — 절대 커밋 금지
+firebase-admin-key.json
+*-service-account*.json
+
 # Claude Code 사용자별 설정 — launch.json 만 공유, 나머지는 로컬
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
