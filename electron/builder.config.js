@@ -22,10 +22,12 @@ module.exports = {
     main: 'electron/main.js',
   },
 
-  // 빌드 산출물에 포함할 파일들 — electron/ 폴더 전체 + Node 의존성.
-  // 웹 빌드(dist/) 는 라이브 URL 로드라 미포함 (오프라인 모드는 향후 Phase 에서).
+  // 빌드 산출물에 포함할 파일들.
+  // Phase 4: dist/ 를 번들 포함 — 라이브 URL 실패 시 로컬 폴백용.
+  // dist/ 가 없으면 offline.js 의 mountLocalServer 가 조용히 skip, 라이브 URL 만 사용.
   files: [
     'electron/**/*',
+    'dist/**/*',
     'package.json',
     '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}',
     '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}',

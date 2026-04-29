@@ -233,8 +233,31 @@ npm run electron:build   # Windows portable .exe + NSIS installer 빌드 (electr
 ### Phase 로드맵
 - ✅ **Phase 1**: 라이브 URL wrapper + 키오스크 + 단일 인스턴스
 - ✅ **Phase 2** (코드만, 실 프린터 결정 후 활성화): 영수증 프린터 (simulate / network / usb)
+- ✅ **Phase 2.1**: 결제 후 영수증 자동 출력 (PaymentMethodPicker 토글)
 - ✅ **Phase 3**: 자동 업데이트 (electron-updater + GitHub Releases)
-- **Phase 4**: 오프라인 캐시 강화 (dist/ 를 .exe 안에 번들 → 인터넷 끊겨도 동작).
+- ✅ **Phase 4**: 오프라인 캐시 (dist/ 번들 + network-first + local fallback)
+
+### Phase 4 — 오프라인 캐시
+
+라이브 URL(Cloudflare) 우선 로드 → 6초 타임아웃/오류 시 .exe 안에 번들된 `dist/` 폴백.
+
+코드:
+- `electron/offline.js` — `registerOfflineScheme` (app 준비 전 필수) + `mountLocalServer` + `loadWithFallback`
+- `electron/main.js` — `registerOfflineScheme()` 최상단 + `mountLocalServer()` in whenReady + `loadWithFallback(win, liveUrl)` in createWindow
+- `electron/builder.config.js` — `files` 에 `dist/**/*` 추가
+
+빌드 파이프라인 (`npm run electron:build`):
+1. `npm run build:web` → `dist/` 생성 (Expo Metro web export)
+2. `electron-builder` → dist/ 를 .exe 안에 번들 + Windows .exe 빌드
+
+커스텀 scheme `mypos://` 가 필요한 이유:
+- Expo web 빌드가 `/_expo/static/...` 같은 **절대 경로** 사용
+- `file://` 로 index.html 을 로드하면 `file:///_expo/...` 가 되어 404
+- `mypos://` 를 http 처럼 privileged 등록 → `/` 로 시작하는 경로가 `mypos://localhost/` 기준으로 정상 해석
+
+오프라인 시나리오:
+- Cloudflare Workers 일시 다운 → 6초 후 번들 폴백 → 화면 정상 동작
+- 주문 받기 / 메뉴 보기 가능 (UI 코드 로컬) — Firestore 는 그대로 (인터넷 연결 복구 시 자동 sync)
 
 ### Phase 3 — 자동 업데이트
 

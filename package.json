@@ -10,7 +10,8 @@
     "deploy:web": "bash scripts/deploy-web.sh",
     "electron": "electron electron/main.js",
     "electron:kiosk": "cross-env MYPOS_KIOSK=1 electron electron/main.js",
-    "electron:build": "electron-builder --config electron/builder.config.js",
+    "build:web": "npx expo export --platform web",
+    "electron:build": "npm run build:web && electron-builder --config electron/builder.config.js",
     "test": "jest",
     "test:watch": "jest --watch"
   },

@@ -19,6 +19,15 @@ const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 const { printReceiptIpc } = require('./printer/print');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
+const {
+  registerOfflineScheme,
+  mountLocalServer,
+  loadWithFallback,
+} = require('./offline');
+
+// 커스텀 scheme 등록 — app.whenReady() 이전에 호출 필수.
+// mypos:// 가 http 처럼 동작해서 Expo 빌드의 절대 경로(/static/...)가 정상 해석됨.
+registerOfflineScheme();
 
 const DEFAULT_URL = process.env.MYPOS_URL || 'https://mypos-sdk54.overson76.workers.dev';
 const KIOSK_MODE = process.env.MYPOS_KIOSK === '1' || app.isPackaged;
@@ -60,7 +69,13 @@ function createWindow() {
     Menu.setApplicationMenu(null);
   }
 
-  mainWindow.loadURL(DEFAULT_URL);
+  // 라이브 URL 우선. 타임아웃/오류 시 번들된 dist/ 폴백 (Phase 4 오프라인 캐시).
+  loadWithFallback(mainWindow, DEFAULT_URL).then(({ source }) => {
+    if (source !== 'live') {
+      // eslint-disable-next-line no-console
+      console.warn(`[main] 로드 소스: ${source}`);
+    }
+  });
 
   // 외부 링크 (target=_blank, window.open 등) 는 OS 기본 브라우저로.
   // 매장 PC 에서 실수로 외부 사이트 들어가도 격리된 공간에서 열림.
@@ -117,6 +132,8 @@ ipcMain.handle('mypos/update-status', () => {
 });
 
 app.whenReady().then(() => {
+  // 로컬 dist/ 서버 마운트 — createWindow 보다 먼저 등록해야 loadWithFallback 이 바로 사용 가능.
+  mountLocalServer();
   createWindow();
   // 윈도우 만든 후 자동 업데이트 setup — autoUpdater 이벤트가 모든 윈도우에 broadcast.
   // dev 빌드에서는 setupAutoUpdater 가 'disabled' 상태 setStatus 후 즉시 반환.
