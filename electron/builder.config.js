@@ -28,6 +28,7 @@ module.exports = {
   files: [
     'electron/**/*',
     'dist/**/*',
+    'utils/escposBuilder.js',   // electron/printer/print.js 가 require 함
     'package.json',
     '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}',
     '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}',
