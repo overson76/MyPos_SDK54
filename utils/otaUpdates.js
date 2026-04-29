@@ -21,10 +21,12 @@ import { addBreadcrumb, reportError } from './sentry';
 //   { state: 'downloaded', manifest } — 새 번들 받아 캐시. 다음 시작 시 적용
 //   { state: 'error', error } — 네트워크 / 서버 / 권한 오류
 export async function checkForUpdates() {
-  if (!Updates.isEnabled) {
-    return { state: 'disabled' };
-  }
+  // expo-updates 가 처음 추가된 네이티브 빌드에서 isEnabled 접근 자체가 드물게 에러 발생 가능.
+  // 전체를 최상위 try/catch 로 감쌈 — 어떤 에러도 앱 크래시로 번지지 않게.
   try {
+    if (!Updates.isEnabled) {
+      return { state: 'disabled' };
+    }
     const result = await Updates.checkForUpdateAsync();
     if (!result.isAvailable) {
       addBreadcrumb('ota.upToDate');
@@ -44,12 +46,16 @@ export async function checkForUpdates() {
 
 // 진단 정보 — 관리자 화면에서 현재 빌드 + OTA 상태 표시용.
 export function getOtaInfo() {
-  return {
-    enabled: Updates.isEnabled,
-    runtimeVersion: Updates.runtimeVersion || null,
-    updateId: Updates.updateId || null,
-    channel: Updates.channel || null,
-    createdAt: Updates.createdAt || null,
-    isEmbeddedLaunch: Updates.isEmbeddedLaunch ?? null,
-  };
+  try {
+    return {
+      enabled: Updates.isEnabled,
+      runtimeVersion: Updates.runtimeVersion || null,
+      updateId: Updates.updateId || null,
+      channel: Updates.channel || null,
+      createdAt: Updates.createdAt || null,
+      isEmbeddedLaunch: Updates.isEmbeddedLaunch ?? null,
+    };
+  } catch {
+    return { enabled: false, runtimeVersion: null, updateId: null, channel: null, createdAt: null, isEmbeddedLaunch: null };
+  }
 }

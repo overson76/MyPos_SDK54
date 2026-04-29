@@ -46,7 +46,13 @@ export default function StoreManagementSection() {
   const [busyUid, setBusyUid] = useState(null);
   // 본인 익명 uid — getCurrentUid() 는 SDK 가 주는 동기 값이라 useEffect 안 쓰고 직접 호출.
   // 진단/멤버 표시에서 본인 식별 정확하게 하기 위함.
-  const myUid = getCurrentUid();
+  // try/catch: Firebase 초기화 타이밍 이슈 방어 (첫 빌드 + expo-updates 추가 후 race 가능).
+  let myUid = null;
+  try {
+    myUid = getCurrentUid();
+  } catch (_e) {
+    // Firebase 아직 준비 안 됨 — null 로 두고 다음 렌더에서 재시도
+  }
 
   // 가입 요청 listener — 대표만. 멤버 listener — 모두.
   useEffect(() => {
