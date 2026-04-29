@@ -192,6 +192,44 @@ TableScreen: "결제하기" 버튼 → picker → markPaid + clearTable.
 - 옛 history (paymentMethod 없음) 는 `미분류` 로 집계 — 운영 마이그레이션 0 (자동).
 - 회계 사무소 송부: PC 카운터에서 "수익현황 → CSV → 이번 달" 한 번이면 끝.
 
+## Electron .exe (PC 카운터 데스크톱)
+
+매장 PC 카운터를 Chrome --kiosk 대신 정식 .exe 설치형 앱으로 운영. Phase 1 — 라이브 URL 을 BrowserWindow 로 감싸기 + 표준 보안 설정 + 단일 인스턴스 가드.
+
+### 구조
+- `electron/main.js` — 메인 프로세스. BrowserWindow 생성, 라이브 URL 로드, 외부 링크 → OS 기본 브라우저, 단일 인스턴스 가드.
+- `electron/preload.js` — contextBridge 로 안전한 API 노출 (`window.mypos.isElectron` 등). Phase 2 영수증 프린터 / Phase 3 자동 업데이트 시 확장.
+- `electron/builder.config.js` — electron-builder 설정. Windows portable + NSIS installer 두 타겟. extraMetadata 로 main 경로 override (Expo `index.js` 와 충돌 회피).
+- `electron-dist/` — 빌드 산출물 (.exe). gitignored.
+
+### 보안 설정 (매장 환경 기본)
+- `nodeIntegration: false` + `contextIsolation: true` + `sandbox: true` — 표준 안전 조합
+- 외부 링크 (`window.open` / `target=_blank` / 다른 origin navigate) — `shell.openExternal` 로 OS 기본 브라우저로 분기. 매장 PC 에서 실수로 외부 사이트 들어가도 격리.
+- 단일 인스턴스 가드 — 사장님이 더블클릭 한 번 더 누르면 두 창 뜨는 사고 방지.
+
+### 운영 모드
+- `MYPOS_KIOSK=1` 또는 패키징된 빌드 — 풀스크린 + 메뉴바 제거 + 키오스크 모드.
+- dev 빌드 (`npm run electron`) — 일반 창 + DevTools 자동 열림. 디버깅 편함.
+
+### 명령어
+```bash
+npm run electron         # dev 모드 (창 + DevTools)
+npm run electron:kiosk   # 키오스크 모드 강제 (cross-env 로 환경변수 설정)
+npm run electron:build   # Windows portable .exe + NSIS installer 빌드 (electron-dist/)
+```
+
+### 빌드 산출물
+- `electron-dist/MyPos-1.0.0-x64.exe` — portable. 더블클릭으로 실행. USB 로 옮겨 다른 매장 PC 에 즉시 사용.
+- `electron-dist/MyPos Setup 1.0.0.exe` — NSIS installer. 사용자 폴더에 설치 + 시작메뉴/바탕화면 바로가기 자동.
+
+**코드 서명**: 미적용. Windows SmartScreen "알 수 없는 게시자" 경고 → "추가 정보 → 실행" 으로 우회. 자체 매장 사용은 무방. 외부 배포 시 EV Code Signing 인증서 (~연 $300) 구매 후 빌드 설정에 추가.
+
+### Phase 로드맵
+- ✅ **Phase 1** (현재): 라이브 URL wrapper + 키오스크 + 단일 인스턴스
+- **Phase 2**: 영수증 프린터 (USB ESC/POS 또는 IP 프린터). preload 의 `window.mypos.printReceipt(text)` 노출.
+- **Phase 3**: 자동 업데이트 (electron-updater). 새 .exe 배포 시 사용자 PC 자동 갱신.
+- **Phase 4**: 오프라인 캐시 강화 (dist/ 를 .exe 안에 번들 → 인터넷 끊겨도 동작).
+
 ## OTA 자동 업데이트 (expo-updates)
 
 폰(iOS/Android) 앱에 새 JS 번들을 EAS Update 채널을 통해 자동 배포. 설정만 박아둔 상태 — **다음 EAS 빌드부터 자동 활성화**.

@@ -50,6 +50,9 @@ docs/*.html
 android-*.png
 expo-qr.png
 
+# Electron 빌드 산출물 (.exe / installer / portable) — 큰 파일이라 git 제외
+electron-dist/
+
 # editor / OS
 .idea/
 Thumbs.db
