@@ -30,6 +30,7 @@ import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
 import { SentryErrorBoundary } from './utils/sentry';
 import { setupPwa } from './utils/pwaSetup';
+import { checkForUpdates } from './utils/otaUpdates';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
 function CrashFallback({ error, resetError }) {
@@ -116,6 +117,11 @@ export default function App() {
     // 웹에서만 매니페스트 / theme-color / apple-touch-icon 동적 주입.
     // 네이티브 빌드에선 utils/pwaSetup.js 가 no-op.
     setupPwa();
+
+    // 네이티브 빌드에서만 OTA 체크. 새 번들 있으면 백그라운드 다운로드 → 다음 시작 시 적용.
+    // 영업 중 reload 강제 안 함 — 사장님이 자연스럽게 앱 재시작하는 시점에 갱신.
+    // dev 빌드 / Expo Go / 웹은 utils/otaUpdates.web.js 가 no-op.
+    checkForUpdates();
   }, []);
 
   return (
