@@ -210,6 +210,21 @@ export default function makeStyles(scale = 1) {
     borderRadius: 10,
     overflow: 'hidden',
   },
+  // 조리완료 미결제 시 표시되는 큰 결제완료 버튼.
+  // 뱃지보다 폰트/패딩이 커서 한 번에 누르기 좋음. 색은 주의 환기용 amber 톤.
+  tilePayBtn: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#d97706',
+  },
+  tilePayBtnText: {
+    fontSize: fp(11),
+    color: '#fff',
+    fontWeight: '800',
+  },
   tileDeliveringBadge: {
     fontSize: fp(8),
     color: '#fff',

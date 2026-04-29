@@ -29,6 +29,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [groupSelection, setGroupSelection] = useState([]);
   // 하이라이트 깜빡임 + 배달 경과시간 주기적 리렌더
   const [blinkOn, setBlinkOn] = useState(true);
+  // highlightTableId 변경 시 3초간만 깜빡이고 자동 소멸 — 영구 깜빡임 눈 피로 회피.
+  const [blinkActive, setBlinkActive] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
   // 격자 정렬용 — 그리드 폭을 측정해서 SlotStrip 폭을 일반 셀 폭의 정확한 N배로 맞춤
   const [gridWidth, setGridWidth] = useState(0);
@@ -37,6 +39,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   // 펼쳐보기 칩 클릭이 타일 onPress 와 같이 발화하는 RN 플랫폼 quirk 방어용 가드.
   // boolean flag 는 부모 onPress 가 안 불릴 때 sticky 가 되는 부작용이 있어 timestamp 로 자동 만료.
   const expandClickedAtRef = useRef(0);
+  // 테이블 위 결제완료 버튼 클릭 시 부모 onPress 무시용 동일 가드.
+  const payClickedAtRef = useRef(0);
   useEffect(() => {
     const blinkId = setInterval(() => setBlinkOn((b) => !b), 600);
     const timeId = setInterval(() => setNowTick(Date.now()), 15000);
@@ -45,6 +49,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       clearInterval(timeId);
     };
   }, []);
+  // highlightTableId 가 바뀌면 3초만 활성 → 자동 소멸. 영구 깜빡임 눈 피로 방지.
+  useEffect(() => {
+    if (!highlightTableId) {
+      setBlinkActive(false);
+      return;
+    }
+    setBlinkActive(true);
+    const t = setTimeout(() => setBlinkActive(false), 3000);
+    return () => clearTimeout(t);
+  }, [highlightTableId]);
   const { width, height, isXS, isSM, isMD, scale } = useResponsive();
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
@@ -72,6 +86,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     createGroup,
     dissolveGroup,
     getGroupFor,
+    markPaid,
   } = useOrders();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
 
@@ -276,8 +291,9 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       <TouchableOpacity
         key={t.id}
         onPress={() => {
-          // 펼쳐보기 칩 클릭 직후 200ms 안의 타일 onPress 는 nested-touchable 누수로 보고 무시
+          // 펼쳐보기 / 결제완료 버튼 클릭 직후 200ms 안의 타일 onPress 는 nested-touchable 누수로 무시
           if (Date.now() - expandClickedAtRef.current < 200) return;
+          if (Date.now() - payClickedAtRef.current < 200) return;
           handleTilePress(t);
         }}
         activeOpacity={0.7}
@@ -295,7 +311,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           cartOnly && !hasOrder && styles.tileOrdering,
           isGrouped && styles.tileGrouped,
           isGroupSelected && styles.tileGroupSelected,
-          isHighlighted && blinkOn && styles.tileHighlightedBlink,
+          isHighlighted && blinkActive && blinkOn && styles.tileHighlightedBlink,
         ]}
       >
         <View style={styles.tileTouch}>
@@ -330,6 +346,22 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     <Text style={styles.tileDeliveringBadge}>
                       🛵 배달중{deliveredMins != null ? ` ${deliveredMins}분` : ''}
                     </Text>
+                  ) : isReady && !isPaid ? (
+                    // 조리완료 미결제: "결제하기" 버튼 직접 노출.
+                    // 한 번 누르면 매출 history 적재 + 테이블 즉시 비움 (clearTable 에 모두 포함).
+                    // 총금액은 위 tileTopLeft 의 total 텍스트에 이미 표시됨 — 두 정보 같이 노출.
+                    <TouchableOpacity
+                      style={styles.tilePayBtn}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        payClickedAtRef.current = Date.now();
+                        markPaid(readTableId);
+                        clearTable(readTableId);
+                      }}
+                      accessibilityLabel={`${displayLabel} 결제하기`}
+                    >
+                      <Text style={styles.tilePayBtnText}>💰 결제하기</Text>
+                    </TouchableOpacity>
                   ) : isReady ? (
                     <Text style={styles.tileReadyBadge}>✓ 조리완료</Text>
                   ) : anyCooking ? (
