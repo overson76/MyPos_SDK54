@@ -157,3 +157,61 @@ export function summarizeDaily(history) {
 
   return { byMenu, byHour, byPayment };
 }
+
+// 월계 보고서 — 한 달 history 의 메뉴별/요일별/결제수단별 집계.
+// summarizeDaily 와 같은 형태 + byHour 대신 byDayOfWeek (월~일).
+// 반환:
+//   {
+//     byMenu: [{ name, qty, total }],
+//     byDayOfWeek: [{ day: 0~6, label: '일'~'토', count, total }],
+//     byPayment: { cash: ..., ... },
+//     totalDays: 매출 발생한 영업일 수
+//   }
+//
+// JS Date.getDay(): 0=일, 1=월, ..., 6=토. 사장님 친숙한 월~일 순서로 reorder 가능하지만
+// 표준 Date 인덱스 그대로 두고 label 로 표시.
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+export function summarizeMonthly(history) {
+  const byMenuMap = new Map();
+  const byDayOfWeek = DAY_LABELS.map((label, day) => ({
+    day,
+    label,
+    count: 0,
+    total: 0,
+  }));
+  const dateSet = new Set(); // 영업일 카운트용 (yyyy-mm-dd)
+
+  for (const entry of history || []) {
+    // 메뉴별
+    for (const item of entry.items || []) {
+      const name = item.name || '(이름 없음)';
+      const cur = byMenuMap.get(name) || { name, qty: 0, total: 0 };
+      const itemTotal =
+        (item.price || 0) * (item.qty || 0) +
+        (item.sizeUpcharge || 0) * (item.largeQty || 0);
+      cur.qty += (item.qty || 0) + (item.largeQty || 0);
+      cur.total += itemTotal;
+      byMenuMap.set(name, cur);
+    }
+    // 요일별 + 영업일
+    if (entry.clearedAt) {
+      const d = new Date(entry.clearedAt);
+      const dow = d.getDay();
+      byDayOfWeek[dow].count += 1;
+      byDayOfWeek[dow].total += Number(entry.total) || 0;
+      const dateKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      dateSet.add(dateKey);
+    }
+  }
+
+  const byMenu = Array.from(byMenuMap.values()).sort((a, b) => b.total - a.total);
+  const byPayment = summarizeByPaymentMethod(history);
+
+  return {
+    byMenu,
+    byDayOfWeek,
+    byPayment,
+    totalDays: dateSet.size,
+  };
+}

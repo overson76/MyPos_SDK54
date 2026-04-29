@@ -8,6 +8,7 @@ import {
   summarizeByPaymentMethod,
   historyToCsv,
   summarizeDaily,
+  summarizeMonthly,
 } from '../utils/payment';
 
 describe('paymentMethodLabel', () => {
@@ -207,6 +208,85 @@ describe('summarizeDaily', () => {
     expect(byMenu).toEqual([]);
     expect(byHour.every((h) => h.count === 0)).toBe(true);
     expect(byPayment.cash.total).toBe(0);
+  });
+});
+
+describe('summarizeMonthly', () => {
+  // 4월 29일(수), 4월 28일(화), 4월 27일(월) — 3일치
+  const sample = [
+    {
+      clearedAt: new Date('2026-04-29T12:30:00').getTime(), // 수요일
+      items: [{ name: '치킨', qty: 2, price: 10000 }],
+      total: 20000,
+      paymentMethod: 'card',
+    },
+    {
+      clearedAt: new Date('2026-04-29T18:30:00').getTime(), // 같은 수요일
+      items: [{ name: '콜라', qty: 1, price: 2000 }],
+      total: 2000,
+      paymentMethod: 'cash',
+    },
+    {
+      clearedAt: new Date('2026-04-28T12:00:00').getTime(), // 화요일
+      items: [{ name: '치킨', qty: 1, price: 10000 }],
+      total: 10000,
+      paymentMethod: 'card',
+    },
+    {
+      clearedAt: new Date('2026-04-27T12:00:00').getTime(), // 월요일
+      items: [{ name: '피자', qty: 1, price: 15000 }],
+      total: 15000,
+      paymentMethod: 'transfer',
+    },
+  ];
+
+  test('byMenu — 메뉴별 매출 내림차순', () => {
+    const { byMenu } = summarizeMonthly(sample);
+    expect(byMenu[0].name).toBe('치킨');
+    expect(byMenu[0].qty).toBe(3);
+    expect(byMenu[0].total).toBe(30000);
+    expect(byMenu[1].name).toBe('피자');
+    expect(byMenu[2].name).toBe('콜라');
+  });
+
+  test('byDayOfWeek — 7개 요일 (일~토 순서)', () => {
+    const { byDayOfWeek } = summarizeMonthly(sample);
+    expect(byDayOfWeek.length).toBe(7);
+    expect(byDayOfWeek[0].label).toBe('일');
+    expect(byDayOfWeek[6].label).toBe('토');
+
+    // 월요일(1): 1건 / 15000
+    expect(byDayOfWeek[1].count).toBe(1);
+    expect(byDayOfWeek[1].total).toBe(15000);
+    // 화요일(2): 1건 / 10000
+    expect(byDayOfWeek[2].count).toBe(1);
+    expect(byDayOfWeek[2].total).toBe(10000);
+    // 수요일(3): 2건 / 22000
+    expect(byDayOfWeek[3].count).toBe(2);
+    expect(byDayOfWeek[3].total).toBe(22000);
+    // 일요일(0): 0건
+    expect(byDayOfWeek[0].count).toBe(0);
+  });
+
+  test('totalDays — 영업일 카운트 (중복 날짜는 1일)', () => {
+    const { totalDays } = summarizeMonthly(sample);
+    // 4/29 두 건은 같은 날 → 영업일 3일
+    expect(totalDays).toBe(3);
+  });
+
+  test('byPayment — summarizeByPaymentMethod 와 동일', () => {
+    const { byPayment } = summarizeMonthly(sample);
+    expect(byPayment.card.count).toBe(2);
+    expect(byPayment.card.total).toBe(30000);
+    expect(byPayment.cash.count).toBe(1);
+    expect(byPayment.transfer.count).toBe(1);
+  });
+
+  test('빈 history', () => {
+    const r = summarizeMonthly([]);
+    expect(r.byMenu).toEqual([]);
+    expect(r.byDayOfWeek.every((d) => d.count === 0)).toBe(true);
+    expect(r.totalDays).toBe(0);
   });
 });
 

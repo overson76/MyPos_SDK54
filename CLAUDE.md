@@ -178,8 +178,14 @@ TableScreen: "결제하기" 버튼 → picker → markPaid + clearTable.
 - 부가세 분리 표시 토글 + CSV 다운로드 버튼 (오늘/이번 달/전체)
 - 오늘 결제수단별 카드 row — 5종 (4 + 미분류) 즉시 보임
 - 오늘 일계 보고서 — 메뉴 TOP 5 + 시간대 TOP 5 (매출 기준)
+- **이번 달 보고서** (`summarizeMonthly`) — 영업일 / 일평균 / 메뉴 TOP 5 + 요일별 매출
 - 매월 수익 (기존)
 - 최근 30건 이력 — 결제수단 라벨 추가, VAT 토글 ON 시 공급가액/부가세 한 줄 추가
+- Electron .exe 환경에서만 history row 에 "🖨️ 출력" 버튼 (Phase 2)
+
+### 결제 후 영수증 자동 출력 (Phase 2.1)
+
+`PaymentMethodPicker` 의 자동 출력 토글 — Electron 환경에서만 보임. 사장님 선호 `printer.autoPrint` 키로 AsyncStorage 영속. 결제 직전 receipt 데이터 캡처 (markPaid/clearTable 후 order 변경되므로) → 결제 직후 비동기 `printReceipt(receiptData)` 호출. 실패해도 결제 흐름 영향 X.
 
 ### CSV 익스포트 (utils/csvDownload)
 

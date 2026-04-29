@@ -11,6 +11,7 @@ import {
   splitVatIncluded,
   summarizeByPaymentMethod,
   summarizeDaily,
+  summarizeMonthly,
   historyToCsv,
 } from '../utils/payment';
 import { downloadCsv } from '../utils/csvDownload';
@@ -95,6 +96,11 @@ export default function RevenueScreen() {
   const todayDaily = useMemo(() => summarizeDaily(todayOrders), [todayOrders]);
   const todayVat = useMemo(() => splitVatIncluded(todayTotal), [todayTotal]);
   const monthVat = useMemo(() => splitVatIncluded(monthTotal), [monthTotal]);
+  // 월계 — 이번 달 메뉴/요일/영업일 분석
+  const monthlyReport = useMemo(() => summarizeMonthly(thisMonthOrders), [thisMonthOrders]);
+  const monthAvgPerDay = monthlyReport.totalDays > 0
+    ? Math.round(monthTotal / monthlyReport.totalDays)
+    : 0;
 
   // CSV 익스포트 — 다운로드 시 파일명에 날짜 포함.
   const exportCsv = (filterFn, suffix) => {
@@ -246,6 +252,44 @@ export default function RevenueScreen() {
               {todayDaily.byHour.every((h) => h.count === 0) ? (
                 <Text style={styles.emptyHint}>오늘 판매 내역 없음</Text>
               ) : null}
+            </View>
+          </View>
+        </>
+      ) : null}
+
+      {/* 이번 달 보고서 — 일계와 동일 패턴, 요일별 + 영업일 통계 추가 */}
+      {thisMonthOrders.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitle}>
+            📈 이번 달 보고서 ({monthlyReport.totalDays}일 영업 · 일평균{' '}
+            {monthAvgPerDay.toLocaleString()}원)
+          </Text>
+          <View style={styles.dailyRow}>
+            <View style={styles.dailyBox}>
+              <Text style={styles.dailyBoxTitle}>이번 달 메뉴 TOP 5 (매출)</Text>
+              {monthlyReport.byMenu.slice(0, 5).map((m) => (
+                <View key={m.name} style={styles.dailyItem}>
+                  <Text style={styles.dailyItemName} numberOfLines={1}>
+                    {m.name}
+                  </Text>
+                  <Text style={styles.dailyItemQty}>{m.qty}개</Text>
+                  <Text style={styles.dailyItemTotal}>
+                    {m.total.toLocaleString()}원
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.dailyBox}>
+              <Text style={styles.dailyBoxTitle}>요일별 매출</Text>
+              {monthlyReport.byDayOfWeek.map((d) => (
+                <View key={d.day} style={styles.dailyItem}>
+                  <Text style={styles.dailyItemName}>{d.label}요일</Text>
+                  <Text style={styles.dailyItemQty}>{d.count}건</Text>
+                  <Text style={styles.dailyItemTotal}>
+                    {d.total.toLocaleString()}원
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
         </>

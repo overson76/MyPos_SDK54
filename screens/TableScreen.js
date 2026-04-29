@@ -16,9 +16,11 @@ import {
 } from '../utils/tableData';
 import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
+import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import { printReceipt } from '../utils/printReceipt';
 
 export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [subTab, setSubTab] = useState('기본홀');
@@ -92,6 +94,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     getGroupFor,
     markPaid,
   } = useOrders();
+  const { storeInfo } = useStore();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
 
   const exitAllModes = () => {
@@ -999,13 +1002,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           total={paymentPicker.total}
           title={`${paymentPicker.label || '테이블'} 결제`}
           onClose={() => setPaymentPicker(null)}
-          onSelect={(code) => {
+          onSelect={(code, autoPrint) => {
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
+            // 결제 직전 receipt 데이터 캡처 — clearTable 후 order 사라지므로.
+            const orderSnap = autoPrint ? getOrder(id) : null;
+            const receiptData = autoPrint
+              ? {
+                  storeName: storeInfo?.name || 'MyPos',
+                  tableId: id,
+                  items: orderSnap?.items || [],
+                  total: paymentPicker.total,
+                  paymentMethod: picked,
+                  paymentStatus: 'paid',
+                  deliveryAddress: orderSnap?.deliveryAddress || '',
+                  printedAt: Date.now(),
+                }
+              : null;
             setPaymentPicker(null);
             // 결제하기 = markPaid + clearTable 한 번에. 어제 추가된 흐름 그대로.
             markPaid(id, picked);
             clearTable(id, picked);
+            // 자동 출력 — 비동기, 실패해도 결제 흐름 영향 X.
+            if (receiptData) {
+              printReceipt(receiptData).catch(() => {});
+            }
           }}
         />
       ) : null}

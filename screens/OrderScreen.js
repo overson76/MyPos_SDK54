@@ -17,6 +17,8 @@ import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import { useStore } from '../utils/StoreContext';
+import { printReceipt } from '../utils/printReceipt';
 import {
   playChangeSound,
   playOrderSound,
@@ -58,6 +60,7 @@ export default function OrderScreen({
   // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total } | null
   // 선불/후불 버튼이 누르면 모달 띄움 → 사용자 결제수단 선택 → markPaid/clearTable 호출.
   const [paymentPicker, setPaymentPicker] = useState(null);
+  const { storeInfo } = useStore();
   // sizePrompt = { items: [...], index: 0, sizeOption, value }
   const {
     width: _screenW,
@@ -1508,10 +1511,24 @@ export default function OrderScreen({
           total={paymentPicker.total}
           title={paymentPicker.mode === 'prepaid' ? '선불 결제수단' : '후불 결제수단'}
           onClose={() => setPaymentPicker(null)}
-          onSelect={(code) => {
+          onSelect={(code, autoPrint) => {
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
             const mode = paymentPicker.mode;
+            // 결제 직전 receipt 데이터 캡처 — markPaid/clearTable 후 order 가 변경되므로.
+            const orderSnap = autoPrint ? getOrder(id) : null;
+            const receiptData = autoPrint
+              ? {
+                  storeName: storeInfo?.name || 'MyPos',
+                  tableId: id,
+                  items: orderSnap?.items || [],
+                  total: paymentPicker.total,
+                  paymentMethod: picked,
+                  paymentStatus: 'paid',
+                  deliveryAddress: orderSnap?.deliveryAddress || '',
+                  printedAt: Date.now(),
+                }
+              : null;
             setPaymentPicker(null);
             // 선불 = 결제만 (테이블 유지). 후불 = 결제 + 테이블 비우기 + 뒤로.
             if (mode === 'prepaid') {
@@ -1519,6 +1536,10 @@ export default function OrderScreen({
             } else {
               clearTable(id, picked);
               onBack?.();
+            }
+            // 자동 출력 — receipt 데이터로 비동기 호출. 실패해도 결제 흐름엔 영향 X.
+            if (receiptData) {
+              printReceipt(receiptData).catch(() => {});
             }
           }}
         />
