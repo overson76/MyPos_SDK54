@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
+import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import {
   PAYMENT_METHOD_LIST,
@@ -13,6 +14,7 @@ import {
   historyToCsv,
 } from '../utils/payment';
 import { downloadCsv } from '../utils/csvDownload';
+import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 
 function formatDateTime(ts) {
   if (!ts) return '';
@@ -37,9 +39,38 @@ export default function RevenueScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { revenue } = useOrders();
+  const { storeInfo } = useStore();
   const history = revenue?.history || [];
   // 부가세 분리 표시 토글 — ON 시 카드/이력에 공급가액/부가세 분리. OFF 시 합계만.
   const [showVat, setShowVat] = useState(false);
+  // Electron(PC 카운터 .exe) 환경에서만 영수증 출력 가능. 일반 브라우저는 버튼 숨김.
+  const printerAvailable = isPrinterAvailable();
+  const [printingId, setPrintingId] = useState(null);
+
+  // history row 의 "🖨️ 재출력" 버튼 핸들러.
+  const handleReprint = async (entry) => {
+    if (!printerAvailable || printingId) return;
+    setPrintingId(entry.id);
+    try {
+      const result = await printReceipt({
+        storeName: storeInfo?.name || 'MyPos',
+        tableId: entry.tableId,
+        items: entry.items,
+        total: entry.total,
+        paymentMethod: entry.paymentMethod,
+        paymentStatus: entry.paymentStatus,
+        deliveryAddress: entry.deliveryAddress,
+        printedAt: Date.now(),
+      });
+      if (!result.ok && typeof window !== 'undefined') {
+        // 브라우저 alert — 매장에서 빠르게 식별
+        // eslint-disable-next-line no-alert
+        window?.alert?.(`출력 실패: ${result.error || result.message || '알 수 없는 오류'}`);
+      }
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   const now = new Date();
   const todayStart = new Date(
@@ -315,6 +346,20 @@ export default function RevenueScreen() {
                     VAT {splitVatIncluded(h.total).vat.toLocaleString()}
                   </Text>
                 ) : null}
+                {printerAvailable ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.historyPrintBtn,
+                      printingId === h.id && styles.historyPrintBtnBusy,
+                    ]}
+                    disabled={printingId === h.id}
+                    onPress={() => handleReprint(h)}
+                  >
+                    <Text style={styles.historyPrintBtnText}>
+                      {printingId === h.id ? '출력 중…' : '🖨️ 출력'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 <Text style={styles.historyTotal}>
                   {h.total.toLocaleString()}원
                 </Text>
@@ -538,6 +583,14 @@ function makeStyles(scale = 1) {
     gap: 8,
   },
   historyVat: { fontSize: fp(10), color: '#6b7280' },
+  historyPrintBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#1F2937',
+    borderRadius: 4,
+  },
+  historyPrintBtnBusy: { opacity: 0.5 },
+  historyPrintBtnText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
   historyTotal: {
     fontSize: fp(14),
     fontWeight: '800',

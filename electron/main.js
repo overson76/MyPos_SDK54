@@ -15,8 +15,9 @@
 // 라이브 URL:
 //   - 환경변수 MYPOS_URL 또는 기본값 (Cloudflare 라이브 URL)
 
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
+const { printReceiptIpc } = require('./printer/print');
 
 const DEFAULT_URL = process.env.MYPOS_URL || 'https://mypos-sdk54.overson76.workers.dev';
 const KIOSK_MODE = process.env.MYPOS_KIOSK === '1' || app.isPackaged;
@@ -97,6 +98,13 @@ app.on('second-instance', () => {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   }
+});
+
+// 영수증 출력 IPC — preload 의 contextBridge 가 렌더러 → 메인으로 호출 보낼 때 진입.
+// receipt: utils/escposBuilder 의 receipt 객체. options: { mode, host, port, iface, type }.
+// 모드 default = simulate (콘솔 로그). 매장이 프린터 결정 후 환경변수 / IPC 옵션으로 전환.
+ipcMain.handle('mypos/print-receipt', async (_event, receipt, options) => {
+  return await printReceiptIpc(receipt, options);
 });
 
 app.whenReady().then(createWindow);

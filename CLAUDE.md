@@ -225,10 +225,38 @@ npm run electron:build   # Windows portable .exe + NSIS installer 빌드 (electr
 **코드 서명**: 미적용. Windows SmartScreen "알 수 없는 게시자" 경고 → "추가 정보 → 실행" 으로 우회. 자체 매장 사용은 무방. 외부 배포 시 EV Code Signing 인증서 (~연 $300) 구매 후 빌드 설정에 추가.
 
 ### Phase 로드맵
-- ✅ **Phase 1** (현재): 라이브 URL wrapper + 키오스크 + 단일 인스턴스
-- **Phase 2**: 영수증 프린터 (USB ESC/POS 또는 IP 프린터). preload 의 `window.mypos.printReceipt(text)` 노출.
+- ✅ **Phase 1**: 라이브 URL wrapper + 키오스크 + 단일 인스턴스
+- ✅ **Phase 2** (코드만, 실 프린터 결정 후 활성화): 영수증 프린터 (simulate / network / usb)
 - **Phase 3**: 자동 업데이트 (electron-updater). 새 .exe 배포 시 사용자 PC 자동 갱신.
 - **Phase 4**: 오프라인 캐시 강화 (dist/ 를 .exe 안에 번들 → 인터넷 끊겨도 동작).
+
+### Phase 2 — 영수증 프린터
+
+코드 흐름:
+- `utils/escposBuilder.js` — ESC/POS 명령 + 영수증 텍스트/바이트 빌더 (순수 함수, RN/Electron 공통). VAT 분리, 결제수단 라벨, 80mm 32칼럼 레이아웃.
+- `electron/printer/print.js` — IPC 핸들러. 3 모드:
+  - `simulate` (default): 콘솔 로그만. 매장이 프린터 결정 전 흐름 검증.
+  - `network`: TCP 9100 raw bytes 송신. 별도 라이브러리 불필요.
+  - `usb`: `node-thermal-printer` 동적 require. 매장 프린터 결정 후 `npm install node-thermal-printer` 추가.
+- `electron/main.js` — `ipcMain.handle('mypos/print-receipt', ...)`.
+- `electron/preload.js` — `window.mypos.printReceipt(receipt, options)`.
+- `utils/printReceipt.web.js` — `isPrinterAvailable()` (window.mypos.isElectron 체크) + IPC 호출.
+- `utils/printReceipt.js` — 네이티브 no-op.
+- `RevenueScreen` history row — Electron 환경에서만 "🖨️ 출력" 버튼 표시.
+
+환경변수 (런타임 설정 — 매장 프린터 모델별):
+```
+MYPOS_PRINTER_MODE=network|usb|simulate
+MYPOS_PRINTER_HOST=192.168.1.100   # network
+MYPOS_PRINTER_PORT=9100             # network
+MYPOS_PRINTER_IFACE=printer:Bixolon SRP-330II   # usb
+MYPOS_PRINTER_TYPE=epson|star|bixolon
+```
+
+매장 프린터 도입 시:
+1. 프린터 IP / USB interface 확인
+2. 환경변수 또는 IPC options 으로 `mode: 'network'` / `mode: 'usb'` 전환
+3. Electron 빌드에 환경변수 박거나 매장 운영 도구에 설정 화면 추가 (Phase 2.1)
 
 ## OTA 자동 업데이트 (expo-updates)
 
