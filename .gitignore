@@ -45,6 +45,7 @@ yarn-error.*
 
 # debug screenshots / scratch artifacts
 docs/screenshots/
+docs/icon-preview/
 docs/*.html
 android-*.png
 expo-qr.png

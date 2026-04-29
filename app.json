@@ -24,7 +24,7 @@
       "package": "com.cadpia.mypos",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1F2937"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.cadpia.mypos",
