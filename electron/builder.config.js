@@ -59,6 +59,27 @@ module.exports = {
     deleteAppDataOnUninstall: false, // 재설치 시 IndexedDB / cookie 유지 (매장 멤버십)
   },
 
+  // 자동 업데이트 — GitHub Releases 를 update server 로 사용.
+  //
+  // 빌드 시 publish:
+  //   GH_TOKEN=<personal access token> npm run electron:build -- --publish always
+  //   → 빌드 후 자동으로 GitHub Releases 에 .exe / latest.yml 업로드.
+  //
+  // 매장 PC (.exe 설치된 사용자) 자동 업데이트:
+  //   - 부팅 시 electron-updater 가 GitHub API 로 최신 release 확인
+  //   - 새 버전 있으면 백그라운드 다운로드
+  //   - 사장님이 자연스럽게 .exe 닫을 때 (영업 종료) 다음 시작 시 새 버전 적용
+  //   - 영업 중 강제 reload X — 매장 운영 안전 우선
+  //
+  // 주의: repo private 이면 매장 PC 도 GH_TOKEN 필요 → 별도 update 서버 (Cloudflare R2 등)
+  // 고려. 현재는 public repo 전제.
+  publish: {
+    provider: 'github',
+    owner: 'overson76',
+    repo: 'MyPos_SDK54',
+    releaseType: 'release',
+  },
+
   // electron-builder 가 main.js 위치 찾는 데 사용.
   // package.json 의 "main" 도 같은 값이어야 함.
 };

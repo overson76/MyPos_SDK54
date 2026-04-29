@@ -30,6 +30,12 @@ import { useLock } from '../utils/LockContext';
 import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
 import { useResponsive } from '../utils/useResponsive';
+import {
+  isElectronUpdateAvailable,
+  checkForElectronUpdate,
+  getElectronUpdateStatus,
+  subscribeElectronUpdate,
+} from '../utils/electronUpdate';
 
 const SECTIONS = [
   { key: 'menu', label: '메뉴 관리' },
@@ -132,6 +138,38 @@ function SystemSettingsView() {
   const lock = useLock();
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
+
+  // Electron(.exe) 자동 업데이트 — 매장 PC 카운터 환경. 일반 브라우저 / 폰 에서는 카드 안 보임.
+  const updateSupported = isElectronUpdateAvailable();
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+
+  useEffect(() => {
+    if (!updateSupported) return;
+    let cancelled = false;
+    // 마운트 직후 마지막 알려진 상태 한 번 폴링
+    getElectronUpdateStatus().then((s) => {
+      if (!cancelled) setUpdateStatus(s);
+    });
+    // 이후 메인 프로세스의 broadcast 구독 — 새 상태 push 받음
+    const unsub = subscribeElectronUpdate((s) => {
+      if (!cancelled) setUpdateStatus(s);
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [updateSupported]);
+
+  const handleCheckUpdate = async () => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    try {
+      await checkForElectronUpdate();
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -286,6 +324,44 @@ function SystemSettingsView() {
           • 메뉴 가격 / 이름 / 배달 주소 / 시간 등 입력값은 자동으로 길이·형식 검증됩니다.
         </Text>
       </View>
+
+      {/* === Electron 자동 업데이트 — PC 카운터 .exe 환경에서만 보임. === */}
+      {updateSupported ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>
+            🔄 자동 업데이트 (PC 카운터)
+          </Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>
+                {updateStatus?.message || '아직 확인 안 됨'}
+              </Text>
+              <Text style={sysStyles.helper}>
+                새 버전이 배포되면 백그라운드에서 다운로드합니다. 영업 중 강제 재시작 X —
+                다음 앱 시작 시 자동 적용. 영업 종료 후 .exe 닫고 다시 열면 새 버전.
+              </Text>
+              {updateStatus?.kind === 'downloading' &&
+              typeof updateStatus.percent === 'number' ? (
+                <Text style={sysStyles.helper}>
+                  진행률: {Math.round(updateStatus.percent)}%
+                </Text>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={[
+                sysStyles.btnSecondary,
+                updateChecking && { opacity: 0.5 },
+              ]}
+              disabled={updateChecking}
+              onPress={handleCheckUpdate}
+            >
+              <Text style={sysStyles.btnSecondaryText}>
+                {updateChecking ? '확인 중…' : '지금 확인'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
 
       {/* === 진단 — Sentry 연동 확인용. 개발 빌드(__DEV__)에서만 노출. 운영 빌드에서는 자동 숨김. === */}
       {__DEV__ ? (

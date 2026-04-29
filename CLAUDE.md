@@ -227,8 +227,52 @@ npm run electron:build   # Windows portable .exe + NSIS installer 빌드 (electr
 ### Phase 로드맵
 - ✅ **Phase 1**: 라이브 URL wrapper + 키오스크 + 단일 인스턴스
 - ✅ **Phase 2** (코드만, 실 프린터 결정 후 활성화): 영수증 프린터 (simulate / network / usb)
-- **Phase 3**: 자동 업데이트 (electron-updater). 새 .exe 배포 시 사용자 PC 자동 갱신.
+- ✅ **Phase 3**: 자동 업데이트 (electron-updater + GitHub Releases)
 - **Phase 4**: 오프라인 캐시 강화 (dist/ 를 .exe 안에 번들 → 인터넷 끊겨도 동작).
+
+### Phase 3 — 자동 업데이트
+
+매장 PC 의 .exe 가 **GitHub Releases 의 최신 .exe 를 자동으로 받아 다음 시작 시 적용**.
+
+코드:
+- `electron/updater.js` — autoUpdater 래퍼. `autoDownload: true` + `autoInstallOnAppQuit: true`. 절대 `quitAndInstall()` 강제 호출 X (영업 중 재시작 사고 방지).
+- `electron/main.js` — `setupAutoUpdater(getWindows)` 부팅 시 호출 + IPC 핸들러 (`mypos/update-check`, `mypos/update-status`).
+- `electron/preload.js` — `window.mypos.checkUpdate` / `getUpdateStatus` / `onUpdateStatus(callback)`.
+- `electron/builder.config.js` — `publish: { provider: 'github', owner: 'overson76', repo: 'MyPos_SDK54' }`.
+- `utils/electronUpdate.web.js` (.web.js / .js 분리) — RN 측 헬퍼.
+- `AdminScreen` 시스템 섹션 — "🔄 자동 업데이트" 카드. Electron 환경에서만 보임. 메인 프로세스의 broadcast 이벤트 실시간 구독 → 진행률 / 상태 즉시 반영.
+
+상태 종류 (`status.kind`):
+- `idle` — 초기
+- `disabled` — dev 빌드 (자동 비활성)
+- `checking` — GitHub 확인 중
+- `available` — 새 버전 발견, 다운로드 시작
+- `downloading` — 다운로드 진행 중 (`percent`)
+- `downloaded` — 다운로드 완료, 다음 시작 시 자동 적용
+- `upToDate` — 최신
+- `error` — 오류 (네트워크 / 서버 등)
+
+매장 운영 안전 정책:
+- 영업 중에는 백그라운드 다운로드만. UI 차단 X.
+- 사장님이 자연스럽게 .exe 닫을 때 (영업 종료) 다음 시작 시 새 버전.
+- 강제 reload / quitAndInstall 절대 안 부름.
+
+### Phase 3 — 운영 발행 절차
+
+```bash
+# 1. version 올림 (semver)
+# package.json 의 "version": "1.0.1" 등으로 수정
+
+# 2. GH_TOKEN 환경변수 설정 (Personal Access Token, repo write 권한)
+export GH_TOKEN=ghp_...
+
+# 3. 빌드 + 자동 publish — GitHub Releases 에 .exe + latest.yml 자동 업로드
+npx electron-builder --config electron/builder.config.js --publish always
+
+# 4. 매장 PC 의 .exe 가 다음 부팅 시 자동 감지 → 다운로드 → 다음 시작 시 적용
+```
+
+**주의**: repo 가 private 이면 매장 PC 도 GH_TOKEN 필요 → 별도 update 서버(Cloudflare R2 등) 고려. 현재 public repo 전제.
 
 ### Phase 2 — 영수증 프린터
 

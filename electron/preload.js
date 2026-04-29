@@ -23,4 +23,28 @@ contextBridge.exposeInMainWorld('mypos', {
   async printReceipt(receipt, options) {
     return await ipcRenderer.invoke('mypos/print-receipt', receipt, options);
   },
+
+  // 자동 업데이트 — Phase 3.
+  // 수동 "지금 확인" 버튼:
+  //   await window.mypos.checkUpdate(); // → { ok, info? }
+  // 현재 상태 조회 (마지막 알려진 status — 마운트 시점에 폴링용):
+  //   const s = await window.mypos.getUpdateStatus();
+  //   // { kind: 'idle'|'checking'|'available'|'downloading'|'downloaded'|'upToDate'|'error'|'disabled', message, ... }
+  // 푸시 이벤트 구독 — 메인이 새 상태 broadcast 할 때 자동 호출:
+  //   const unsub = window.mypos.onUpdateStatus((status) => { ... });
+  //   // 컴포넌트 언마운트 시 unsub() 호출
+  async checkUpdate() {
+    return await ipcRenderer.invoke('mypos/update-check');
+  },
+  async getUpdateStatus() {
+    return await ipcRenderer.invoke('mypos/update-status');
+  },
+  onUpdateStatus(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on('mypos/update-status', handler);
+    return () => {
+      ipcRenderer.removeListener('mypos/update-status', handler);
+    };
+  },
 });

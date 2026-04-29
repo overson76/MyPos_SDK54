@@ -18,6 +18,7 @@
 const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 const { printReceiptIpc } = require('./printer/print');
+const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
 
 const DEFAULT_URL = process.env.MYPOS_URL || 'https://mypos-sdk54.overson76.workers.dev';
 const KIOSK_MODE = process.env.MYPOS_KIOSK === '1' || app.isPackaged;
@@ -107,7 +108,20 @@ ipcMain.handle('mypos/print-receipt', async (_event, receipt, options) => {
   return await printReceiptIpc(receipt, options);
 });
 
-app.whenReady().then(createWindow);
+// 자동 업데이트 IPC — 관리자 화면 "지금 확인" 버튼이 호출.
+ipcMain.handle('mypos/update-check', async () => {
+  return await checkNow();
+});
+ipcMain.handle('mypos/update-status', () => {
+  return getLastStatus();
+});
+
+app.whenReady().then(() => {
+  createWindow();
+  // 윈도우 만든 후 자동 업데이트 setup — autoUpdater 이벤트가 모든 윈도우에 broadcast.
+  // dev 빌드에서는 setupAutoUpdater 가 'disabled' 상태 setStatus 후 즉시 반환.
+  setupAutoUpdater(() => BrowserWindow.getAllWindows());
+});
 
 app.on('window-all-closed', () => {
   // 매장 PC = Windows. 모든 창 닫히면 종료. macOS 만의 dock 잔존 동작 회피.
