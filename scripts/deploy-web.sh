@@ -56,6 +56,22 @@ if [ "${MATCHED:-0}" -eq 0 ]; then
 fi
 ok "API 키 inline 확인 (${MATCHED} 개 JS 청크에서 매칭)"
 
+# PWA 자산이 public/ 에서 dist/ 로 복사됐는지 확인.
+# Expo SDK 50+ 는 public/ 자동 복사하지만 빌드 설정 변경 / SDK 업그레이드 시 깨질 수 있으므로
+# 한 줄 검증으로 "PWA 설치 안 됨" 같은 silent 사고 사전 차단.
+PWA_REQUIRED="manifest.webmanifest sw.js icon-192.png icon-512.png apple-touch-icon.png"
+PWA_MISSING=""
+for f in $PWA_REQUIRED; do
+  if [ ! -f "dist/$f" ]; then
+    PWA_MISSING="$PWA_MISSING $f"
+  fi
+done
+if [ -n "$PWA_MISSING" ]; then
+  fail "PWA 자산이 dist/ 에 누락됨:$PWA_MISSING
+  public/ 폴더 점검 + Expo SDK 가 public/ 복사 기능 지원하는지 확인 필요. 배포 중단."
+fi
+ok "PWA 자산 5종 확인 (manifest + sw.js + icons)"
+
 note "4/4 wrangler deploy → Cloudflare 라이브 URL 갱신"
 npx wrangler deploy
 

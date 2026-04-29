@@ -134,17 +134,30 @@ SafeAreaProvider
 - **Web**: 일부 네이티브 API 차이 — `notify.js` 가 분기. 핀치줌은 네이티브 우선.
 - SafeArea 인셋 필수 (사용자 메모리: 노치/홈인디케이터 영역 침범 주의).
 
-## PWA (웹 설치 가능)
+## PWA (웹 설치 가능 + 오프라인)
 
 PC 카운터 라이브 URL 을 "앱처럼" 설치 가능한 PWA 로 운영. 매니페스트 / theme-color / apple-touch-icon 메타 태그를 마운트 시점에 head 에 동적 주입.
 
 - `public/manifest.webmanifest` — 매장명, 아이콘 셋, theme/background = `#1F2937` (navy), display: standalone, orientation: landscape
 - `public/icon-192.png` `public/icon-512.png` `public/apple-touch-icon.png` — Expo SDK 50+ 의 `public/` 폴더는 빌드 시 dist/ 에 그대로 복사됨
+- `public/sw.js` — Service Worker. **network-first + cached fallback**. 네트워크 실패 시 캐시 폴백 → 인터넷 잠시 끊겨도 화면 살아있음. 새 빌드 배포 시 `skipWaiting` + `clients.claim` 으로 즉시 활성화 (사용자 새로고침 1회).
 - `utils/pwaSetup.js` — 네이티브 no-op
-- `utils/pwaSetup.web.js` — head 에 link/meta 태그 동적 주입. App.js mount useEffect 에서 호출
+- `utils/pwaSetup.web.js` — head 에 link/meta 태그 동적 주입 + production 빌드에서만 SW 등록 (`__DEV__` 가드)
 - 아이콘 디자인 동일 (navy + 영수증 + MY/POS) — `assets/icon.png` 와 같은 함수로 사이즈만 달리 렌더
 
 PWA 설치 가능 여부는 dev 에서 fetch + DOM 점검으로 검증 (브라우저 DevTools → Application → Manifest 도 가능). 라이브 URL 에서 Chrome → 주소창 옆 "앱 설치" 아이콘 또는 Edge → "이 사이트를 앱처럼 설치".
+
+`deploy:web` 스크립트가 빌드 후 `dist/manifest.webmanifest`, `dist/sw.js`, 아이콘 3종 존재까지 검증 — public/ 복사 누락 시 배포 abort.
+
+## 매장 멤버 진단 (utils/storeDiag.js)
+
+어제 사고 회고: 사장님 폰의 익명 uid 가 ownerId 와 어긋나서 `joinRequests` listener 가 0건 read → 가입 요청이 사장님 화면에 안 보임 → 새 매장 만들어 복구.
+
+`computeMemberDiagnosis(members, storeInfo, myUid)` 가 8개 시나리오를 자동 분류 — 운영자가 Firebase 콘솔 안 보고도 화면에서 1초에 식별. 결과 4단계 (`ok` / `warn` / `error` / `pending`).
+
+`StoreManagementSection` 의 "진단 / 운영 정보" 섹션이 자동 메시지 + 본인 uid / ownerId / storeId 끝 12자리를 monospace 로 보여줌. 멤버 목록의 본인 행에 "· 나" 태그.
+
+순수 함수라 Jest 단위 테스트 14개 케이스 (`__tests__/storeDiag.test.js`).
 
 ## 큰 파일 / 분리 패턴
 

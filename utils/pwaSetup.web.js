@@ -18,6 +18,28 @@ function appendOnce(tagName, attrs, matchKeys) {
   document.head.appendChild(el);
 }
 
+// SW 등록은 production 빌드에서만. dev 서버에서는 Metro/HMR 과 캐싱이 충돌하여
+// 코드 변경이 안 보이는 사고가 잘 일어남. __DEV__ 는 RN/Expo 환경 변수 — production 에서는 false.
+function registerServiceWorker() {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) return;
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (typeof window === 'undefined') return;
+
+  // load 후 등록 — 첫 페이지 로드 성능 영향 최소화
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        // eslint-disable-next-line no-console
+        console.info('[pwa] SW registered, scope:', reg.scope);
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[pwa] SW register failed:', err);
+      });
+  });
+}
+
 export function setupPwa() {
   // 1) Web App Manifest — Android Chrome / Edge "앱으로 설치" 활성
   appendOnce('link', { rel: 'manifest', href: '/manifest.webmanifest' }, ['rel']);
@@ -34,4 +56,7 @@ export function setupPwa() {
     ['name']
   );
   appendOnce('meta', { name: 'apple-mobile-web-app-title', content: 'MyPos' }, ['name']);
+
+  // 4) Service Worker — 인터넷 끊겨도 화면 살아있음 + 재방문 빠름. production 만.
+  registerServiceWorker();
 }

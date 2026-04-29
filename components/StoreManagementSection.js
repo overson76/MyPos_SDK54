@@ -16,6 +16,8 @@ import {
 import PinEntry from './PinEntry';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
+import { getCurrentUid } from '../utils/firebase';
+import { computeMemberDiagnosis, shortId } from '../utils/storeDiag';
 import {
   clearRevenuePin,
   hasRevenuePin,
@@ -42,6 +44,9 @@ export default function StoreManagementSection() {
   const [joinRequests, setJoinRequests] = useState([]);
   const [members, setMembers] = useState([]);
   const [busyUid, setBusyUid] = useState(null);
+  // 본인 익명 uid — getCurrentUid() 는 SDK 가 주는 동기 값이라 useEffect 안 쓰고 직접 호출.
+  // 진단/멤버 표시에서 본인 식별 정확하게 하기 위함.
+  const myUid = getCurrentUid();
 
   // 가입 요청 listener — 대표만. 멤버 listener — 모두.
   useEffect(() => {
@@ -293,11 +298,8 @@ export default function StoreManagementSection() {
         </View>
       ) : (
         members.map((m) => {
-          const isSelf = m.uid && storeInfo.ownerId
-            ? false // 본인 표시는 displayName 비교가 아닌 uid 비교가 정확. storeOps 가 이미 uid 사용.
-            : false;
-          // 본인 여부는 storeInfo.role/displayName 으로 추정 (storeInfo 의 본인 uid 직접 노출 안 함).
-          // 대신 storeInfo.role + members 의 role 매칭으로 본인 추정 가능.
+          // 본인 식별 — uid 비교가 가장 정확. displayName 은 중복 가능.
+          const isSelf = !!myUid && m.uid === myUid;
           const isOwnerRow = m.role === 'owner';
           return (
             <View key={m.uid} style={styles.row}>
@@ -307,6 +309,7 @@ export default function StoreManagementSection() {
                   <Text style={styles.roleTag}>
                     {isOwnerRow ? '대표' : '직원'}
                   </Text>
+                  {isSelf ? <Text style={styles.selfTag}>  · 나</Text> : null}
                 </Text>
                 {m.joinedAt ? (
                   <Text style={styles.helper}>
@@ -331,6 +334,47 @@ export default function StoreManagementSection() {
           );
         })
       )}
+
+      {/* === 진단 / 운영 정보 === */}
+      {/* 어제 사고 회고: 사장님 폰 익명 uid 가 owner role 로 등록 안 되어 가입 요청 listener
+          가 0건 read → 운영 사고. 자동 진단으로 1초 내 식별 + uid 표시로 Firebase 콘솔 직접
+          확인 없이 운영 화면에서 즉시 점검 가능. */}
+      <Text style={styles.sectionTitle}>진단 / 운영 정보</Text>
+      <DiagnosisRow
+        styles={styles}
+        members={members}
+        storeInfo={storeInfo}
+        myUid={myUid}
+      />
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.helper}>이 기기 ID (익명 uid)</Text>
+          <Text style={styles.idText}>{shortId(myUid)}</Text>
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.helper}>대표 ID (stores.ownerId)</Text>
+          <Text style={styles.idText}>{shortId(storeInfo.ownerId)}</Text>
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.helper}>매장 ID (stores doc)</Text>
+          <Text style={styles.idText}>{shortId(storeInfo.storeId)}</Text>
+        </View>
+      </View>
+      <View style={styles.note}>
+        <Text style={styles.noteText}>
+          • 새 PC / 폰 / 직원 데이터 클리어 시 재가입 필요 — 익명 uid 는 (기기 + 브라우저)
+          단위로 새로 발급됩니다.
+        </Text>
+        <Text style={styles.noteText}>
+          • 가입 요청이 사장님 화면에 안 보이면: (1) 위 "이 기기 ID" 와 "대표 ID" 끝 자리가
+          같은지 확인 (2) 다르면 사장님 폰의 익명 uid 가 옛 데이터와 어긋남 → 새 매장
+          만들거나 Firebase 콘솔에서 stores/{매장ID}/members 직접 점검.
+        </Text>
+      </View>
 
       {/* === 매장 떠나기 === */}
       <Text style={styles.sectionTitle}>매장 탈퇴</Text>
@@ -512,7 +556,48 @@ function makeStyles(scale = 1) {
   btnDangerText: { color: '#b91c1c', fontSize: fp(13), fontWeight: '600' },
   btnDisabled: { opacity: 0.4 },
   roleTag: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
+  selfTag: { fontSize: fp(11), color: '#2563eb', fontWeight: '700' },
+  idText: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: fp(12),
+    color: '#374151',
+    marginTop: 4,
+  },
+  diagText: { flex: 1, fontSize: fp(13), fontWeight: '600', color: '#111827', lineHeight: fp(18) },
+  diagOk: { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' },
+  diagWarn: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
+  diagError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  diagPending: { backgroundColor: '#f9fafb', borderColor: '#e5e7eb' },
+  note: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  noteText: { fontSize: fp(11), color: '#6b7280', lineHeight: fp(16), marginBottom: 4 },
   });
+}
+
+// 진단 결과 한 줄 — utils/storeDiag 의 순수 함수가 분류, 본 컴포넌트는 표시만.
+function DiagnosisRow({ styles, members, storeInfo, myUid }) {
+  const diag = computeMemberDiagnosis(members, storeInfo, myUid);
+  const rowStyle =
+    diag.level === 'error'
+      ? styles.diagError
+      : diag.level === 'warn'
+        ? styles.diagWarn
+        : diag.level === 'ok'
+          ? styles.diagOk
+          : styles.diagPending;
+  return (
+    <View style={[styles.row, rowStyle]}>
+      <Text style={styles.diagText}>{diag.message}</Text>
+    </View>
+  );
 }
 
 // Firestore Timestamp → "2026-04-26 14:30" 식 표시.
