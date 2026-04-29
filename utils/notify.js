@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { formatKorean12h, parseDeliveryTime } from './timeUtil';
+import { triggerSharedAudio, registerLocalDispatch } from './sharedAudio';
 
 const isWeb = Platform.OS === 'web';
 
@@ -179,7 +180,8 @@ function playNativeSound(key) {
   } catch (e) {}
 }
 
-export function playOrderSound() {
+// _do* 는 본인 기기 실제 재생용 (private). entry 함수는 trigger 호출 → 모든 매장 멤버 동시 재생.
+function _doPlayOrderSound() {
   if (isWeb) {
     playToneWeb(660, 120, 0);
     playToneWeb(880, 180, 0.13);
@@ -188,7 +190,7 @@ export function playOrderSound() {
   }
 }
 
-export function playChangeSound() {
+function _doPlayChangeSound() {
   if (isWeb) {
     playToneWeb(520, 90, 0, 0.22);
     playToneWeb(700, 90, 0.1, 0.22);
@@ -198,7 +200,7 @@ export function playChangeSound() {
   }
 }
 
-export function playReadySound() {
+function _doPlayReadySound() {
   if (isWeb) {
     playToneWeb(784, 110, 0);
     playToneWeb(988, 110, 0.11);
@@ -208,7 +210,7 @@ export function playReadySound() {
   }
 }
 
-export function playDeliveryAlertSound() {
+function _doPlayDeliveryAlertSound() {
   if (isWeb) {
     playToneWeb(880, 150, 0, 0.25);
     playToneWeb(1175, 150, 0.17, 0.25);
@@ -217,6 +219,19 @@ export function playDeliveryAlertSound() {
   } else {
     playNativeSound('delivery');
   }
+}
+
+export function playOrderSound() {
+  triggerSharedAudio({ type: 'sound', sound: 'order' });
+}
+export function playChangeSound() {
+  triggerSharedAudio({ type: 'sound', sound: 'change' });
+}
+export function playReadySound() {
+  triggerSharedAudio({ type: 'sound', sound: 'ready' });
+}
+export function playDeliveryAlertSound() {
+  triggerSharedAudio({ type: 'sound', sound: 'delivery' });
 }
 
 // ===== 고품질 음성 선택 (웹) ======================================
@@ -460,7 +475,8 @@ export function speakOrder({ table, order, menuItems, optionsList }) {
     else if (addr) parts.push(`배달지는 ${addr} 입니다.`);
     else if (timePart) parts.push(`${timePart} 부탁드립니다.`);
   }
-  rawSpeak(joinSpeech(parts));
+  const text = joinSpeech(parts);
+  if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
 export function speakOrderChange({
@@ -566,7 +582,8 @@ export function speakOrderChange({
     else if (addr) parts.push(`배달지는 ${addr} 입니다.`);
     else if (timePart) parts.push(`${timePart} 부탁드립니다.`);
   }
-  rawSpeak(joinSpeech(parts));
+  const text = joinSpeech(parts);
+  if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
 export function speakDeliveryAlert({ table, minutesLeft, address }) {
@@ -577,22 +594,20 @@ export function speakDeliveryAlert({ table, minutesLeft, address }) {
     `${name}, 배달 출발 ${mins > 0 ? mins + '분 전' : '시간'}입니다.`,
   ];
   if (_speakAddress && address) parts.push(`배달지는 ${address} 입니다.`);
-  rawSpeak(joinSpeech(parts));
+  const text = joinSpeech(parts);
+  if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
 export function speakPartialReady({ table, itemName }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
-  rawSpeak(`${name}, ${itemName} 먼저 나왔습니다.`, {
-    rate: 0.95,
-    pitch: 1.1,
-  });
+  triggerSharedAudio({ type: 'speak', text: `${name}, ${itemName} 먼저 나왔습니다.` });
 }
 
 export function speakFullReady({ table }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
-  rawSpeak(`${name}, 조리 완료됐습니다.`, { rate: 0.95, pitch: 1.08 });
+  triggerSharedAudio({ type: 'speak', text: `${name}, 조리 완료됐습니다.` });
 }
 
 export function speakReady({ table, order, menuItems, optionsList = [] }) {
@@ -614,13 +629,41 @@ export function speakReady({ table, order, menuItems, optionsList = [] }) {
     else if (addr) parts.push(`배달지는 ${addr} 입니다.`);
     else if (timePart) parts.push(`${timePart} 부탁드립니다.`);
   }
-  rawSpeak(joinSpeech(parts));
+  const text = joinSpeech(parts);
+  if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
 // 운영 시작 전 점검용: 톤 + TTS 가 함께 정상 출력되는지 한 번에 검증.
 // 무음 스위치 / 시스템 볼륨 / 미디어 채널 mute 여부를 귀로 확인하는 용도.
+// 테스트는 본인 기기만 — 다른 매장 멤버에게 공유 X.
 export function playSoundTest() {
-  playOrderSound();
+  _doPlayOrderSound();
   cancelSpeech();
   rawSpeak('사운드 테스트입니다. 알림이 잘 들리시나요?');
 }
+
+// ===== 매장 공유 dispatcher 등록 ===================================
+// sharedAudio.js 의 listener 가 다른 기기 trigger 를 받으면 이 함수를 호출.
+// 본인이 trigger 한 이벤트는 sharedAudio 가 source 비교로 skip 처리.
+function _localDispatch(payload) {
+  if (!payload) return;
+  if (payload.type === 'sound') {
+    switch (payload.sound) {
+      case 'order':
+        _doPlayOrderSound();
+        break;
+      case 'change':
+        _doPlayChangeSound();
+        break;
+      case 'ready':
+        _doPlayReadySound();
+        break;
+      case 'delivery':
+        _doPlayDeliveryAlertSound();
+        break;
+    }
+  } else if (payload.type === 'speak' && payload.text) {
+    rawSpeak(payload.text);
+  }
+}
+registerLocalDispatch(_localDispatch);

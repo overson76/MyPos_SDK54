@@ -21,6 +21,7 @@ import { useStore } from './StoreContext';
 import { getFirestore } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
+import { setSharedAudioStore } from './sharedAudio';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -63,6 +64,12 @@ export function useOrderFirestoreSync({
   const ordersDebounceRef = useRef(null);
   const historyDebounceRef = useRef(null);
   const addressEntriesDebounceRef = useRef(null);
+
+  // 매장 공유 음성/사운드 dispatcher 활성. storeId 가 바뀌면 listener 재등록.
+  useEffect(() => {
+    setSharedAudioStore(storeId);
+    return () => setSharedAudioStore(null);
+  }, [storeId]);
 
   // ── Listeners ───────────────────────────────────────────────
   useEffect(() => {
