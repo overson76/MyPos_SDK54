@@ -37,6 +37,16 @@ import {
   subscribeElectronUpdate,
 } from '../utils/electronUpdate';
 
+// Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
+function isElectron() {
+  return typeof window !== 'undefined' && !!window.mypos?.isElectron;
+}
+function quitElectron() {
+  if (typeof window !== 'undefined' && typeof window.mypos?.quitApp === 'function') {
+    window.mypos.quitApp();
+  }
+}
+
 const SECTIONS = [
   { key: 'menu', label: '메뉴 관리' },
   { key: 'revenue', label: '수익 현황' },
@@ -358,6 +368,38 @@ function SystemSettingsView() {
               <Text style={sysStyles.btnSecondaryText}>
                 {updateChecking ? '확인 중…' : '지금 확인'}
               </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
+
+      {/* === 앱 종료 — Electron(.exe) 키오스크 환경에서만 보임. X 버튼 없을 때 사용. === */}
+      {isElectron() ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>앱 종료</Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>PC 카운터 앱 종료</Text>
+              <Text style={sysStyles.helper}>
+                영업 종료 후 앱을 닫습니다. 다음 시작 시 자동 업데이트가 있으면 적용됩니다.{'\n'}
+                단축키: Ctrl + Shift + Q (언제든 사용 가능)
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={sysStyles.btnDanger}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  const ok = window?.confirm?.('앱을 종료하시겠습니까?');
+                  if (ok) quitElectron();
+                } else {
+                  Alert.alert('앱 종료', '앱을 종료하시겠습니까?', [
+                    { text: '취소', style: 'cancel' },
+                    { text: '종료', style: 'destructive', onPress: quitElectron },
+                  ]);
+                }
+              }}
+            >
+              <Text style={sysStyles.btnDangerText}>앱 종료</Text>
             </TouchableOpacity>
           </View>
         </>

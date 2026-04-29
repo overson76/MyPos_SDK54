@@ -15,7 +15,7 @@
 // 라이브 URL:
 //   - 환경변수 MYPOS_URL 또는 기본값 (Cloudflare 라이브 URL)
 
-const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, globalShortcut } = require('electron');
 const path = require('node:path');
 const { printReceiptIpc } = require('./printer/print');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
@@ -123,6 +123,11 @@ ipcMain.handle('mypos/print-receipt', async (_event, receipt, options) => {
   return await printReceiptIpc(receipt, options);
 });
 
+// 앱 종료 IPC — 관리자 화면 "앱 종료" 버튼 또는 preload 의 quitApp() 이 호출.
+ipcMain.on('mypos/quit', () => {
+  app.quit();
+});
+
 // 자동 업데이트 IPC — 관리자 화면 "지금 확인" 버튼이 호출.
 ipcMain.handle('mypos/update-check', async () => {
   return await checkNow();
@@ -138,6 +143,16 @@ app.whenReady().then(() => {
   // 윈도우 만든 후 자동 업데이트 setup — autoUpdater 이벤트가 모든 윈도우에 broadcast.
   // dev 빌드에서는 setupAutoUpdater 가 'disabled' 상태 setStatus 후 즉시 반환.
   setupAutoUpdater(() => BrowserWindow.getAllWindows());
+
+  // 키오스크 종료 단축키 — 메뉴바 없어도 사용 가능.
+  // Ctrl+Shift+Q: 사장님/직원용 앱 종료. 키오스크 환경에서 Alt+F4 대체.
+  globalShortcut.register('CommandOrControl+Shift+Q', () => {
+    app.quit();
+  });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld('mypos', {
   // 푸시 이벤트 구독 — 메인이 새 상태 broadcast 할 때 자동 호출:
   //   const unsub = window.mypos.onUpdateStatus((status) => { ... });
   //   // 컴포넌트 언마운트 시 unsub() 호출
+  // 앱 종료 — 관리자 화면의 "앱 종료" 버튼이 호출. 키오스크에서 X 버튼 없을 때 사용.
+  quitApp() {
+    ipcRenderer.send('mypos/quit');
+  },
+
   async checkUpdate() {
     return await ipcRenderer.invoke('mypos/update-check');
   },
