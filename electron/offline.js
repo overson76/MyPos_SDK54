@@ -83,7 +83,7 @@ function getLocalURL() {
 
 // 라이브 URL 로드 시도 → 실패/타임아웃 시 로컬 폴백.
 // 반환: Promise<{ source: 'live' | 'local' | 'failed' }>
-function loadWithFallback(win, liveUrl, timeoutMs = 6000) {
+function loadWithFallback(win, liveUrl, timeoutMs = 15000) {
   const localAvailable = fs.existsSync(getDistPath());
   return new Promise((resolve) => {
     let settled = false;
