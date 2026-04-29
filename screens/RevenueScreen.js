@@ -1,7 +1,18 @@
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
+import {
+  PAYMENT_METHOD_LIST,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_UNSPECIFIED,
+  paymentMethodLabel,
+  splitVatIncluded,
+  summarizeByPaymentMethod,
+  summarizeDaily,
+  historyToCsv,
+} from '../utils/payment';
+import { downloadCsv } from '../utils/csvDownload';
 
 function formatDateTime(ts) {
   if (!ts) return '';
@@ -27,6 +38,8 @@ export default function RevenueScreen() {
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { revenue } = useOrders();
   const history = revenue?.history || [];
+  // 부가세 분리 표시 토글 — ON 시 카드/이력에 공급가액/부가세 분리. OFF 시 합계만.
+  const [showVat, setShowVat] = useState(false);
 
   const now = new Date();
   const todayStart = new Date(
@@ -45,6 +58,22 @@ export default function RevenueScreen() {
   const thisMonthOrders = history.filter((h) => h.clearedAt >= monthStart);
   const todayTotal = todayOrders.reduce((s, h) => s + h.total, 0);
   const monthTotal = thisMonthOrders.reduce((s, h) => s + h.total, 0);
+
+  // 결제수단별 합계 + 일계 — 오늘 기준
+  const todayByPayment = useMemo(() => summarizeByPaymentMethod(todayOrders), [todayOrders]);
+  const todayDaily = useMemo(() => summarizeDaily(todayOrders), [todayOrders]);
+  const todayVat = useMemo(() => splitVatIncluded(todayTotal), [todayTotal]);
+  const monthVat = useMemo(() => splitVatIncluded(monthTotal), [monthTotal]);
+
+  // CSV 익스포트 — 다운로드 시 파일명에 날짜 포함.
+  const exportCsv = (filterFn, suffix) => {
+    const filtered = filterFn ? history.filter(filterFn) : history;
+    if (filtered.length === 0) return;
+    const csv = historyToCsv(filtered);
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    downloadCsv(csv, `mypos-${suffix}-${dateStr}.csv`);
+  };
 
   const byMonth = {};
   history.forEach((h) => {
@@ -65,6 +94,11 @@ export default function RevenueScreen() {
           <Text style={styles.summaryValue}>
             {todayTotal.toLocaleString()}원
           </Text>
+          {showVat && todayTotal > 0 ? (
+            <Text style={styles.summaryVat}>
+              공급가액 {todayVat.supply.toLocaleString()}원 · 부가세 {todayVat.vat.toLocaleString()}원
+            </Text>
+          ) : null}
           <Text style={styles.summarySub}>
             {todayOrders.length}건 · {now.getMonth() + 1}/{now.getDate()}
           </Text>
@@ -74,11 +108,117 @@ export default function RevenueScreen() {
           <Text style={styles.summaryValue}>
             {monthTotal.toLocaleString()}원
           </Text>
+          {showVat && monthTotal > 0 ? (
+            <Text style={styles.summaryVat}>
+              공급가액 {monthVat.supply.toLocaleString()}원 · 부가세 {monthVat.vat.toLocaleString()}원
+            </Text>
+          ) : null}
           <Text style={styles.summarySub}>
             {thisMonthOrders.length}건 · 매월 1일 자동 리셋
           </Text>
         </View>
       </View>
+
+      {/* 부가세 표시 토글 + CSV 익스포트 버튼 — 회계 / 분기 신고 대비 */}
+      <View style={styles.toolBar}>
+        <TouchableOpacity
+          style={[styles.toolBtn, showVat && styles.toolBtnActive]}
+          onPress={() => setShowVat((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.toolBtnText, showVat && styles.toolBtnTextActive]}>
+            {showVat ? '✓ 부가세 분리 표시 (10%)' : '부가세 분리 표시 (10%)'}
+          </Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <Text style={styles.csvLabel}>CSV 익스포트:</Text>
+        <TouchableOpacity
+          style={styles.csvBtn}
+          onPress={() => exportCsv((h) => h.clearedAt >= todayStart, 'today')}
+        >
+          <Text style={styles.csvBtnText}>오늘</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.csvBtn}
+          onPress={() => exportCsv((h) => h.clearedAt >= monthStart, 'month')}
+        >
+          <Text style={styles.csvBtnText}>이번 달</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.csvBtn}
+          onPress={() => exportCsv(null, 'all')}
+        >
+          <Text style={styles.csvBtnText}>전체</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 오늘 결제수단별 합계 — 일계 정산 즉시 보임 */}
+      <Text style={styles.sectionTitle}>💳 오늘 결제수단별</Text>
+      <View style={styles.payMethodRow}>
+        {[...PAYMENT_METHOD_LIST, PAYMENT_METHOD_UNSPECIFIED].map((code) => {
+          const bucket = todayByPayment[code] || { count: 0, total: 0 };
+          const isUnspec = code === PAYMENT_METHOD_UNSPECIFIED;
+          return (
+            <View
+              key={code}
+              style={[styles.payMethodCard, isUnspec && styles.payMethodCardMuted]}
+            >
+              <Text style={styles.payMethodLabel}>
+                {isUnspec ? '미분류' : PAYMENT_METHODS[code]}
+              </Text>
+              <Text style={styles.payMethodValue}>
+                {bucket.total.toLocaleString()}원
+              </Text>
+              <Text style={styles.payMethodCount}>{bucket.count}건</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* 일계 보고서 — 메뉴 TOP / 시간대 TOP */}
+      {todayOrders.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitle}>📊 오늘 일계 보고서</Text>
+          <View style={styles.dailyRow}>
+            <View style={styles.dailyBox}>
+              <Text style={styles.dailyBoxTitle}>메뉴 TOP 5 (매출)</Text>
+              {todayDaily.byMenu.slice(0, 5).map((m) => (
+                <View key={m.name} style={styles.dailyItem}>
+                  <Text style={styles.dailyItemName} numberOfLines={1}>
+                    {m.name}
+                  </Text>
+                  <Text style={styles.dailyItemQty}>{m.qty}개</Text>
+                  <Text style={styles.dailyItemTotal}>
+                    {m.total.toLocaleString()}원
+                  </Text>
+                </View>
+              ))}
+              {todayDaily.byMenu.length === 0 ? (
+                <Text style={styles.emptyHint}>오늘 판매 내역 없음</Text>
+              ) : null}
+            </View>
+            <View style={styles.dailyBox}>
+              <Text style={styles.dailyBoxTitle}>시간대 TOP 5 (매출)</Text>
+              {todayDaily.byHour
+                .filter((h) => h.count > 0)
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 5)
+                .map((h) => (
+                  <View key={h.hour} style={styles.dailyItem}>
+                    <Text style={styles.dailyItemName}>{h.hour}시</Text>
+                    <Text style={styles.dailyItemQty}>{h.count}건</Text>
+                    <Text style={styles.dailyItemTotal}>
+                      {h.total.toLocaleString()}원
+                    </Text>
+                  </View>
+                ))}
+              {todayDaily.byHour.every((h) => h.count === 0) ? (
+                <Text style={styles.emptyHint}>오늘 판매 내역 없음</Text>
+              ) : null}
+            </View>
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.sectionTitle}>📅 매월 수익</Text>
 
@@ -149,6 +289,9 @@ export default function RevenueScreen() {
                 >
                   {h.paymentStatus === 'paid' ? '선불' : '후불'}
                 </Text>
+                <Text style={styles.historyMethod}>
+                  {paymentMethodLabel(h.paymentMethod)}
+                </Text>
               </View>
               <View style={styles.historyItems}>
                 {h.items.map((i) => (
@@ -165,9 +308,17 @@ export default function RevenueScreen() {
               {h.deliveryAddress ? (
                 <Text style={styles.historyAddr}>📍 {h.deliveryAddress}</Text>
               ) : null}
-              <Text style={styles.historyTotal}>
-                {h.total.toLocaleString()}원
-              </Text>
+              <View style={styles.historyTotalRow}>
+                {showVat && h.total > 0 ? (
+                  <Text style={styles.historyVat}>
+                    공급 {splitVatIncluded(h.total).supply.toLocaleString()} ·
+                    VAT {splitVatIncluded(h.total).vat.toLocaleString()}
+                  </Text>
+                ) : null}
+                <Text style={styles.historyTotal}>
+                  {h.total.toLocaleString()}원
+                </Text>
+              </View>
             </View>
           ))
       )}
@@ -197,6 +348,101 @@ function makeStyles(scale = 1) {
     marginTop: 4,
   },
   summarySub: { fontSize: fp(11), color: 'rgba(255,255,255,0.7)' },
+  summaryVat: {
+    fontSize: fp(11),
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+
+  toolBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  toolBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+  },
+  toolBtnActive: { backgroundColor: '#1F2937', borderColor: '#1F2937' },
+  toolBtnText: { fontSize: fp(11), color: '#374151', fontWeight: '600' },
+  toolBtnTextActive: { color: '#fff' },
+  csvLabel: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
+  csvBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
+  },
+  csvBtnText: { fontSize: fp(11), color: '#fff', fontWeight: '700' },
+
+  payMethodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  payMethodCard: {
+    flex: 1,
+    minWidth: 100,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 2,
+  },
+  payMethodCardMuted: { backgroundColor: '#f3f4f6', opacity: 0.85 },
+  payMethodLabel: { fontSize: fp(11), color: '#6b7280', fontWeight: '700' },
+  payMethodValue: { fontSize: fp(15), color: '#111827', fontWeight: '800' },
+  payMethodCount: { fontSize: fp(10), color: '#9ca3af' },
+
+  dailyRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    flexWrap: 'wrap',
+  },
+  dailyBox: {
+    flex: 1,
+    minWidth: 240,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  dailyBoxTitle: {
+    fontSize: fp(13),
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  dailyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    gap: 6,
+  },
+  dailyItemName: { flex: 1, fontSize: fp(12), color: '#374151' },
+  dailyItemQty: { fontSize: fp(11), color: '#6b7280', minWidth: 36, textAlign: 'right' },
+  dailyItemTotal: {
+    fontSize: fp(12),
+    color: '#111827',
+    fontWeight: '700',
+    minWidth: 80,
+    textAlign: 'right',
+  },
 
   sectionTitle: {
     fontSize: fp(15),
@@ -272,14 +518,30 @@ function makeStyles(scale = 1) {
     overflow: 'hidden',
   },
   historyPayPaid: { color: '#fff', backgroundColor: '#2563eb' },
+  historyMethod: {
+    fontSize: fp(10),
+    fontWeight: '700',
+    color: '#1F2937',
+    backgroundColor: '#e5e7eb',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
   historyItems: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   historyItem: { fontSize: fp(11), color: '#374151' },
   historyAddr: { fontSize: fp(10), color: '#dc2626', fontWeight: '600' },
+  historyTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  historyVat: { fontSize: fp(10), color: '#6b7280' },
   historyTotal: {
     fontSize: fp(14),
     fontWeight: '800',
     color: '#111827',
-    textAlign: 'right',
   },
   });
 }

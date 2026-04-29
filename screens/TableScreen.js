@@ -18,6 +18,7 @@ import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
+import PaymentMethodPicker from '../components/PaymentMethodPicker';
 
 export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [subTab, setSubTab] = useState('기본홀');
@@ -36,6 +37,9 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [gridWidth, setGridWidth] = useState(0);
   // 메뉴 전체보기 모달 — 선택된 테이블의 id 저장 (null 이면 닫힘)
   const [expandedTableId, setExpandedTableId] = useState(null);
+  // 결제하기 버튼이 띄우는 결제수단 선택 모달.
+  // { tableId, total } | null. 선택 시 markPaid + clearTable + 모달 닫기.
+  const [paymentPicker, setPaymentPicker] = useState(null);
   // 펼쳐보기 칩 클릭이 타일 onPress 와 같이 발화하는 RN 플랫폼 quirk 방어용 가드.
   // boolean flag 는 부모 onPress 가 안 불릴 때 sticky 가 되는 부작용이 있어 timestamp 로 자동 만료.
   const expandClickedAtRef = useRef(0);
@@ -348,15 +352,18 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     </Text>
                   ) : isReady && !isPaid ? (
                     // 조리완료 미결제: "결제하기" 버튼 직접 노출.
-                    // 한 번 누르면 매출 history 적재 + 테이블 즉시 비움 (clearTable 에 모두 포함).
-                    // 총금액은 위 tileTopLeft 의 total 텍스트에 이미 표시됨 — 두 정보 같이 노출.
+                    // 누르면 결제수단 선택 모달 → 선택값으로 markPaid + clearTable.
+                    // 총금액은 위 tileTopLeft 의 total 텍스트에 이미 표시됨 — picker 안에서 한 번 더.
                     <TouchableOpacity
                       style={styles.tilePayBtn}
                       activeOpacity={0.7}
                       onPress={() => {
                         payClickedAtRef.current = Date.now();
-                        markPaid(readTableId);
-                        clearTable(readTableId);
+                        setPaymentPicker({
+                          tableId: readTableId,
+                          total: getOrderTotal(readTableId),
+                          label: displayLabel,
+                        });
                       }}
                       accessibilityLabel={`${displayLabel} 결제하기`}
                     >
@@ -986,6 +993,22 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           </Pressable>
         </View>
       )}
+
+      {paymentPicker ? (
+        <PaymentMethodPicker
+          total={paymentPicker.total}
+          title={`${paymentPicker.label || '테이블'} 결제`}
+          onClose={() => setPaymentPicker(null)}
+          onSelect={(code) => {
+            const picked = code === 'unspecified' ? null : code;
+            const id = paymentPicker.tableId;
+            setPaymentPicker(null);
+            // 결제하기 = markPaid + clearTable 한 번에. 어제 추가된 흐름 그대로.
+            markPaid(id, picked);
+            clearTable(id, picked);
+          }}
+        />
+      ) : null}
     </View>
   );
 }

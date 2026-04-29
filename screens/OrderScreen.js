@@ -16,6 +16,7 @@ import { useMenu } from '../utils/MenuContext';
 import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
+import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import {
   playChangeSound,
   playOrderSound,
@@ -54,6 +55,9 @@ export default function OrderScreen({
   // 옵션 편집 모달 표시
   const [optionsEditOpen, setOptionsEditOpen] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
+  // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total } | null
+  // 선불/후불 버튼이 누르면 모달 띄움 → 사용자 결제수단 선택 → markPaid/clearTable 호출.
+  const [paymentPicker, setPaymentPicker] = useState(null);
   // sizePrompt = { items: [...], index: 0, sizeOption, value }
   const {
     width: _screenW,
@@ -112,6 +116,7 @@ export default function OrderScreen({
 
   const {
     getOrder,
+    getOrderTotal,
     getCartTotal,
     getCartQty,
     addItem,
@@ -1445,7 +1450,13 @@ export default function OrderScreen({
                         styles.payBtnDisabled,
                     ]}
                     disabled={!hasCommittedOrder || isPending}
-                    onPress={() => markPaid(tableId)}
+                    onPress={() =>
+                      setPaymentPicker({
+                        mode: 'prepaid',
+                        tableId,
+                        total: getOrderTotal(tableId),
+                      })
+                    }
                   >
                     <Text style={[styles.payBtnText, isPhone && styles.payBtnTextPhone]}>선불</Text>
                   </TouchableOpacity>
@@ -1457,10 +1468,13 @@ export default function OrderScreen({
                         styles.payBtnDisabled,
                     ]}
                     disabled={!hasCommittedOrder || isPending}
-                    onPress={() => {
-                      clearTable(tableId);
-                      onBack?.();
-                    }}
+                    onPress={() =>
+                      setPaymentPicker({
+                        mode: 'postpaid',
+                        tableId,
+                        total: getOrderTotal(tableId),
+                      })
+                    }
                   >
                     <Text
                       style={[
@@ -1488,6 +1502,27 @@ export default function OrderScreen({
           </View>
         </View>
       </View>
+
+      {paymentPicker ? (
+        <PaymentMethodPicker
+          total={paymentPicker.total}
+          title={paymentPicker.mode === 'prepaid' ? '선불 결제수단' : '후불 결제수단'}
+          onClose={() => setPaymentPicker(null)}
+          onSelect={(code) => {
+            const picked = code === 'unspecified' ? null : code;
+            const id = paymentPicker.tableId;
+            const mode = paymentPicker.mode;
+            setPaymentPicker(null);
+            // 선불 = 결제만 (테이블 유지). 후불 = 결제 + 테이블 비우기 + 뒤로.
+            if (mode === 'prepaid') {
+              markPaid(id, picked);
+            } else {
+              clearTable(id, picked);
+              onBack?.();
+            }
+          }}
+        />
+      ) : null}
     </View>
   );
 }

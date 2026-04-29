@@ -1,0 +1,222 @@
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LIST,
+  PAYMENT_METHOD_UNSPECIFIED,
+  paymentMethodLabel,
+  splitVatIncluded,
+  addVatExcluded,
+  summarizeByPaymentMethod,
+  historyToCsv,
+  summarizeDaily,
+} from '../utils/payment';
+
+describe('paymentMethodLabel', () => {
+  test('알려진 코드는 한국어 라벨', () => {
+    expect(paymentMethodLabel('cash')).toBe('현금');
+    expect(paymentMethodLabel('card')).toBe('카드');
+    expect(paymentMethodLabel('transfer')).toBe('계좌이체');
+    expect(paymentMethodLabel('localCurrency')).toBe('지역화폐');
+  });
+  test('null / undefined / unspecified → 미분류', () => {
+    expect(paymentMethodLabel(null)).toBe('미분류');
+    expect(paymentMethodLabel(undefined)).toBe('미분류');
+    expect(paymentMethodLabel(PAYMENT_METHOD_UNSPECIFIED)).toBe('미분류');
+  });
+  test('모르는 코드 → 미분류', () => {
+    expect(paymentMethodLabel('crypto')).toBe('미분류');
+  });
+});
+
+describe('splitVatIncluded', () => {
+  test('11000원 (부가세 포함) → 공급가액 10000 + 부가세 1000', () => {
+    const r = splitVatIncluded(11000);
+    expect(r.total).toBe(11000);
+    expect(r.supply).toBe(10000);
+    expect(r.vat).toBe(1000);
+  });
+  test('소수점 반올림 안전 — 합 = total 항상 보장', () => {
+    // 1000 / 1.1 = 909.09... → 909
+    // 1000 - 909 = 91
+    const r = splitVatIncluded(1000);
+    expect(r.supply + r.vat).toBe(1000);
+    expect(r.supply).toBe(909);
+    expect(r.vat).toBe(91);
+  });
+  test('0 → 0/0/0', () => {
+    expect(splitVatIncluded(0)).toEqual({ total: 0, supply: 0, vat: 0 });
+  });
+  test('null/undefined 안전', () => {
+    expect(splitVatIncluded(null)).toEqual({ total: 0, supply: 0, vat: 0 });
+    expect(splitVatIncluded(undefined)).toEqual({ total: 0, supply: 0, vat: 0 });
+  });
+});
+
+describe('addVatExcluded', () => {
+  test('공급가액 10000 → 11000 (부가세 1000)', () => {
+    const r = addVatExcluded(10000);
+    expect(r.supply).toBe(10000);
+    expect(r.vat).toBe(1000);
+    expect(r.total).toBe(11000);
+  });
+  test('0 → 0/0/0', () => {
+    expect(addVatExcluded(0)).toEqual({ supply: 0, vat: 0, total: 0 });
+  });
+});
+
+describe('summarizeByPaymentMethod', () => {
+  const sample = [
+    { total: 10000, paymentMethod: 'cash' },
+    { total: 5000, paymentMethod: 'cash' },
+    { total: 20000, paymentMethod: 'card' },
+    { total: 7000, paymentMethod: 'transfer' },
+    { total: 3000 }, // 옛 데이터 — paymentMethod 없음
+    { total: 1500, paymentMethod: 'crypto' }, // 모르는 코드
+  ];
+
+  test('각 결제수단 합계 + 건수', () => {
+    const r = summarizeByPaymentMethod(sample);
+    expect(r.cash).toEqual({ count: 2, total: 15000 });
+    expect(r.card).toEqual({ count: 1, total: 20000 });
+    expect(r.transfer).toEqual({ count: 1, total: 7000 });
+    expect(r.localCurrency).toEqual({ count: 0, total: 0 });
+  });
+  test('paymentMethod 없는 옛 데이터는 unspecified', () => {
+    const r = summarizeByPaymentMethod(sample);
+    // 'crypto' 같은 모르는 코드 + null 모두 unspecified
+    expect(r.unspecified.count).toBe(2);
+    expect(r.unspecified.total).toBe(4500);
+  });
+  test('빈 배열 / null', () => {
+    const empty = summarizeByPaymentMethod([]);
+    PAYMENT_METHOD_LIST.forEach((c) => {
+      expect(empty[c]).toEqual({ count: 0, total: 0 });
+    });
+    expect(summarizeByPaymentMethod(null).cash).toEqual({ count: 0, total: 0 });
+  });
+});
+
+describe('historyToCsv', () => {
+  test('헤더 + 한 행 직렬화', () => {
+    const csv = historyToCsv([
+      {
+        clearedAt: new Date('2026-04-29T14:30:00').getTime(),
+        tableId: '1',
+        items: [
+          { name: '치킨', qty: 2, price: 10000 },
+          { name: '콜라', qty: 1, price: 2000 },
+        ],
+        paymentMethod: 'card',
+        paymentStatus: 'paid',
+        deliveryAddress: '',
+        total: 22000,
+      },
+    ]);
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe('시점,테이블,메뉴,결제수단,결제상태,배달주소,합계,공급가액,부가세');
+    // 메뉴는 "치킨×2,콜라×1" — 콤마 포함이라 큰따옴표로 감싸짐
+    expect(lines[1]).toContain('"치킨×2,콜라×1"');
+    expect(lines[1]).toContain('카드');
+    expect(lines[1]).toContain('결제완료');
+    expect(lines[1]).toContain('22000');
+    // VAT 분리: 22000 / 1.1 = 20000 + 2000
+    expect(lines[1]).toContain('20000');
+    expect(lines[1]).toContain('2000');
+  });
+
+  test('빈 history → 헤더만', () => {
+    const csv = historyToCsv([]);
+    expect(csv.split('\n').length).toBe(1);
+  });
+
+  test('CSV 셀 escape — 큰따옴표 두 번', () => {
+    const csv = historyToCsv([
+      {
+        clearedAt: 0,
+        tableId: '1',
+        items: [{ name: '메뉴 "특별"', qty: 1, price: 1000 }],
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        deliveryAddress: '',
+        total: 1000,
+      },
+    ]);
+    expect(csv).toContain('"메뉴 ""특별""×1"');
+  });
+
+  test('paymentMethod 없는 옛 데이터 → 미분류', () => {
+    const csv = historyToCsv([
+      {
+        clearedAt: 0,
+        tableId: '1',
+        items: [{ name: 'X', qty: 1, price: 1000 }],
+        paymentStatus: 'paid',
+        total: 1000,
+      },
+    ]);
+    expect(csv).toContain('미분류');
+  });
+});
+
+describe('summarizeDaily', () => {
+  const sample = [
+    {
+      clearedAt: new Date('2026-04-29T12:30:00').getTime(),
+      items: [
+        { name: '치킨', qty: 2, price: 10000 },
+        { name: '콜라', qty: 1, price: 2000 },
+      ],
+      total: 22000,
+      paymentMethod: 'card',
+    },
+    {
+      clearedAt: new Date('2026-04-29T18:45:00').getTime(),
+      items: [{ name: '치킨', qty: 1, price: 10000 }],
+      total: 10000,
+      paymentMethod: 'cash',
+    },
+  ];
+
+  test('byMenu — 메뉴별 수량/매출, 매출 내림차순', () => {
+    const { byMenu } = summarizeDaily(sample);
+    expect(byMenu[0].name).toBe('치킨');
+    expect(byMenu[0].qty).toBe(3);
+    expect(byMenu[0].total).toBe(30000);
+    expect(byMenu[1].name).toBe('콜라');
+    expect(byMenu[1].qty).toBe(1);
+    expect(byMenu[1].total).toBe(2000);
+  });
+
+  test('byHour — 시간대별 건수/매출 (24시간 배열)', () => {
+    const { byHour } = summarizeDaily(sample);
+    expect(byHour.length).toBe(24);
+    expect(byHour[12].count).toBe(1);
+    expect(byHour[12].total).toBe(22000);
+    expect(byHour[18].count).toBe(1);
+    expect(byHour[18].total).toBe(10000);
+    expect(byHour[0].count).toBe(0);
+  });
+
+  test('byPayment — summarizeByPaymentMethod 와 동일', () => {
+    const { byPayment } = summarizeDaily(sample);
+    expect(byPayment.card).toEqual({ count: 1, total: 22000 });
+    expect(byPayment.cash).toEqual({ count: 1, total: 10000 });
+  });
+
+  test('빈 history', () => {
+    const { byMenu, byHour, byPayment } = summarizeDaily([]);
+    expect(byMenu).toEqual([]);
+    expect(byHour.every((h) => h.count === 0)).toBe(true);
+    expect(byPayment.cash.total).toBe(0);
+  });
+});
+
+describe('PAYMENT_METHODS / PAYMENT_METHOD_LIST', () => {
+  test('LIST 가 모든 키를 커버', () => {
+    PAYMENT_METHOD_LIST.forEach((code) => {
+      expect(PAYMENT_METHODS[code]).toBeDefined();
+    });
+  });
+  test('현재 한국 매장 기본 4종', () => {
+    expect(PAYMENT_METHOD_LIST).toEqual(['cash', 'card', 'transfer', 'localCurrency']);
+  });
+});

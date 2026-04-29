@@ -156,8 +156,10 @@ export function OrderProvider({ children }) {
       }
     };
 
-    const clearTable = (tableId) => {
-      addBreadcrumb('order.clearTable', { tableId });
+    // paymentMethod: 후불 결제(테이블 정리 시점에 결제) 시 결제수단 선택값.
+    //   비우면 슬롯에 이미 저장된 paymentMethod (선불 시 markPaid 가 저장한 값) 사용.
+    const clearTable = (tableId, paymentMethod = null) => {
+      addBreadcrumb('order.clearTable', { tableId, paymentMethod });
       // 단체(그룹)에 속해 있으면 리더 tableId 로 통일하고, 비운 뒤 그룹 해제
       let targetId = tableId;
       let groupLeaderToDissolve = null;
@@ -181,6 +183,7 @@ export function OrderProvider({ children }) {
               deliveryAddress: existing.deliveryAddress,
               deliveryTime: existing.deliveryTime,
               paymentStatus: existing.paymentStatus,
+              paymentMethod: paymentMethod || existing.paymentMethod || null,
               total,
             })
           )
@@ -351,8 +354,10 @@ export function OrderProvider({ children }) {
       dispatch({ type: 'orders/toggleOption', tableId, optionId });
     };
 
-    const markPaid = (tableId) => {
-      addBreadcrumb('order.markPaid', { tableId });
+    // paymentMethod: 'cash' | 'card' | 'transfer' | 'localCurrency' | null
+    //   결제수단 선택 모달이 사용자 선택값을 전달. 미선택(null) 도 허용 — 회계엔 '미분류'.
+    const markPaid = (tableId, paymentMethod = null) => {
+      addBreadcrumb('order.markPaid', { tableId, paymentMethod });
       // 포장(p prefix) 은 결제 완료 = 픽업 종료 → 매출 기록 + 슬롯 제거 + compact.
       // 그 외(일반/배달/예약/분할) 는 기존 동작: paymentStatus 만 'paid' 로 변경.
       const prefix = detectDynamicSlotPrefix(tableId);
@@ -368,6 +373,7 @@ export function OrderProvider({ children }) {
                 items: existing.items,
                 options: existing.options,
                 paymentStatus: 'paid',
+                paymentMethod,
                 total,
               })
             )
@@ -377,7 +383,7 @@ export function OrderProvider({ children }) {
         dispatch({ type: 'orders/compactSlots', prefix: 'p' });
         return;
       }
-      dispatch({ type: 'orders/markPaid', tableId });
+      dispatch({ type: 'orders/markPaid', tableId, paymentMethod });
     };
 
     const getOrder = (tableId) => orders[tableId] || emptyOrder;

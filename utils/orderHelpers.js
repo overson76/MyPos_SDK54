@@ -20,6 +20,10 @@ export function computeItemsTotal(items) {
 
 // 매출 history 한 건 빌더 — 정리(clearTable) / 자동 배달 정리에서 동일 모양으로 push.
 // extraFields 로 autoDelivered 같은 옵션 필드 병합.
+//
+// paymentMethod: 결제수단 코드 ('cash' | 'card' | 'transfer' | 'localCurrency').
+//   미선택 / 옛 데이터는 null. utils/payment.js 가 'unspecified'(미분류) 로 집계.
+//   회계 / CSV 익스포트 / 결제수단별 매출 분석에 사용.
 export function buildHistoryEntry({
   tableId,
   items,
@@ -27,6 +31,7 @@ export function buildHistoryEntry({
   deliveryAddress,
   deliveryTime,
   paymentStatus,
+  paymentMethod,
   total,
   extraFields,
 }) {
@@ -38,6 +43,7 @@ export function buildHistoryEntry({
     deliveryAddress: deliveryAddress || '',
     deliveryTime: deliveryTime || '',
     paymentStatus,
+    paymentMethod: paymentMethod || null,
     total,
     clearedAt: Date.now(),
     ...(extraFields || {}),

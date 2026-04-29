@@ -171,11 +171,16 @@ export function orderReducer(state, action) {
     }
 
     case 'orders/markPaid': {
-      const { tableId } = action;
+      const { tableId, paymentMethod } = action;
       if (!state[tableId]) return state;
       return {
         ...state,
-        [tableId]: { ...state[tableId], paymentStatus: 'paid' },
+        [tableId]: {
+          ...state[tableId],
+          paymentStatus: 'paid',
+          // 결제수단 — 회계 / CSV / 결제수단별 매출 집계용. null 이면 미분류.
+          paymentMethod: paymentMethod || state[tableId].paymentMethod || null,
+        },
       };
     }
 
