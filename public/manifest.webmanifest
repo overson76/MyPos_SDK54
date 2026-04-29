@@ -1,0 +1,32 @@
+{
+  "name": "MyPos — 매장 POS",
+  "short_name": "MyPos",
+  "description": "소형 매장(배달 + 홀)을 위한 POS 앱. 매장 코드로 폰/PC 동시 동기화.",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1F2937",
+  "theme_color": "#1F2937",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

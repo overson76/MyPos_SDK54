@@ -29,6 +29,7 @@ import { useResponsive } from './utils/useResponsive';
 import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
 import { SentryErrorBoundary } from './utils/sentry';
+import { setupPwa } from './utils/pwaSetup';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
 function CrashFallback({ error, resetError }) {
@@ -111,6 +112,12 @@ const WEB_FIREBASE_ENABLED = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
 const USE_GATE = Platform.OS !== 'web' || WEB_FIREBASE_ENABLED;
 
 export default function App() {
+  useEffect(() => {
+    // 웹에서만 매니페스트 / theme-color / apple-touch-icon 동적 주입.
+    // 네이티브 빌드에선 utils/pwaSetup.js 가 no-op.
+    setupPwa();
+  }, []);
+
   return (
     <SentryErrorBoundary fallback={CrashFallback}>
       <SafeAreaProvider initialMetrics={SIMULATED_INITIAL_METRICS}>

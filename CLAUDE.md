@@ -17,7 +17,17 @@ npm start          # Expo Dev
 npm run ios        # iOS 시뮬레이터
 npm run android    # Android 에뮬레이터
 npm run web        # 웹 미리보기 (Pinch zoom 등 일부 동작은 네이티브 전용)
+npm run deploy:web # PC 카운터 라이브 URL 갱신 (clean + build + grep 검증 + wrangler deploy)
 ```
+
+**`deploy:web` 절차 (`scripts/deploy-web.sh`):**
+1. `.env` 의 `EXPO_PUBLIC_FIREBASE_API_KEY` 존재/형식 사전 확인 — 없으면 abort
+2. `dist/` + `node_modules/.cache/` 클리어
+3. `npx expo export --platform web`
+4. **빌드 산출물에 API 키 inline 됐는지 grep** — 0개면 abort (함정 2 방지)
+5. `npx wrangler deploy`
+
+함정 2 = `babel-preset-expo` 의 `EXPO_PUBLIC_*` inline transformer 가 직접 참조 패턴만 인식. `const env = process.env; env.X` 같은 우회는 production 빌드에서 inline 실패 → 라이브 URL Firebase init 깨짐. grep 한 줄로 1초 만에 잡는다.
 
 ## 최상위 구조
 
@@ -123,6 +133,18 @@ SafeAreaProvider
 - **Android**: `BackHandler` 로 하드웨어 뒤로가기 처리 (`App.js`). 비-테이블 탭 → 테이블 → 선택 해제 → OS 처리 순.
 - **Web**: 일부 네이티브 API 차이 — `notify.js` 가 분기. 핀치줌은 네이티브 우선.
 - SafeArea 인셋 필수 (사용자 메모리: 노치/홈인디케이터 영역 침범 주의).
+
+## PWA (웹 설치 가능)
+
+PC 카운터 라이브 URL 을 "앱처럼" 설치 가능한 PWA 로 운영. 매니페스트 / theme-color / apple-touch-icon 메타 태그를 마운트 시점에 head 에 동적 주입.
+
+- `public/manifest.webmanifest` — 매장명, 아이콘 셋, theme/background = `#1F2937` (navy), display: standalone, orientation: landscape
+- `public/icon-192.png` `public/icon-512.png` `public/apple-touch-icon.png` — Expo SDK 50+ 의 `public/` 폴더는 빌드 시 dist/ 에 그대로 복사됨
+- `utils/pwaSetup.js` — 네이티브 no-op
+- `utils/pwaSetup.web.js` — head 에 link/meta 태그 동적 주입. App.js mount useEffect 에서 호출
+- 아이콘 디자인 동일 (navy + 영수증 + MY/POS) — `assets/icon.png` 와 같은 함수로 사이즈만 달리 렌더
+
+PWA 설치 가능 여부는 dev 에서 fetch + DOM 점검으로 검증 (브라우저 DevTools → Application → Manifest 도 가능). 라이브 URL 에서 Chrome → 주소창 옆 "앱 설치" 아이콘 또는 Edge → "이 사이트를 앱처럼 설치".
 
 ## 큰 파일 / 분리 패턴
 
