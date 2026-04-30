@@ -40,8 +40,8 @@ function CrashFallback({ error, resetError }) {
       <Text style={styles.crashSubtitle}>
         오류가 자동으로 보고되었습니다. 아래 버튼으로 다시 시도하세요.
       </Text>
-      {error?.message ? (
-        <Text style={styles.crashError} numberOfLines={8}>
+      {__DEV__ && error?.message ? (
+        <Text style={styles.crashError} numberOfLines={4}>
           {String(error.message)}
         </Text>
       ) : null}

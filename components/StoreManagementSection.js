@@ -378,7 +378,7 @@ export default function StoreManagementSection() {
         <Text style={styles.noteText}>
           • 가입 요청이 사장님 화면에 안 보이면: (1) 위 "이 기기 ID" 와 "대표 ID" 끝 자리가
           같은지 확인 (2) 다르면 사장님 폰의 익명 uid 가 옛 데이터와 어긋남 → 새 매장
-          만들거나 Firebase 콘솔에서 stores/{매장ID}/members 직접 점검.
+          만들거나 Firebase 콘솔에서 stores/(매장ID)/members 직접 점검.
         </Text>
       </View>
 
