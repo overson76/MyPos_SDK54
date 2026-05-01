@@ -18,12 +18,17 @@ import { useResponsive } from '../utils/useResponsive';
 export default function AddressBookModal({ visible, onClose, onSelect }) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { addressBook, pinAddress, deleteAddress, setAlias, setPhone } = useOrders();
+  const { addressBook, pinAddress, deleteAddress, setAlias, setPhone, addAddress } = useOrders();
   const [query, setQuery] = useState('');
   // 편집 중인 항목 key. null = 편집 없음.
   const [editingKey, setEditingKey] = useState(null);
   const [editAlias, setEditAlias] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  // 새 주소 추가 폼
+  const [addingNew, setAddingNew] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newAlias, setNewAlias] = useState('');
+  const [newPhone, setNewPhone] = useState('');
 
   const todaySet = useMemo(
     () => new Set(addressBook.todayDeliveredKeys || []),
@@ -69,6 +74,22 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
 
   const cancelEdit = () => setEditingKey(null);
 
+  const confirmAdd = () => {
+    if (!newLabel.trim()) return;
+    addAddress(newLabel.trim(), newAlias.trim(), newPhone);
+    setAddingNew(false);
+    setNewLabel('');
+    setNewAlias('');
+    setNewPhone('');
+  };
+
+  const cancelAdd = () => {
+    setAddingNew(false);
+    setNewLabel('');
+    setNewAlias('');
+    setNewPhone('');
+  };
+
   return (
     <Modal
       visible={visible}
@@ -80,10 +101,67 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
             <Text style={styles.title}>배달 주소록</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
-              <Text style={styles.closeBtn}>닫기</Text>
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => setAddingNew(true)}
+                hitSlop={6}
+              >
+                <Text style={styles.addBtnText}>+ 추가</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} hitSlop={8}>
+                <Text style={styles.closeBtn}>닫기</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {addingNew && (
+            <View style={styles.newBox}>
+              <View style={styles.editRow}>
+                <Text style={styles.editFieldLabel}>주소</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={newLabel}
+                  onChangeText={setNewLabel}
+                  placeholder="예) 부산 사하구 사하로 47"
+                  placeholderTextColor="#9ca3af"
+                  maxLength={100}
+                  autoFocus
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.editFieldLabel}>별칭</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={newAlias}
+                  onChangeText={setNewAlias}
+                  placeholder="예) 김사장 (선택)"
+                  placeholderTextColor="#9ca3af"
+                  maxLength={20}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.editFieldLabel}>전화번호</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={newPhone}
+                  onChangeText={setNewPhone}
+                  placeholder="예) 010-1234-5678 (선택)"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="phone-pad"
+                  maxLength={14}
+                />
+              </View>
+              <View style={styles.editActions}>
+                <TouchableOpacity style={styles.editConfirmBtn} onPress={confirmAdd}>
+                  <Text style={styles.editConfirmText}>등록</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.editCancelBtn} onPress={cancelAdd}>
+                  <Text style={styles.editCancelText}>취소</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <View style={styles.searchRow}>
             <Text style={styles.searchIcon}>🔍</Text>
@@ -279,7 +357,22 @@ function makeStyles(scale = 1) {
     backgroundColor: '#ef4444',
   },
   title: { fontSize: fp(16), fontWeight: '900', color: '#fff' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addBtn: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  addBtnText: { fontSize: fp(12), fontWeight: '800', color: '#fff' },
   closeBtn: { fontSize: fp(13), fontWeight: '700', color: '#fff' },
+  newBox: {
+    padding: 12,
+    backgroundColor: '#f0fdf4',
+    borderBottomWidth: 1,
+    borderBottomColor: '#bbf7d0',
+    gap: 6,
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',

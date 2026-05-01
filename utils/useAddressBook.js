@@ -122,6 +122,31 @@ export function useAddressBook() {
     });
   }, []);
 
+  // 수동 주소 추가 — 배달 완료 없이도 미리 등록 가능.
+  // label 필수. alias, phone 은 선택.
+  const addAddress = useCallback((label, alias, phone) => {
+    const safe = sanitizeDeliveryAddress(label);
+    if (!safe) return false;
+    const key = normalizeAddressKey(safe);
+    if (!key) return false;
+    const digits = (phone || '').replace(/\D/g, '');
+    setAddressBook((prev) => {
+      if (prev.entries[key]) return prev; // 이미 존재하면 무시
+      const entry = {
+        key,
+        label: safe,
+        count: 0,
+        pinned: false,
+        firstSeenAt: Date.now(),
+        lastUsedAt: Date.now(),
+      };
+      if (alias?.trim()) entry.alias = alias.trim();
+      if (digits) entry.phone = digits;
+      return { ...prev, entries: { ...prev.entries, [key]: entry } };
+    });
+    return true;
+  }, []);
+
   const setAutoRemember = useCallback((on) => {
     setAddressBook((prev) =>
       prev.autoRemember === !!on ? prev : { ...prev, autoRemember: !!on }
@@ -164,5 +189,6 @@ export function useAddressBook() {
     setAutoRemember,
     setAlias,
     setPhone,
+    addAddress,
   };
 }

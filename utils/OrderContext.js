@@ -56,6 +56,7 @@ export function OrderProvider({ children }) {
     setAutoRemember,
     setAlias,
     setPhone,
+    addAddress,
   } = useAddressBook();
 
   useOrderPersistence({
@@ -436,6 +437,7 @@ export function OrderProvider({ children }) {
       setAutoRemember,
       setAlias,
       setPhone,
+      addAddress,
       isSplit,
       addItem,
       removeItem,
