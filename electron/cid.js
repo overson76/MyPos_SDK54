@@ -25,12 +25,13 @@ try {
 // ── 설정 ──────────────────────────────────────────────────────────────────────
 function getConfig() {
   return {
-    host: process.env.MYPOS_SIP_HOST || 'lgdacom.net',
+    host: process.env.MYPOS_SIP_HOST || '192.168.10.100',  // LG U+ 센트릭스 로컬 SIP 서버
     port: Number(process.env.MYPOS_SIP_PORT) || 5060,
     user: process.env.MYPOS_SIP_USER || 'tmpid7133',
     pass: process.env.MYPOS_SIP_PASS || '1L777133',
     domain: process.env.MYPOS_SIP_DOMAIN || 'lgdacom.net',
     ext: process.env.MYPOS_SIP_EXT || '7133',
+    transport: process.env.MYPOS_SIP_TRANSPORT || 'udp',
   };
 }
 
