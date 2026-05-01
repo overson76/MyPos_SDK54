@@ -74,23 +74,6 @@ export function localDateString(ts = Date.now()) {
   return `${y}-${m}-${day}`;
 }
 
-// 매출 history 의 배달주소(PII) 자동 만료. 매출 합계는 유지하되 주소만 제거.
-// GDPR/PIPA 의 데이터 최소화 원칙. 7일 이상 지난 항목의 deliveryAddress 제거.
-export const PII_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-export function sweepHistoryPII(history) {
-  const now = Date.now();
-  let changed = false;
-  const next = history.map((r) => {
-    if (!r || !r.deliveryAddress) return r;
-    const age = now - (r.clearedAt || 0);
-    if (age <= PII_RETENTION_MS) return r;
-    changed = true;
-    const { deliveryAddress, deliveryTime, ...rest } = r;
-    return rest;
-  });
-  return changed ? next : history;
-}
-
 export function genSlotId() {
   return `s-${Date.now().toString(36)}-${Math.random()
     .toString(36)

@@ -3,8 +3,6 @@ import {
   REVENUE_HISTORY_CAP,
   normalizeAddressKey,
   localDateString,
-  sweepHistoryPII,
-  PII_RETENTION_MS,
   genSlotId,
   normalizeSlots,
   resolveTableForAlert,
@@ -52,45 +50,6 @@ describe('localDateString', () => {
   test('타임스탬프 → 같은 일자', () => {
     const ts = new Date(2026, 0, 5, 10, 0, 0).getTime();
     expect(localDateString(ts)).toBe('2026-01-05');
-  });
-});
-
-describe('sweepHistoryPII', () => {
-  const now = Date.now();
-
-  test('보존 기간 내 항목은 deliveryAddress 유지', () => {
-    const fresh = [
-      { id: 1, total: 1000, deliveryAddress: '서울', clearedAt: now - 1000 },
-    ];
-    const result = sweepHistoryPII(fresh);
-    expect(result[0].deliveryAddress).toBe('서울');
-  });
-
-  test('만료된 항목은 deliveryAddress / deliveryTime 제거 (총합/id 유지)', () => {
-    const stale = [
-      {
-        id: 1,
-        total: 1000,
-        deliveryAddress: '서울',
-        deliveryTime: '12:30',
-        clearedAt: now - PII_RETENTION_MS - 1000,
-      },
-    ];
-    const result = sweepHistoryPII(stale);
-    expect(result[0]).toEqual({ id: 1, total: 1000, clearedAt: stale[0].clearedAt });
-    expect(result[0].deliveryAddress).toBeUndefined();
-    expect(result[0].deliveryTime).toBeUndefined();
-  });
-
-  test('변경이 없으면 원본 배열 그대로 반환 (참조 동일)', () => {
-    const arr = [{ id: 1, total: 1000 }];
-    expect(sweepHistoryPII(arr)).toBe(arr);
-  });
-
-  test('null/undefined 항목 안전 통과', () => {
-    const arr = [null, { id: 1, total: 100 }];
-    const result = sweepHistoryPII(arr);
-    expect(result).toEqual(arr);
   });
 });
 

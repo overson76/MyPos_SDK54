@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadMany, makeDebouncedSaver } from './persistence';
-import {
-  capHistory,
-  localDateString,
-  sweepHistoryPII,
-} from './orderHelpers';
+import { capHistory, localDateString } from './orderHelpers';
 
 // OrderProvider 의 영속화 책임을 캡슐화 — 마운트 1회 hydration + 5개 state 디바운스 저장.
 // 반환된 hydrated 가 true 가 되기 전에는 디스크 쓰기 effect 가 noop 이라 깨끗한 초기 로드 보장.
@@ -44,7 +40,7 @@ export function useOrderPersistence({
         setRevenue({
           total: Number(data.revenue.total) || 0,
           history: Array.isArray(data.revenue.history)
-            ? sweepHistoryPII(capHistory(data.revenue.history))
+            ? capHistory(data.revenue.history)
             : [],
         });
       }
