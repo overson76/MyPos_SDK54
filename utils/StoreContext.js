@@ -77,7 +77,10 @@ export function StoreProvider({ children }) {
     memberUnsubRef.current = memberRef.onSnapshot(
       async (snap) => {
         if (!snapExists(snap)) {
-          // 멤버 제거됨 (대표가 강퇴 또는 본인 탈퇴)
+          // 오프라인/캐시 미스 시 fromCache=true — 서버 응답 올 때까지 현재 상태 유지.
+          // 네트워크 잠깐 끊겨서 캐시 상태로 "없어 보이는" 경우를 연동 해제로 오판 방지.
+          if (snap?.metadata?.fromCache) return;
+          // 서버에서 실제로 문서 없음 확인 — 멤버 제거됨 (강퇴 또는 탈퇴).
           await removeKey(CACHE_KEY);
           setStoreInfo(null);
           setState(STORE_STATE.UNJOINED);

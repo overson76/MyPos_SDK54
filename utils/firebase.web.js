@@ -99,6 +99,24 @@ export async function initFirebase() {
     }
   }
 
+  // Electron 전용: 인증 상태가 바뀔 때마다 userData 파일에 저장.
+  // preload 가 다음 시작 시 이 값을 localStorage 에 주입 → origin 달라도 동일 UID 유지.
+  if (typeof window !== 'undefined' && window.mypos?.saveAuthState) {
+    rawAuth.onAuthStateChanged((user) => {
+      if (!user) return; // 로그아웃 상태엔 저장 안 함 — 기존 상태 보존
+      try {
+        const keys = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('firebase:')) keys[k] = localStorage.getItem(k);
+        }
+        if (Object.keys(keys).length > 0) {
+          window.mypos.saveAuthState(keys).catch(() => {});
+        }
+      } catch {}
+    });
+  }
+
   _initialized = true;
 }
 

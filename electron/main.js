@@ -17,6 +17,7 @@
 
 const { app, BrowserWindow, shell, Menu, ipcMain, globalShortcut } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 const { printReceiptIpc } = require('./printer/print');
 const { startCidListener } = require('./cid');
 const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
@@ -116,6 +117,26 @@ app.on('second-instance', () => {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   }
+});
+
+// Firebase 인증 상태 파일 영속화 — Cloudflare / mypos:// origin 불일치 해소.
+// Cloudflare URL 로 로드되든 로컬 폴백으로 로드되든 동일한 익명 UID 유지.
+const authStatePath = path.join(app.getPath('userData'), 'firebaseAuth.json');
+
+// preload 에서 synchronous 로 호출 — Firebase 초기화 전에 localStorage 에 주입하기 위함.
+ipcMain.on('mypos/load-auth-state-sync', (event) => {
+  try {
+    if (!fs.existsSync(authStatePath)) { event.returnValue = null; return; }
+    event.returnValue = JSON.parse(fs.readFileSync(authStatePath, 'utf8'));
+  } catch { event.returnValue = null; }
+});
+
+// 렌더러(firebase.web.js)가 인증 상태 변경 시 저장.
+ipcMain.handle('mypos/save-auth-state', (_event, data) => {
+  try {
+    fs.writeFileSync(authStatePath, JSON.stringify(data || {}), 'utf8');
+  } catch {}
+  return { ok: true };
 });
 
 // 매장 멤버십 파일 영속화 IPC — 재설치해도 매장 연동 유지.

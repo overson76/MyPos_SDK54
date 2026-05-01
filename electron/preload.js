@@ -8,6 +8,19 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Firebase 인증 상태를 localStorage 에 사전 주입.
+// Firebase 가 초기화되기 전에 실행되어야 하므로 preload 최상단에 위치.
+// Cloudflare URL 로 로드될 때와 mypos:// 로컬 폴백으로 로드될 때 localStorage 가 달라서
+// 매번 다른 익명 UID 가 생성되던 문제를 방지한다.
+try {
+  const savedAuth = ipcRenderer.sendSync('mypos/load-auth-state-sync');
+  if (savedAuth && typeof savedAuth === 'object') {
+    Object.entries(savedAuth).forEach(([k, v]) => {
+      try { window.localStorage.setItem(k, v); } catch {}
+    });
+  }
+} catch {}
+
 contextBridge.exposeInMainWorld('mypos', {
   isElectron: true,
   platform: process.platform, // 'win32' / 'darwin' / 'linux'
@@ -47,6 +60,11 @@ contextBridge.exposeInMainWorld('mypos', {
   },
   async clearMembership() {
     return await ipcRenderer.invoke('mypos/clear-membership');
+  },
+
+  // Firebase 인증 상태 저장 — firebase.web.js 가 인증 상태 변경 시 호출.
+  async saveAuthState(data) {
+    return await ipcRenderer.invoke('mypos/save-auth-state', data);
   },
 
   // CID — 전화 착신 자동 감지.
