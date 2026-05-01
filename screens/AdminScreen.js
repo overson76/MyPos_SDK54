@@ -31,6 +31,7 @@ import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
 import { useResponsive } from '../utils/useResponsive';
 import Constants from 'expo-constants';
+import { BUILD_NUMBER } from '../utils/buildInfo';
 import {
   isElectronUpdateAvailable,
   checkForElectronUpdate,
@@ -438,8 +439,9 @@ function SystemSettingsView() {
       <View style={sysStyles.versionBox}>
         <Text style={sysStyles.versionText}>
           📱 MyPos v{Constants.expoConfig?.version || '1.0.0'}
-          {Constants.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
-          {'  '}
+          {' ('}
+          {Constants.nativeBuildVersion || BUILD_NUMBER}
+          {')  '}
           {Platform.OS === 'web'
             ? (isElectron() ? '🖥️ PC 카운터' : '🌐 웹')
             : Platform.OS === 'ios'
