@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ImageBackground,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -457,7 +458,11 @@ export default function OrderScreen({
         const targetItem = cart.find((i) => i.slotId === memoPrompt.slotId);
         if (!targetItem) return null;
         return (
-          <View style={styles.sizeModalOverlay} pointerEvents="auto">
+          <KeyboardAvoidingView
+            style={styles.sizeModalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            pointerEvents="auto"
+          >
             <Pressable
               style={styles.sizeModalBackdrop}
               onPress={() => setMemoPrompt(null)}
@@ -473,18 +478,7 @@ export default function OrderScreen({
                   <Text style={styles.sizeModalCloseText}>✕</Text>
                 </TouchableOpacity>
                 <Text style={styles.sizeModalLine1}>{targetItem.name} 메모</Text>
-                <TextInput
-                  style={styles.memoInput}
-                  value={memoPrompt.value}
-                  onChangeText={(v) =>
-                    setMemoPrompt((p) => (p ? { ...p, value: v } : p))
-                  }
-                  placeholder="예: 면 푹 익혀서, 양 많이"
-                  placeholderTextColor="#9ca3af"
-                  multiline
-                  maxLength={60}
-                  autoFocus
-                />
+                {/* 확인/비우기 버튼을 TextInput 위에 배치 — iOS 키보드가 올라와도 항상 보임 */}
                 <View style={styles.memoModalRow}>
                   <TouchableOpacity
                     style={styles.memoClearBtn}
@@ -509,9 +503,21 @@ export default function OrderScreen({
                     <Text style={styles.sizeConfirmText}>확인</Text>
                   </TouchableOpacity>
                 </View>
+                <TextInput
+                  style={styles.memoInput}
+                  value={memoPrompt.value}
+                  onChangeText={(v) =>
+                    setMemoPrompt((p) => (p ? { ...p, value: v } : p))
+                  }
+                  placeholder="예: 면 푹 익혀서, 양 많이"
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  maxLength={60}
+                  autoFocus
+                />
               </Pressable>
             </Pressable>
-          </View>
+          </KeyboardAvoidingView>
         );
       })()}
 
