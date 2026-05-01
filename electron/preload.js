@@ -38,6 +38,17 @@ contextBridge.exposeInMainWorld('mypos', {
     ipcRenderer.send('mypos/quit');
   },
 
+  // 매장 멤버십 파일 영속화 — 재설치해도 매장 연동 유지.
+  async saveMembership(data) {
+    return await ipcRenderer.invoke('mypos/save-membership', data);
+  },
+  async loadMembership() {
+    return await ipcRenderer.invoke('mypos/load-membership');
+  },
+  async clearMembership() {
+    return await ipcRenderer.invoke('mypos/clear-membership');
+  },
+
   // CID — 전화 착신 자동 감지.
   async startCid(storeId) {
     return await ipcRenderer.invoke('mypos/start-cid', storeId);

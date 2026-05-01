@@ -149,9 +149,19 @@ export function StoreProvider({ children }) {
       const uid = await waitForUid();
       if (cancelled) return;
       if (!uid) {
-        // Firebase 미설정 또는 네트워크 문제 — 일단 unjoined 로 두고 화면에서 재시도 유도
         setState(STORE_STATE.UNJOINED);
         return;
+      }
+
+      // Electron(.exe) 재설치 시 IndexedDB 초기화 문제 방어:
+      // 파일 영속화된 멤버십을 AsyncStorage 로 복구한 뒤 진행.
+      if (typeof window !== 'undefined' && window.mypos?.loadMembership) {
+        try {
+          const fileCached = await window.mypos.loadMembership();
+          if (fileCached?.storeId) {
+            await saveJSON(CACHE_KEY, fileCached);
+          }
+        } catch {}
       }
 
       const [cached, pending] = await Promise.all([
@@ -183,7 +193,12 @@ export function StoreProvider({ children }) {
   const markJoined = useCallback(
     async (info) => {
       // info: { storeId, code, name, ownerId, role, displayName }
-      await saveJSON(CACHE_KEY, { storeId: info.storeId, role: info.role });
+      const cacheData = { storeId: info.storeId, role: info.role };
+      await saveJSON(CACHE_KEY, cacheData);
+      // Electron(.exe) 재설치 대비 파일에도 저장
+      if (typeof window !== 'undefined' && window.mypos?.saveMembership) {
+        try { await window.mypos.saveMembership(cacheData); } catch {}
+      }
       setStoreInfo(info);
       setState(STORE_STATE.JOINED);
       subscribeMembership(info.storeId);

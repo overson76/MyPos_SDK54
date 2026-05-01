@@ -19,6 +19,7 @@ const { app, BrowserWindow, shell, Menu, ipcMain, globalShortcut } = require('el
 const path = require('node:path');
 const { printReceiptIpc } = require('./printer/print');
 const { startCidListener } = require('./cid');
+const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
 const {
   registerOfflineScheme,
@@ -115,6 +116,19 @@ app.on('second-instance', () => {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   }
+});
+
+// 매장 멤버십 파일 영속화 IPC — 재설치해도 매장 연동 유지.
+ipcMain.handle('mypos/save-membership', (_event, data) => {
+  saveMembership(data);
+  return { ok: true };
+});
+ipcMain.handle('mypos/load-membership', () => {
+  return loadMembership();
+});
+ipcMain.handle('mypos/clear-membership', () => {
+  clearMembership();
+  return { ok: true };
 });
 
 // 영수증 출력 IPC — preload 의 contextBridge 가 렌더러 → 메인으로 호출 보낼 때 진입.
