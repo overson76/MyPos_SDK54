@@ -3,6 +3,7 @@ import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { formatKorean12h, parseDeliveryTime } from './timeUtil';
 import { triggerSharedAudio, registerLocalDispatch } from './sharedAudio';
+import { isAzureConfigured, azureSpeak, cancelAzureSpeech } from './azureTts';
 
 const isWeb = Platform.OS === 'web';
 
@@ -330,6 +331,18 @@ function nativeSpeakNow(text) {
 function rawSpeak(text, _opts = {}) {
   if (!text) return;
   if (_volume <= 0) return;
+
+  // Azure TTS 설정됐으면 우선 시도. 실패 시 시스템 TTS 폴백.
+  if (isAzureConfigured()) {
+    azureSpeak(text, _volume).then((ok) => {
+      if (!ok) _rawSpeakSystem(text);
+    }).catch(() => _rawSpeakSystem(text));
+    return;
+  }
+  _rawSpeakSystem(text);
+}
+
+function _rawSpeakSystem(text) {
   if (isWeb) {
     if (!hasWebSpeech) return;
     const u = new SpeechSynthesisUtterance(text);
@@ -354,6 +367,7 @@ function rawSpeak(text, _opts = {}) {
 }
 
 function cancelSpeech() {
+  cancelAzureSpeech();
   if (isWeb) {
     if (hasWebSpeech) window.speechSynthesis.cancel();
   } else {
