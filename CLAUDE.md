@@ -67,7 +67,7 @@ SafeAreaProvider
 
 | Context | 파일 | 역할 |
 |---|---|---|
-| `OrderContext` | `utils/OrderContext.js` | 테이블별 주문 슬롯, 확정/미확정 상태, 매출 history, 배달 주소록, 주소록 PII 7일 만료 |
+| `OrderContext` | `utils/OrderContext.js` | 테이블별 주문 슬롯, 확정/미확정 상태, 매출 history, 배달 주소록 |
 | `MenuContext` | `utils/MenuContext.js` | 메뉴 카탈로그 (이름/가격/이미지/카테고리), CRUD |
 | `LockContext` | `utils/LockContext.js` | PIN 잠금/해제, 자동 잠금 타이머, 백그라운드 즉시 잠금 |
 
@@ -378,7 +378,7 @@ OTA 인프라는 코드/설정만 박힘 — 실제 활성화는 **expo-updates 
 
 수정시 두 파일을 같이 봐야 함. import 패턴: `import styles from './<Screen>.styles'`.
 
-OrderContext 의 순수 helper 는 `utils/orderHelpers.js` 로 분리됨 — `normalizeSlots`, `mergeOrderParts`, `sweepHistoryPII`, `genSlotId`, `localDateString`, `normalizeAddressKey`, `capHistory`, `resolveTableForAlert`. Jest 단위 테스트가 `__tests__/orderHelpers.test.js` 에 있으므로 동작 변경시 테스트도 갱신.
+OrderContext 의 순수 helper 는 `utils/orderHelpers.js` 로 분리됨 — `normalizeSlots`, `mergeOrderParts`, `genSlotId`, `localDateString`, `normalizeAddressKey`, `capHistory`, `resolveTableForAlert`. Jest 단위 테스트가 `__tests__/orderHelpers.test.js` 에 있으므로 동작 변경시 테스트도 갱신.
 
 추가 분할 후보:
 - `utils/OrderContext.js` — 1,333줄. provider 본체. reducer 분리 / hook 단위 추출 여지.

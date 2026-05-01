@@ -329,9 +329,6 @@ function SystemSettingsView() {
 
       <View style={sysStyles.note}>
         <Text style={sysStyles.noteText}>
-          • 배달 매출 기록(수익 현황) 의 주소는 7일 후 자동 삭제됩니다 (매출 합계는 유지).
-        </Text>
-        <Text style={sysStyles.noteText}>
           • 메뉴 가격 / 이름 / 배달 주소 / 시간 등 입력값은 자동으로 길이·형식 검증됩니다.
         </Text>
       </View>

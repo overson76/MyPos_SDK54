@@ -1,24 +1,8 @@
-import { useEffect, useState } from 'react';
-import { sweepHistoryPII } from './orderHelpers';
+import { useState } from 'react';
 
-// 매출 도메인 — 누적 total + history 배열 + 1시간 주기 PII sweep.
+// 매출 도메인 — 누적 total + history 배열.
 // state/setter 둘 다 노출 — 외부 도메인(주문 정리/자동 배달 정리)이 setRevenue 로 history 항목 추가.
-// PII sweep 은 hydrate 가드 없이 시작 — 빈 history 면 noop, 영속화 가드는 useOrderPersistence 가 담당.
 export function useRevenue() {
   const [revenue, setRevenue] = useState({ total: 0, history: [] });
-
-  useEffect(() => {
-    const sweep = () => {
-      setRevenue((prev) => {
-        const swept = sweepHistoryPII(prev.history);
-        if (swept === prev.history) return prev;
-        return { ...prev, history: swept };
-      });
-    };
-    sweep();
-    const id = setInterval(sweep, 60 * 60 * 1000); // 1h
-    return () => clearInterval(id);
-  }, []);
-
   return { revenue, setRevenue };
 }
