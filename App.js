@@ -31,6 +31,9 @@ import { loadJSON } from './utils/persistence';
 import { SentryErrorBoundary } from './utils/sentry';
 import { setupPwa } from './utils/pwaSetup';
 import { checkForUpdates } from './utils/otaUpdates';
+import { useCidHandler } from './utils/useCidHandler';
+import { useIncomingCall } from './utils/useIncomingCall';
+import IncomingCallBanner from './components/IncomingCallBanner';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
 function CrashFallback({ error, resetError }) {
@@ -177,6 +180,13 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState('테이블');
   const [tableResetSignal, setTableResetSignal] = useState(0);
   const [selectedTable, setSelectedTable] = useState(null);
+  const { storeInfo } = useStore();
+  const storeId = storeInfo?.storeId || null;
+
+  // CID — Electron PC 에서 SIP 착신 → Firebase 기록 (다른 기기도 동시 수신)
+  useCidHandler(storeId);
+  // 모든 기기: Firebase 착신 이벤트 수신 → 팝업 표시
+  const incomingCall = useIncomingCall(storeId);
   // 최근 선택된 테이블 id — TableScreen 복귀시 하이라이트용
   const [lastSelectedTableId, setLastSelectedTableId] = useState(null);
   // 주문 탭에서 '주문' 클릭 후 테이블 선택 시 자동 확정하기 위한 의도 플래그
@@ -238,6 +248,15 @@ function MainApp() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+      {/* 착신 팝업 — 전화 오면 화면 상단에 표시. Electron PC + 폰/iPad 모두 동시. */}
+      <IncomingCallBanner
+        call={incomingCall}
+        onDismiss={() => {/* 타이머 자동 해제, 별도 동작 불필요 */}}
+        onOrderPress={() => {
+          // "주문받기" 탭 → 주문 탭으로 이동 (배달 주문 시작)
+          handleTabPress('주문');
+        }}
+      />
       <PinchZoom>
         <View style={styles.zoomRoot}>
           <View style={styles.topTabs}>
