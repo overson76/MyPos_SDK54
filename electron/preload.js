@@ -38,6 +38,17 @@ contextBridge.exposeInMainWorld('mypos', {
     ipcRenderer.send('mypos/quit');
   },
 
+  // CID — 전화 착신 자동 감지.
+  async startCid(storeId) {
+    return await ipcRenderer.invoke('mypos/start-cid', storeId);
+  },
+  onIncomingCall(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('mypos/incoming-call', handler);
+    return () => ipcRenderer.removeListener('mypos/incoming-call', handler);
+  },
+
   async checkUpdate() {
     return await ipcRenderer.invoke('mypos/update-check');
   },

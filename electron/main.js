@@ -18,6 +18,7 @@
 const { app, BrowserWindow, shell, Menu, ipcMain, globalShortcut } = require('electron');
 const path = require('node:path');
 const { printReceiptIpc } = require('./printer/print');
+const { startCidListener } = require('./cid');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
 const {
   registerOfflineScheme,
@@ -143,6 +144,21 @@ app.whenReady().then(() => {
   // 윈도우 만든 후 자동 업데이트 setup — autoUpdater 이벤트가 모든 윈도우에 broadcast.
   // dev 빌드에서는 setupAutoUpdater 가 'disabled' 상태 setStatus 후 즉시 반환.
   setupAutoUpdater(() => BrowserWindow.getAllWindows());
+
+  // CID 착신 감지 — Electron 에서만 실행. 전화 오면 모든 기기에 Firebase 이벤트 push.
+  // IPC 로 렌더러가 storeId 를 전달하면 CID 활성화.
+  ipcMain.handle('mypos/start-cid', (_event, storeId) => {
+    if (!storeId) return { ok: false };
+    startCidListener((phoneNumber, formattedNumber) => {
+      // Firebase 에 기록 — 렌더러(웹) 에서 처리
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('mypos/incoming-call', { phoneNumber, formattedNumber, storeId });
+        }
+      }
+    });
+    return { ok: true };
+  });
 
   // 키오스크 종료 단축키 — 메뉴바 없어도 사용 가능.
   // Ctrl+Shift+Q: 사장님/직원용 앱 종료. 키오스크 환경에서 Alt+F4 대체.
