@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
-import { sanitizeDeliveryAddress } from '../utils/validate';
 
 // 배달 주소록 — 검색 / 핀 / 삭제 / 선택.
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
