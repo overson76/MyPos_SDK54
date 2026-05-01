@@ -633,6 +633,14 @@ export function speakReady({ table, order, menuItems, optionsList = [] }) {
   if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
+// CID 착신 TTS — 별칭 우선, 없으면 _speakAddress ON 시 주소.
+// 별칭은 사장님이 직접 입력한 단어라 speakAddress 토글과 무관하게 항상 읽음.
+export function speakIncomingCid({ alias, address }) {
+  const text = alias || (_speakAddress ? (address || '').trim() : '');
+  if (!text) return;
+  triggerSharedAudio({ type: 'speak', text });
+}
+
 // 운영 시작 전 점검용: 톤 + TTS 가 함께 정상 출력되는지 한 번에 검증.
 // 무음 스위치 / 시스템 볼륨 / 미디어 채널 mute 여부를 귀로 확인하는 용도.
 // 테스트는 본인 기기만 — 다른 매장 멤버에게 공유 X.

@@ -128,6 +128,32 @@ export function useAddressBook() {
     );
   }, []);
 
+  // 별칭 설정 — 빈 문자열이면 필드 제거
+  const setAlias = useCallback((key, alias) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const trimmed = (alias || '').trim();
+      const updated = { ...ex };
+      if (trimmed) updated.alias = trimmed;
+      else delete updated.alias;
+      return { ...prev, entries: { ...prev.entries, [key]: updated } };
+    });
+  }, []);
+
+  // 전화번호 설정 — 숫자만 저장. 빈 문자열이면 필드 제거
+  const setPhone = useCallback((key, phone) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const digits = (phone || '').replace(/\D/g, '');
+      const updated = { ...ex };
+      if (digits) updated.phone = digits;
+      else delete updated.phone;
+      return { ...prev, entries: { ...prev.entries, [key]: updated } };
+    });
+  }, []);
+
   return {
     addressBook,
     setAddressBook,
@@ -136,5 +162,7 @@ export function useAddressBook() {
     pinAddress,
     deleteAddress,
     setAutoRemember,
+    setAlias,
+    setPhone,
   };
 }

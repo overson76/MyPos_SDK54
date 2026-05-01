@@ -27,7 +27,11 @@ export default function IncomingCallBanner({ call, onOrderPress, onDismiss }) {
         </View>
         <View style={styles.center}>
           <Text style={styles.number}>{call.formattedNumber || call.phoneNumber}</Text>
-          {call.address ? (
+          {call.alias ? (
+            <Text style={styles.address} numberOfLines={1}>
+              👤 {call.alias}
+            </Text>
+          ) : call.address ? (
             <Text style={styles.address} numberOfLines={1}>
               📍 {call.address}
             </Text>

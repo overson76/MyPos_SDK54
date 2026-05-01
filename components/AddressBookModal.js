@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
+import { sanitizeDeliveryAddress } from '../utils/validate';
 
 // 배달 주소록 — 검색 / 핀 / 삭제 / 선택.
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
@@ -18,8 +19,12 @@ import { useResponsive } from '../utils/useResponsive';
 export default function AddressBookModal({ visible, onClose, onSelect }) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { addressBook, pinAddress, deleteAddress } = useOrders();
+  const { addressBook, pinAddress, deleteAddress, setAlias, setPhone } = useOrders();
   const [query, setQuery] = useState('');
+  // 편집 중인 항목 key. null = 편집 없음.
+  const [editingKey, setEditingKey] = useState(null);
+  const [editAlias, setEditAlias] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
   const todaySet = useMemo(
     () => new Set(addressBook.todayDeliveredKeys || []),
@@ -49,6 +54,21 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     onSelect && onSelect(label);
     onClose && onClose();
   };
+
+  const openEdit = (it) => {
+    setEditingKey(it.key);
+    setEditAlias(it.alias || '');
+    setEditPhone(it.phone ? formatPhoneDisplay(it.phone) : '');
+  };
+
+  const confirmEdit = () => {
+    if (!editingKey) return;
+    setAlias(editingKey, editAlias);
+    setPhone(editingKey, editPhone);
+    setEditingKey(null);
+  };
+
+  const cancelEdit = () => setEditingKey(null);
 
   return (
     <Modal
@@ -98,53 +118,113 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             <ScrollView style={styles.list}>
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);
+                const isEditing = editingKey === it.key;
                 return (
                   <View
                     key={it.key}
                     style={[styles.row, isToday && styles.rowToday]}
                   >
-                    <TouchableOpacity
-                      style={styles.rowMain}
-                      onPress={() => handleSelect(it.label)}
-                      activeOpacity={0.6}
-                    >
-                      <Text
-                        style={[
-                          styles.rowLabel,
-                          isToday && styles.rowLabelToday,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {it.label}
-                      </Text>
-                      <View style={styles.rowMeta}>
-                        <Text style={styles.rowCount}>×{it.count || 0}</Text>
-                        {isToday && (
-                          <Text style={styles.todayBadge}>오늘 완료</Text>
-                        )}
+                    {isEditing ? (
+                      // ── 편집 모드 ──────────────────────────────────────
+                      <View style={styles.editBox}>
+                        <Text style={styles.editLabel} numberOfLines={1}>{it.label}</Text>
+                        <View style={styles.editRow}>
+                          <Text style={styles.editFieldLabel}>별칭</Text>
+                          <TextInput
+                            style={styles.editInput}
+                            value={editAlias}
+                            onChangeText={setEditAlias}
+                            placeholder="예) 김사장"
+                            placeholderTextColor="#9ca3af"
+                            maxLength={20}
+                            autoFocus
+                          />
+                        </View>
+                        <View style={styles.editRow}>
+                          <Text style={styles.editFieldLabel}>전화번호</Text>
+                          <TextInput
+                            style={styles.editInput}
+                            value={editPhone}
+                            onChangeText={setEditPhone}
+                            placeholder="예) 010-1234-5678"
+                            placeholderTextColor="#9ca3af"
+                            keyboardType="phone-pad"
+                            maxLength={14}
+                          />
+                        </View>
+                        <View style={styles.editActions}>
+                          <TouchableOpacity style={styles.editConfirmBtn} onPress={confirmEdit}>
+                            <Text style={styles.editConfirmText}>저장</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.editCancelBtn} onPress={cancelEdit}>
+                            <Text style={styles.editCancelText}>취소</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconBtn}
-                      onPress={() => pinAddress(it.key, !it.pinned)}
-                      hitSlop={6}
-                    >
-                      <Text
-                        style={[
-                          styles.iconText,
-                          it.pinned && styles.iconTextActive,
-                        ]}
-                      >
-                        {it.pinned ? '📌' : '📍'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconBtn}
-                      onPress={() => deleteAddress(it.key)}
-                      hitSlop={6}
-                    >
-                      <Text style={styles.deleteText}>🗑</Text>
-                    </TouchableOpacity>
+                    ) : (
+                      // ── 일반 모드 ──────────────────────────────────────
+                      <>
+                        <TouchableOpacity
+                          style={styles.rowMain}
+                          onPress={() => handleSelect(it.label)}
+                          activeOpacity={0.6}
+                        >
+                          {it.alias ? (
+                            <Text style={styles.rowAlias} numberOfLines={1}>
+                              👤 {it.alias}
+                            </Text>
+                          ) : null}
+                          <Text
+                            style={[
+                              styles.rowLabel,
+                              isToday && styles.rowLabelToday,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {it.label}
+                          </Text>
+                          <View style={styles.rowMeta}>
+                            <Text style={styles.rowCount}>×{it.count || 0}</Text>
+                            {it.phone ? (
+                              <Text style={styles.rowPhone}>
+                                {formatPhoneDisplay(it.phone)}
+                              </Text>
+                            ) : null}
+                            {isToday && (
+                              <Text style={styles.todayBadge}>오늘 완료</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.iconBtn}
+                          onPress={() => openEdit(it)}
+                          hitSlop={6}
+                        >
+                          <Text style={styles.iconText}>✏️</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.iconBtn}
+                          onPress={() => pinAddress(it.key, !it.pinned)}
+                          hitSlop={6}
+                        >
+                          <Text
+                            style={[
+                              styles.iconText,
+                              it.pinned && styles.iconTextActive,
+                            ]}
+                          >
+                            {it.pinned ? '📌' : '📍'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.iconBtn}
+                          onPress={() => deleteAddress(it.key)}
+                          hitSlop={6}
+                        >
+                          <Text style={styles.deleteText}>🗑</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 );
               })}
@@ -154,6 +234,17 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
       </Pressable>
     </Modal>
   );
+}
+
+// 저장된 digits → 표시용 포맷 (01012341234 → 010-1234-1234)
+function formatPhoneDisplay(digits) {
+  const d = (digits || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('010')) {
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  return d;
 }
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
@@ -257,5 +348,77 @@ function makeStyles(scale = 1) {
   iconText: { fontSize: fp(16), opacity: 0.5 },
   iconTextActive: { opacity: 1 },
   deleteText: { fontSize: fp(14), opacity: 0.6 },
+  rowAlias: {
+    fontSize: fp(12),
+    fontWeight: '800',
+    color: '#2563eb',
+    marginBottom: 1,
+  },
+  rowPhone: {
+    fontSize: fp(10),
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  // 편집 모드
+  editBox: {
+    flex: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  editLabel: {
+    fontSize: fp(11),
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editFieldLabel: {
+    fontSize: fp(11),
+    color: '#6b7280',
+    fontWeight: '700',
+    width: 50,
+  },
+  editInput: {
+    flex: 1,
+    fontSize: fp(13),
+    color: '#111827',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    outlineStyle: 'none',
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 2,
+  },
+  editConfirmBtn: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editConfirmText: {
+    color: '#fff',
+    fontSize: fp(12),
+    fontWeight: '800',
+  },
+  editCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  editCancelText: {
+    color: '#9ca3af',
+    fontSize: fp(12),
+    fontWeight: '700',
+  },
   });
 }

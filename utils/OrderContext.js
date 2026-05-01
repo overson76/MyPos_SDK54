@@ -54,6 +54,8 @@ export function OrderProvider({ children }) {
     pinAddress,
     deleteAddress,
     setAutoRemember,
+    setAlias,
+    setPhone,
   } = useAddressBook();
 
   useOrderPersistence({
@@ -428,9 +430,12 @@ export function OrderProvider({ children }) {
       revenue,
       addressBook,
       bumpAddress,
+      markAddressDeliveredToday,
       pinAddress,
       deleteAddress,
       setAutoRemember,
+      setAlias,
+      setPhone,
       isSplit,
       addItem,
       removeItem,
