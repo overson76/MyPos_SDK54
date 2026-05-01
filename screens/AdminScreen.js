@@ -30,6 +30,7 @@ import { useLock } from '../utils/LockContext';
 import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
 import { useResponsive } from '../utils/useResponsive';
+import Constants from 'expo-constants';
 import {
   isElectronUpdateAvailable,
   checkForElectronUpdate,
@@ -436,6 +437,20 @@ function SystemSettingsView() {
         </>
       ) : null}
 
+      {/* === 버전 정보 — 모든 기기에서 동일 버전인지 한눈에 확인 === */}
+      <View style={sysStyles.versionBox}>
+        <Text style={sysStyles.versionText}>
+          📱 MyPos v{Constants.expoConfig?.version || '1.0.0'}
+          {Constants.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
+          {'  '}
+          {Platform.OS === 'web'
+            ? (isElectron() ? '🖥️ PC 카운터' : '🌐 웹')
+            : Platform.OS === 'ios'
+            ? '🍎 iPhone/iPad'
+            : '🤖 Android'}
+        </Text>
+      </View>
+
       {pinModal ? (
         <PinManageModal
           mode={pinModal}
@@ -649,6 +664,16 @@ function makeSysStyles(scale = 1) {
       borderRadius: 8,
     },
     noteText: { fontSize: fp(12), color: '#374151', lineHeight: fp(20) },
+    versionBox: {
+      alignItems: 'center',
+      paddingVertical: 20,
+      marginTop: 12,
+    },
+    versionText: {
+      fontSize: fp(12),
+      color: '#9CA3AF',
+      fontWeight: '600',
+    },
   });
 }
 
