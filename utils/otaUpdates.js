@@ -20,26 +20,32 @@ import { addBreadcrumb, reportError } from './sentry';
 //   { state: 'upToDate' }   — 같은 버전
 //   { state: 'downloaded', manifest } — 새 번들 받아 캐시. 다음 시작 시 적용
 //   { state: 'error', error } — 네트워크 / 서버 / 권한 오류
-export async function checkForUpdates() {
+//
+// onStatus?: (state: string) => void — 단계별 콜백 (UI 표시용)
+//   'checking' → 'available' → 'downloading' → 'downloaded' | 'upToDate' | 'error'
+export async function checkForUpdates({ onStatus } = {}) {
   // expo-updates 가 처음 추가된 네이티브 빌드에서 isEnabled 접근 자체가 드물게 에러 발생 가능.
   // 전체를 최상위 try/catch 로 감쌈 — 어떤 에러도 앱 크래시로 번지지 않게.
   try {
     if (!Updates.isEnabled) {
       return { state: 'disabled' };
     }
+    onStatus?.('checking');
     const result = await Updates.checkForUpdateAsync();
     if (!result.isAvailable) {
       addBreadcrumb('ota.upToDate');
+      onStatus?.('upToDate');
       return { state: 'upToDate' };
     }
     addBreadcrumb('ota.available');
+    onStatus?.('downloading');
     const fetchResult = await Updates.fetchUpdateAsync();
-    addBreadcrumb('ota.downloaded', {
-      isNew: fetchResult.isNew,
-    });
+    addBreadcrumb('ota.downloaded', { isNew: fetchResult.isNew });
+    onStatus?.('downloaded');
     return { state: 'downloaded', manifest: fetchResult.manifest };
   } catch (e) {
     reportError(e, { ctx: 'otaUpdates.checkForUpdates' });
+    onStatus?.('error');
     return { state: 'error', error: String(e?.message || e) };
   }
 }

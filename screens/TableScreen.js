@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -21,6 +21,10 @@ import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import { printReceipt } from '../utils/printReceipt';
+import { distanceKm, formatDistance } from '../utils/geocode';
+import { normalizeAddressKey } from '../utils/orderHelpers';
+import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
+import DeliveryMapModal from '../components/DeliveryMapModal';
 
 export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [subTab, setSubTab] = useState('기본홀');
@@ -68,6 +72,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const { width, height, isXS, isSM, isMD, scale } = useResponsive();
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
+  const [mapInfo, setMapInfo] = useState(null);
   // 모든 화면을 한 화면에 Fit — 항상 5 × 4 그리드로 표시
   const isCompact = width < 1200 || height < 700;
   const cols = 5;
@@ -93,6 +98,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     dissolveGroup,
     getGroupFor,
     markPaid,
+    addressBook,
   } = useOrders();
   const { storeInfo } = useStore();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
@@ -279,6 +285,21 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const isPaid = order.paymentStatus === 'paid';
     const deliveryAddr = order.deliveryAddress;
     const isDelivery = t.type === 'delivery';
+    // 배달 거리 — 매장 좌표 + 주소록의 변환 좌표 모두 있을 때만 표시.
+    // useAddressBook 의 백그라운드 effect 가 lat/lng 채워주면 자동으로 나타남.
+    let distanceLabel = null;
+    if (isDelivery && deliveryAddr && storeInfo?.lat != null && storeInfo?.lng != null) {
+      const key = normalizeAddressKey(deliveryAddr);
+      const entry = key ? addressBook?.entries?.[key] : null;
+      if (entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
+        distanceLabel = formatDistance(
+          distanceKm(
+            { lat: entry.lat, lng: entry.lng },
+            { lat: storeInfo.lat, lng: storeInfo.lng }
+          )
+        );
+      }
+    }
     // 배달 테이블이고 조리완료 상태면 '배달중' 뱃지 표시
     const isOutForDelivery = isDelivery && isReady;
     // 배달중이면 조리완료 시점(readyAt)부터 경과 분수 계산
@@ -295,9 +316,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       (order.items?.length || 0) - ITEMS_VISIBLE_LIMIT
     );
 
-    return (
+    const cardNode = (
       <TouchableOpacity
-        key={t.id}
         onPress={() => {
           // 펼쳐보기 / 결제완료 버튼 클릭 직후 200ms 안의 타일 onPress 는 nested-touchable 누수로 무시
           if (Date.now() - expandClickedAtRef.current < 200) return;
@@ -402,9 +422,27 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                 </View>
               </View>
               {t.type === 'delivery' && deliveryAddr ? (
-                <Text style={styles.deliveryAddr} numberOfLines={1}>
-                  📍 {deliveryAddr}
-                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const dk = normalizeAddressKey(deliveryAddr);
+                    const de = dk ? addressBook?.entries?.[dk] : null;
+                    setMapInfo({
+                      storeCoord: typeof storeInfo?.lat === 'number'
+                        ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
+                      deliveryCoord: typeof de?.lat === 'number'
+                        ? { lat: de.lat, lng: de.lng } : null,
+                      deliveryAddr,
+                      distanceLabel,
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.deliveryAddr} numberOfLines={1}>
+                    📍 {deliveryAddr}
+                    {distanceLabel ? ` · ${distanceLabel}` : ''}
+                    {' 🗺️'}
+                  </Text>
+                </TouchableOpacity>
               ) : null}
               {(() => {
                 const shown = order.items.slice(0, ITEMS_VISIBLE_LIMIT);
@@ -581,6 +619,27 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         )}
       </TouchableOpacity>
     );
+
+    // 배달 카드 — 위 스와이프로 지도 열기 (PC 에서는 🗺️ 클릭)
+    if (t.type === 'delivery') {
+      const dKey = deliveryAddr ? normalizeAddressKey(deliveryAddr) : null;
+      const dEntry = dKey ? addressBook?.entries?.[dKey] : null;
+      const openMap = () =>
+        setMapInfo({
+          storeCoord: typeof storeInfo?.lat === 'number'
+            ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
+          deliveryCoord: typeof dEntry?.lat === 'number'
+            ? { lat: dEntry.lat, lng: dEntry.lng } : null,
+          deliveryAddr,
+          distanceLabel,
+        });
+      return (
+        <DeliveryMapSwiper key={t.id} onSwipeUp={openMap}>
+          {cardNode}
+        </DeliveryMapSwiper>
+      );
+    }
+    return <Fragment key={t.id}>{cardNode}</Fragment>;
   };
 
   return (
@@ -1029,6 +1088,19 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               printReceipt(receiptData).catch(() => {});
             }
           }}
+        />
+      ) : null}
+
+      {/* 배달 지도 오버레이 — 웹(PC/Electron)에서만 렌더.
+          폰은 react-native-webview 가 EAS 빌드부터 포함됨. 구 빌드에서 크래시 방지. */}
+      {Platform.OS === 'web' ? (
+        <DeliveryMapModal
+          visible={!!mapInfo}
+          onClose={() => setMapInfo(null)}
+          storeCoord={mapInfo?.storeCoord}
+          deliveryCoord={mapInfo?.deliveryCoord}
+          deliveryAddr={mapInfo?.deliveryAddr}
+          distanceLabel={mapInfo?.distanceLabel}
         />
       ) : null}
     </View>

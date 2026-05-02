@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { sanitizeDeliveryAddress } from './validate';
 import { localDateString, normalizeAddressKey } from './orderHelpers';
+import { geocodeAddress, isGeocodingAvailable } from './geocode';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -26,6 +27,43 @@ export function useAddressBook() {
     const id = setInterval(tick, 60 * 1000); // 1분
     return () => clearInterval(id);
   }, []);
+
+  // ── 좌표 자동 변환 (lazy + fire-and-forget) ─────────────────────
+  // entry 에 lat 없으면 백그라운드로 카카오 호출 → 결과 저장.
+  // inFlight: 중복 호출 방지. failed: 일시 실패 마킹 — 메모리 only 라 앱 재시작 시 재시도.
+  const inFlightRef = useRef(new Set());
+  const failedRef = useRef(new Set());
+  useEffect(() => {
+    if (!isGeocodingAvailable()) return;
+    for (const entry of Object.values(addressBook.entries)) {
+      if (
+        typeof entry.lat === 'number' ||
+        inFlightRef.current.has(entry.key) ||
+        failedRef.current.has(entry.key)
+      ) {
+        continue;
+      }
+      inFlightRef.current.add(entry.key);
+      geocodeAddress(entry.label).then((result) => {
+        inFlightRef.current.delete(entry.key);
+        if (!result) {
+          failedRef.current.add(entry.key);
+          return;
+        }
+        setAddressBook((prev) => {
+          const ex = prev.entries[entry.key];
+          if (!ex || typeof ex.lat === 'number') return prev;
+          return {
+            ...prev,
+            entries: {
+              ...prev.entries,
+              [entry.key]: { ...ex, lat: result.lat, lng: result.lng },
+            },
+          };
+        });
+      });
+    }
+  }, [addressBook.entries]);
 
   // 주문이 cleared 될 때(또는 사용자가 주소를 확정 입력했을 때) 카운트 증가.
   // autoRemember=false 면 noop. 빈 문자열은 무시.

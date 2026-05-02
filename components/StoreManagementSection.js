@@ -10,6 +10,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -18,6 +19,7 @@ import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import { getCurrentUid } from '../utils/firebase';
 import { computeMemberDiagnosis, shortId } from '../utils/storeDiag';
+import { geocodeAddress, isGeocodingAvailable } from '../utils/geocode';
 import {
   clearRevenuePin,
   hasRevenuePin,
@@ -33,6 +35,7 @@ import {
   removeMember,
   subscribeJoinRequests,
   subscribeMembers,
+  updateStoreAddress,
 } from '../utils/storeOps';
 
 const PIN_LENGTH = 4;
@@ -42,6 +45,7 @@ export default function StoreManagementSection() {
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { storeInfo, isOwner } = useStore();
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [joinRequests, setJoinRequests] = useState([]);
   const [members, setMembers] = useState([]);
   const [busyUid, setBusyUid] = useState(null);
@@ -239,6 +243,35 @@ export default function StoreManagementSection() {
             {storeInfo.role === 'owner' ? '대표' : '직원'}
           </Text>
         </View>
+      </View>
+
+      {/* 매장 주소 — 배달 거리 계산 기준점. 모두에게 표시, 수정은 대표만. */}
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.label}>매장 주소</Text>
+          {storeInfo.address ? (
+            <>
+              <Text style={styles.value}>{storeInfo.address}</Text>
+              {typeof storeInfo.lat === 'number' && typeof storeInfo.lng === 'number' ? (
+                <Text style={styles.helper}>
+                  좌표 {storeInfo.lat.toFixed(5)}, {storeInfo.lng.toFixed(5)} · 배달 거리 표시 ON
+                </Text>
+              ) : (
+                <Text style={styles.helper}>좌표 미변환 — 거리 표시 OFF</Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.helper}>미설정 — 배달 주소록에 거리(km) 표시 OFF</Text>
+          )}
+        </View>
+        {isOwner && (
+          <TouchableOpacity
+            style={styles.btnSecondary}
+            onPress={() => setAddressModalOpen(true)}
+          >
+            <Text style={styles.btnSecondaryText}>{storeInfo.address ? '수정' : '설정'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* === 수익 PIN — 대표만 === */}
@@ -451,9 +484,231 @@ export default function StoreManagementSection() {
           onDone={onPinDone}
         />
       ) : null}
+
+      {addressModalOpen ? (
+        <StoreAddressModal
+          storeInfo={storeInfo}
+          onClose={() => setAddressModalOpen(false)}
+          onDone={(action) => {
+            setAddressModalOpen(false);
+            showAlert(
+              '완료',
+              action === 'cleared' ? '매장 주소가 해제됐습니다.' : '매장 주소가 저장됐습니다.'
+            );
+          }}
+        />
+      ) : null}
     </View>
   );
 }
+
+// 매장 주소 입력 + 카카오 좌표 변환 모달. 대표만 호출.
+function StoreAddressModal({ storeInfo, onClose, onDone }) {
+  const [address, setAddress] = useState(storeInfo?.address || '');
+  const [preview, setPreview] = useState(
+    typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number'
+      ? { lat: storeInfo.lat, lng: storeInfo.lng, formatted: storeInfo.address }
+      : null
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSearch = async () => {
+    if (busy) return;
+    const trimmed = address.trim();
+    if (!trimmed) {
+      setError('주소를 입력해주세요.');
+      return;
+    }
+    if (!isGeocodingAvailable()) {
+      setError('카카오 키가 설정되지 않았습니다 (.env 의 EXPO_PUBLIC_KAKAO_REST_KEY).');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setPreview(null);
+    try {
+      const result = await geocodeAddress(trimmed);
+      if (!result) {
+        setError(
+          '주소를 찾을 수 없습니다. 도로명 주소(예: "서울 강남구 테헤란로 152") 또는 가게명으로 다시 시도해주세요.'
+        );
+      } else {
+        setPreview(result);
+      }
+    } catch (e) {
+      setError(e?.message || '주소 검색 실패');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (busy || !preview) return;
+    setBusy(true);
+    setError('');
+    try {
+      await updateStoreAddress({
+        storeId: storeInfo.storeId,
+        address: preview.formatted || address.trim(),
+        lat: preview.lat,
+        lng: preview.lng,
+      });
+      onDone?.('saved');
+    } catch (e) {
+      setError(e?.message || '저장 실패');
+      setBusy(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await updateStoreAddress({
+        storeId: storeInfo.storeId,
+        address: null,
+        lat: null,
+        lng: null,
+      });
+      onDone?.('cleared');
+    } catch (e) {
+      setError(e?.message || '해제 실패');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={modalStyles.overlay} pointerEvents="auto">
+      <Pressable style={modalStyles.backdrop} onPress={onClose}>
+        <Pressable style={[modalStyles.card, { width: 420 }]} onPress={() => {}}>
+          <View style={modalStyles.header}>
+            <Text style={modalStyles.headerTitle}>매장 주소 설정</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={8}>
+              <Text style={modalStyles.close}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={addrStyles.helper}>
+            도로명 주소 권장. 카카오 지도가 못 찾으면 가게명/지번도 자동 시도합니다.
+            {'\n'}매장 좌표는 배달 주소록의 거리(km) 계산에 사용됩니다.
+          </Text>
+          <View style={addrStyles.inputRow}>
+            <TextInput
+              style={addrStyles.input}
+              value={address}
+              onChangeText={(v) => {
+                setAddress(v);
+                setPreview(null);
+                setError('');
+              }}
+              placeholder="예: 서울 강남구 테헤란로 152"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              maxLength={200}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+            />
+            <TouchableOpacity
+              style={[addrStyles.searchBtn, busy && { opacity: 0.5 }]}
+              onPress={handleSearch}
+              disabled={busy}
+            >
+              <Text style={addrStyles.searchBtnText}>{busy ? '검색중...' : '🔍 검색'}</Text>
+            </TouchableOpacity>
+          </View>
+          {preview ? (
+            <View style={addrStyles.previewBox}>
+              <Text style={addrStyles.previewTitle}>✅ 변환됨</Text>
+              <Text style={addrStyles.previewAddr}>{preview.formatted}</Text>
+              <Text style={addrStyles.previewCoord}>
+                위도 {preview.lat.toFixed(5)}, 경도 {preview.lng.toFixed(5)}
+              </Text>
+            </View>
+          ) : null}
+          {error ? <Text style={addrStyles.error}>{error}</Text> : null}
+          <View style={addrStyles.actions}>
+            {storeInfo?.address ? (
+              <TouchableOpacity
+                style={[addrStyles.clearBtn, busy && { opacity: 0.5 }]}
+                onPress={handleClear}
+                disabled={busy}
+              >
+                <Text style={addrStyles.clearBtnText}>주소 해제</Text>
+              </TouchableOpacity>
+            ) : (
+              <View />
+            )}
+            <TouchableOpacity
+              style={[addrStyles.saveBtn, (busy || !preview) && { opacity: 0.4 }]}
+              onPress={handleSave}
+              disabled={busy || !preview}
+            >
+              <Text style={addrStyles.saveBtnText}>저장</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </View>
+  );
+}
+
+const addrStyles = StyleSheet.create({
+  helper: { fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 17 },
+  inputRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+    backgroundColor: '#fff',
+  },
+  searchBtn: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  searchBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  previewBox: {
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  previewTitle: { fontSize: 12, color: '#047857', fontWeight: '700', marginBottom: 4 },
+  previewAddr: { fontSize: 14, color: '#111827', fontWeight: '600' },
+  previewCoord: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  error: { fontSize: 12, color: '#b91c1c', marginBottom: 12, lineHeight: 17 },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clearBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+  },
+  clearBtnText: { color: '#b91c1c', fontSize: 13, fontWeight: '600' },
+  saveBtn: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+});
 
 // 수익 PIN 설정/변경/해제 모달.
 // AdminScreen 의 PinManageModal 과 동일 패턴 — 매장 PIN 함수만 다르게.
