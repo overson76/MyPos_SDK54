@@ -170,13 +170,17 @@ export async function migrateLocalToCloud({ storeId, onProgress }) {
     return { total: 0, skipped: 0, skippedDetails: [] };
   }
 
+  // 순차 set — RNFirebase v24 + 새 아키텍처에서 batch.commit 네이티브 크래시 회피.
+  // 신규 매장 마이그레이션은 한 번만 일어나니 성능 영향 미미.
   let done = 0;
-  for (let i = 0; i < ops.length; i += FIRESTORE_BATCH_LIMIT) {
-    const slice = ops.slice(i, i + FIRESTORE_BATCH_LIMIT);
-    const batch = db.batch();
-    for (const op of slice) batch.set(op.ref, op.data);
-    await batch.commit();
-    done += slice.length;
+  for (const op of ops) {
+    try {
+      await op.ref.set(op.data);
+    } catch (e) {
+      // 일부 항목 실패해도 계속 — 사용자가 매장 못 들어가는 상황만 피함
+      addBreadcrumb('migrate.itemFail', { error: String(e?.message || e) });
+    }
+    done++;
     onProgress?.({ done, total });
   }
 
