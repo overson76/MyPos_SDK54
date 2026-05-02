@@ -42,7 +42,14 @@ service cloud.firestore {
       // 매장 생성 트랜잭션 안에서 인증된 사용자가 새 코드 등록.
       // 이미 존재하는 코드는 createStore 가 미리 exists 검사로 충돌 회피 (storeOps.js).
       allow create: if isSignedIn();
-      allow update, delete: if false; // 코드 회전/삭제 X
+      // 매장 삭제 시 storeCodes 도 함께 정리 — 매장 ownerId 와 일치하는 사용자만 삭제 가능.
+      // 이 코드가 가리키는 매장이 아직 존재하면 매장의 ownerId 확인.
+      // 매장이 이미 삭제됐으면 storeCode 만 남은 orphan — signedIn 사용자가 청소 가능 (자정리).
+      allow delete: if isSignedIn() && (
+        !exists(/databases/$(database)/documents/stores/$(resource.data.storeId)) ||
+        get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == uid()
+      );
+      allow update: if false;
     }
 
     // ── 매장 문서 ─────────────────────────────────────────────

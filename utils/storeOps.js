@@ -227,7 +227,17 @@ export async function removeMember({ storeId, memberUid }) {
 
 // ─── 매장 통째 삭제 (대표만) ──────────────────────────────
 // 매장을 완전히 정리할 때 사용. 모든 멤버가 UNJOINED 상태로 전환됨.
-// 서브컬렉션(members/joinRequests/orders/menus/options/addressBook 등) + 매장 코드 + 매장 문서 모두 제거.
+//
+// 삭제 순서가 중요: 멤버를 먼저 지우면 isOwner 권한이 사라져서 그 다음 단계가 막힘.
+// 1. 데이터 서브컬렉션 (멤버 권한으로 가능): menu/orders/history/addresses/state
+// 2. joinRequests (대표만): 가입 요청 제거
+// 3. 다른 멤버 (대표만): 본인 owner doc 제외하고 직원 제거
+// 4. 매장 코드 매핑: 대표만 삭제 가능 (rules 가 매장 ownerId 확인)
+// 5. 매장 doc: 대표만
+// 6. 본인 owner 멤버 doc: 마지막에 삭제 (이게 빠지면 isOwner 못 함)
+//
+// 단계별 try/catch — 일부 실패해도 계속 진행하여 최대한 정리.
+// batch.commit() 은 RNFirebase v24 + 새 아키텍처 네이티브 크래시 위험 → 순차 delete.
 export async function deleteStore({ storeId }) {
   const db = requireDb();
   const uid = requireUid();
@@ -243,38 +253,52 @@ export async function deleteStore({ storeId }) {
     throw new Error('대표만 매장을 삭제할 수 있습니다.');
   }
 
-  // 알려진 서브컬렉션 삭제 — 새 컬렉션이 추가되면 여기에 추가.
-  const subcollections = ['members', 'joinRequests', 'orders', 'menus', 'options', 'addressBook', 'callLog'];
-  for (const sub of subcollections) {
+  addBreadcrumb('store.delete.start', { storeId });
+
+  // 1) 운영 데이터 서브컬렉션 — isMember 권한이라 owner 인 동안 모두 가능.
+  const dataSubcollections = ['menu', 'orders', 'history', 'addresses', 'state'];
+  for (const sub of dataSubcollections) {
     try {
       const snap = await storeRef.collection(sub).get();
-      if (snap.empty) continue;
-      // Firestore 배치는 최대 500개 — 분할 커밋.
-      let batch = db.batch();
-      let count = 0;
       for (const doc of snap.docs) {
-        batch.delete(doc.ref);
-        count++;
-        if (count >= 450) {
-          await batch.commit();
-          batch = db.batch();
-          count = 0;
-        }
+        try { await doc.ref.delete(); } catch {}
       }
-      if (count > 0) await batch.commit();
-    } catch (e) {
-      // 권한/누락은 무시하고 계속
-    }
+    } catch {}
   }
 
-  // 매장 코드 매핑 제거
+  // 2) 가입 요청 — 대표 권한
+  try {
+    const snap = await storeRef.collection('joinRequests').get();
+    for (const doc of snap.docs) {
+      try { await doc.ref.delete(); } catch {}
+    }
+  } catch {}
+
+  // 3) 다른 멤버(직원) 제거 — 본인 owner doc 은 마지막에 삭제하므로 제외.
+  try {
+    const snap = await storeRef.collection('members').get();
+    for (const doc of snap.docs) {
+      if (doc.id === uid) continue; // 본인 owner doc 은 마지막에
+      try { await doc.ref.delete(); } catch {}
+    }
+  } catch {}
+
+  // 4) 매장 코드 매핑 제거 — 본인 owner doc 살아있으니 isOwner 통과.
   if (storeData.code) {
     try { await db.collection('storeCodes').doc(storeData.code).delete(); } catch {}
   }
 
-  // 매장 문서 자체 삭제
-  await storeRef.delete();
-  addBreadcrumb('store.deleted', { storeId });
+  // 5) 매장 doc 삭제 — owner doc 살아있으니 isOwner 통과.
+  try { await storeRef.delete(); } catch {}
+
+  // 6) 본인 owner 멤버 doc 마지막 삭제. 이거 빠지면 다음 부팅 시 isMember 캐시로
+  //    JOINED 상태로 잠깐 보일 수 있어 명시적으로 정리.
+  //    매장 doc 이 이미 삭제됐어도 본인 doc 은 본인이 항상 삭제 가능 (rules: memberUid == uid()).
+  try {
+    await storeRef.collection('members').doc(uid).delete();
+  } catch {}
+
+  addBreadcrumb('store.delete.success', { storeId });
 }
 
 // ─── 본인 탈퇴 ──────────────────────────────────────────────

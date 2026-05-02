@@ -81,43 +81,46 @@ function getLocalURL() {
   return `${SCHEME}://localhost/`;
 }
 
-// 라이브 URL 로드 시도 → 실패/타임아웃 시 로컬 폴백.
-// 반환: Promise<{ source: 'live' | 'local' | 'failed' }>
-function loadWithFallback(win, liveUrl, timeoutMs = 15000) {
-  const localAvailable = fs.existsSync(getDistPath());
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (source) => {
-      if (settled) return;
-      settled = true;
-      resolve({ source });
-    };
+// 라이브 URL 만 로드. 실패 시 자동 재시도 (3초 간격).
+// 이전엔 mypos:// 로컬 폴백을 썼지만, origin 이 달라져서 Firebase 익명 UID 가 매번 바뀜
+// → 매장 멤버십 잃음 → 매일 아침 연동 끊김 사고. 폴백 제거가 근본 처방.
+//
+// 매장 PC 는 카드 결제 등으로 항상 인터넷이 필요하므로 로컬 폴백의 가치보다 origin 통일이 더 중요.
+// 인터넷이 일시 끊겨도 재시도 루프가 자동으로 복구.
+//
+// 반환: Promise<{ source: 'live' }> — 로드 성공할 때까지 기다림.
+function loadWithFallback(win, liveUrl, retryDelayMs = 3000) {
+  // eslint-disable-next-line no-console
+  console.info(`[load] 라이브 URL 만 사용 (mypos:// 폴백 제거됨)`);
 
-    const fallback = () => {
-      if (settled) return;
+  const tryLoad = async () => {
+    try {
+      await win.loadURL(liveUrl);
       // eslint-disable-next-line no-console
-      console.warn(`[offline] 라이브 URL 응답 없음 → 로컬 폴백`);
-      if (localAvailable) {
-        win.loadURL(getLocalURL())
-          .then(() => finish('local'))
-          .catch(() => finish('failed'));
-      } else {
-        finish('failed');
-      }
-    };
+      console.info(`[load] 라이브 URL 로드 성공`);
+      return { source: 'live' };
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(`[load] 라이브 URL 실패 (${e?.message}) → ${retryDelayMs / 1000}s 후 재시도`);
+      // 사용자한테 시각적 피드백 — 간단한 안내 페이지 띄움.
+      try {
+        const html =
+          'data:text/html;charset=utf-8,' +
+          encodeURIComponent(
+            '<!doctype html><html><head><meta charset="utf-8"><title>MyPos 연결 중</title>' +
+            '<style>body{background:#1F2937;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}' +
+            '.card{text-align:center}h1{font-size:32px;margin:0 0 12px}p{color:#9ca3af;margin:0 0 8px}</style></head>' +
+            '<body><div class="card"><h1>MyPos</h1><p>인터넷 연결 확인 중...</p>' +
+            '<p style="font-size:12px">자동으로 재시도 합니다</p></div></body></html>'
+          );
+        await win.loadURL(html);
+      } catch {}
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+      return tryLoad(); // 재귀 재시도
+    }
+  };
 
-    const timer = setTimeout(fallback, timeoutMs);
-
-    win.loadURL(liveUrl)
-      .then(() => {
-        clearTimeout(timer);
-        finish('live');
-      })
-      .catch(() => {
-        clearTimeout(timer);
-        fallback();
-      });
-  });
+  return tryLoad();
 }
 
 module.exports = {
