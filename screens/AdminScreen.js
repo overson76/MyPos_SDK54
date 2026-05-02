@@ -27,6 +27,8 @@ import {
 } from '../utils/notify';
 import { loadJSON, saveJSON } from '../utils/persistence';
 import { useLock } from '../utils/LockContext';
+import { useStore } from '../utils/StoreContext';
+import { leaveStore as leaveStoreOp } from '../utils/storeOps';
 import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
 import { useResponsive } from '../utils/useResponsive';
@@ -148,6 +150,7 @@ function SystemSettingsView() {
   const { scale } = useResponsive();
   const sysStyles = useMemo(() => makeSysStyles(scale), [scale]);
   const lock = useLock();
+  const { storeInfo, isOwner } = useStore();
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
 
@@ -404,37 +407,51 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === PC 재연동 — 웹(PC 카운터)에서 storeMembership=null 로 연동 끊겼을 때 복구 버튼 === */}
+      {/* === PC 재연동 — 자진 탈퇴 + 캐시 초기화 + 새로고침. 운영자가 다시 승인하면 끝. === */}
       {Platform.OS === 'web' ? (
         <>
           <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>PC 연동</Text>
           <View style={sysStyles.row}>
             <View style={sysStyles.rowText}>
-              <Text style={sysStyles.label}>매장 재연동</Text>
+              <Text style={sysStyles.label}>매장 재연동 (자진 탈퇴 → 재가입)</Text>
               <Text style={sysStyles.helper}>
-                PC 화면이 폰과 주문 데이터가 다를 때 사용하세요.{'\n'}
-                캐시·로컬 데이터를 초기화하고 매장에 다시 가입합니다.
+                PC 화면이 폰과 데이터가 다를 때 사용. 본인 멤버 등록을 정리하고{'\n'}
+                매장 참여 화면으로 돌아갑니다. 운영자가 다시 승인하면 정상 연결됩니다.
               </Text>
             </View>
             <TouchableOpacity
-              style={sysStyles.btnDanger}
+              style={[sysStyles.btnDanger, isOwner && sysStyles.btnDisabled]}
+              disabled={!!isOwner}
               onPress={async () => {
+                if (isOwner) {
+                  window?.alert?.('대표는 재연동을 사용할 수 없습니다. 매장 삭제 메뉴를 사용하세요.');
+                  return;
+                }
                 const ok = window?.confirm?.(
-                  'PC를 매장에 다시 연동합니다.\n로컬 데이터가 초기화되고 페이지가 새로고침됩니다.\n계속하시겠습니까?'
+                  '본인을 매장에서 자진 탈퇴시킨 후 매장 참여 화면으로 돌아갑니다.\n\n' +
+                    '· 운영자 승인 후 다시 연결\n' +
+                    '· 로컬 데이터/캐시 모두 초기화\n\n' +
+                    '계속하시겠습니까?'
                 );
                 if (!ok) return;
-                // 1) Electron 파일 캐시 삭제 — 재시작 시 storeId 복구 차단
+                // 1) Firestore 에서 본인 멤버 문서 삭제 (자진 탈퇴)
+                try {
+                  if (storeInfo?.storeId) {
+                    await leaveStoreOp({ storeId: storeInfo.storeId });
+                  }
+                } catch {}
+                // 2) Electron 파일 캐시 삭제 — 재시작 시 storeId 복구 차단
                 try {
                   if (typeof window !== 'undefined' && window.mypos?.clearMembership) {
                     await window.mypos.clearMembership();
                   }
                 } catch {}
-                // 2) Firebase 로그아웃 — IndexedDB 인증 상태 제거
+                // 3) Firebase 로그아웃 — IndexedDB 인증 상태 제거
                 try {
                   const { getAuth, signOut } = await import('firebase/auth');
                   await signOut(getAuth());
                 } catch {}
-                // 2) IndexedDB 전체 삭제 — Firebase Firestore 캐시 포함
+                // 4) IndexedDB 전체 삭제 — Firebase Firestore 캐시 포함
                 try {
                   if (window.indexedDB?.databases) {
                     const dbs = await window.indexedDB.databases();
@@ -450,7 +467,7 @@ function SystemSettingsView() {
                     );
                   }
                 } catch {}
-                // 3) 서비스워커 + 캐시 + 로컬스토리지 초기화 후 새로고침
+                // 5) 서비스워커 + 캐시 + 로컬스토리지 초기화 후 새로고침
                 try {
                   const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
                   await Promise.all(regs.map((r) => r.unregister()));
