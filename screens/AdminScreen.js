@@ -418,25 +418,41 @@ function SystemSettingsView() {
             </View>
             <TouchableOpacity
               style={sysStyles.btnDanger}
-              onPress={() => {
+              onPress={async () => {
                 const ok = window?.confirm?.(
                   'PC를 매장에 다시 연동합니다.\n로컬 데이터가 초기화되고 페이지가 새로고침됩니다.\n계속하시겠습니까?'
                 );
                 if (!ok) return;
-                // 서비스워커 + 캐시 + 로컬스토리지 초기화 후 강력 새로고침
-                Promise.all([
-                  navigator.serviceWorker
-                    ?.getRegistrations()
-                    .then((regs) => Promise.all(regs.map((r) => r.unregister())))
-                    .catch(() => {}),
-                  caches
-                    ?.keys()
-                    .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-                    .catch(() => {}),
-                ]).then(() => {
-                  localStorage.clear();
-                  window.location.reload(true);
-                });
+                // 1) Firebase 로그아웃 — IndexedDB 인증 상태 제거
+                try {
+                  const { getAuth, signOut } = await import('firebase/auth');
+                  await signOut(getAuth());
+                } catch {}
+                // 2) IndexedDB 전체 삭제 — Firebase Firestore 캐시 포함
+                try {
+                  if (window.indexedDB?.databases) {
+                    const dbs = await window.indexedDB.databases();
+                    await Promise.all(
+                      dbs.map(
+                        (db) =>
+                          new Promise((res) => {
+                            const r = window.indexedDB.deleteDatabase(db.name);
+                            r.onsuccess = res;
+                            r.onerror = res;
+                          })
+                      )
+                    );
+                  }
+                } catch {}
+                // 3) 서비스워커 + 캐시 + 로컬스토리지 초기화 후 새로고침
+                try {
+                  const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
+                  await Promise.all(regs.map((r) => r.unregister()));
+                  const keys = await caches?.keys() ?? [];
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                } catch {}
+                localStorage.clear();
+                window.location.reload(true);
               }}
             >
               <Text style={sysStyles.btnDangerText}>🔄 재연동</Text>
