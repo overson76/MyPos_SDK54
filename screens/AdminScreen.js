@@ -404,6 +404,47 @@ function SystemSettingsView() {
         </>
       ) : null}
 
+      {/* === PC 재연동 — 웹(PC 카운터)에서 storeMembership=null 로 연동 끊겼을 때 복구 버튼 === */}
+      {Platform.OS === 'web' ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>PC 연동</Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>매장 재연동</Text>
+              <Text style={sysStyles.helper}>
+                PC 화면이 폰과 주문 데이터가 다를 때 사용하세요.{'\n'}
+                캐시·로컬 데이터를 초기화하고 매장에 다시 가입합니다.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={sysStyles.btnDanger}
+              onPress={() => {
+                const ok = window?.confirm?.(
+                  'PC를 매장에 다시 연동합니다.\n로컬 데이터가 초기화되고 페이지가 새로고침됩니다.\n계속하시겠습니까?'
+                );
+                if (!ok) return;
+                // 서비스워커 + 캐시 + 로컬스토리지 초기화 후 강력 새로고침
+                Promise.all([
+                  navigator.serviceWorker
+                    ?.getRegistrations()
+                    .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+                    .catch(() => {}),
+                  caches
+                    ?.keys()
+                    .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+                    .catch(() => {}),
+                ]).then(() => {
+                  localStorage.clear();
+                  window.location.reload(true);
+                });
+              }}
+            >
+              <Text style={sysStyles.btnDangerText}>🔄 재연동</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
+
       {/* === 진단 — Sentry 연동 확인용. 개발 빌드(__DEV__)에서만 노출. 운영 빌드에서는 자동 숨김. === */}
       {__DEV__ ? (
         <>
