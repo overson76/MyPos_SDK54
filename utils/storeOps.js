@@ -322,13 +322,16 @@ export function subscribeJoinRequests(storeId, onChange) {
     .collection('stores')
     .doc(storeId)
     .collection('joinRequests')
-    .onSnapshot((snap) => {
-      const list = snap.docs.map((d) => ({
-        uid: d.id,
-        ...d.data(),
-      }));
-      onChange(list);
-    });
+    .onSnapshot(
+      (snap) => {
+        if (!snap) return;
+        const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        onChange(list);
+      },
+      (err) => {
+        addBreadcrumb('store.joinRequests.error', { code: err?.code });
+      }
+    );
 }
 
 // ─── 멤버 목록 listener (멤버 관리 화면) ─────────────────────
@@ -338,11 +341,14 @@ export function subscribeMembers(storeId, onChange) {
     .collection('stores')
     .doc(storeId)
     .collection('members')
-    .onSnapshot((snap) => {
-      const list = snap.docs.map((d) => ({
-        uid: d.id,
-        ...d.data(),
-      }));
-      onChange(list);
-    });
+    .onSnapshot(
+      (snap) => {
+        if (!snap) return;
+        const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        onChange(list);
+      },
+      (err) => {
+        addBreadcrumb('store.members.error', { code: err?.code });
+      }
+    );
 }
