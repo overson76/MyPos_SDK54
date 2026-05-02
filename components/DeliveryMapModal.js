@@ -12,7 +12,16 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import WebView from 'react-native-webview';
+// react-native-webview: 네이티브 모듈 — EAS 빌드에만 포함됨.
+// 구 빌드 폰에서 OTA 적용 시 크래시 방지 위해 동적 require.
+let WebView = null;
+if (Platform.OS !== 'web') {
+  try {
+    WebView = require('react-native-webview').default;
+  } catch (_) {
+    // 네이티브 모듈 미포함 (구 빌드) — 지도 영역 빈 화면 fallback
+  }
+}
 
 function buildMapHtml({ storeCoord, deliveryCoord }) {
   const markerLines = [];
@@ -124,14 +133,14 @@ export default function DeliveryMapModal({
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
-        {/* 지도 — web/Electron 은 iframe, 네이티브는 WebView */}
+        {/* 지도 — web/Electron: iframe, 네이티브(EAS 빌드): WebView, 구 빌드: 안내 */}
         {Platform.OS === 'web' ? (
           <iframe
             srcDoc={mapHtml}
             style={{ width, height: mapDisplayH, border: 0, display: 'block' }}
             title="delivery-map"
           />
-        ) : (
+        ) : WebView ? (
           <View style={{ width, height: mapDisplayH }}>
             <WebView
               source={{ html: mapHtml }}
@@ -141,6 +150,12 @@ export default function DeliveryMapModal({
               bounces={false}
               javaScriptEnabled
             />
+          </View>
+        ) : (
+          <View style={[styles.noMap, { width, height: mapDisplayH }]}>
+            <Text style={styles.noMapText}>
+              앱을 최신 버전으로 업데이트하면{'\n'}지도를 볼 수 있습니다
+            </Text>
           </View>
         )}
 
