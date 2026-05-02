@@ -58,14 +58,21 @@ export async function createStore({ name, displayName }) {
   if (!trimmedName) throw new Error('상호를 입력해주세요.');
   if (!trimmedDisplay) throw new Error('대표 이름을 입력해주세요.');
 
+  addBreadcrumb('store.create.start', { name: trimmedName });
+
   // 사용 가능 코드 후보 찾기
   let code = null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = generateStoreCode();
-    const snap = await db.collection('storeCodes').doc(candidate).get();
-    if (!snapExists(snap)) {
-      code = candidate;
-      break;
+    try {
+      const snap = await db.collection('storeCodes').doc(candidate).get();
+      if (!snapExists(snap)) {
+        code = candidate;
+        break;
+      }
+    } catch (e) {
+      // 첫 시도 실패해도 다음 후보 시도. 모두 실패하면 아래 throw.
+      addBreadcrumb('store.create.codeCheckFail', { attempt, error: String(e?.message || e) });
     }
   }
   if (!code) throw new Error('매장 코드 생성에 실패했습니다. 다시 시도해주세요.');
@@ -75,22 +82,28 @@ export async function createStore({ name, displayName }) {
   const codeRef = db.collection('storeCodes').doc(code);
   const memberRef = storeRef.collection('members').doc(uid);
 
-  await db.runTransaction(async (tx) => {
-    tx.set(storeRef, {
-      name: trimmedName,
-      code,
-      ownerId: uid,
-      createdAt: serverTimestamp(),
-    });
-    tx.set(codeRef, { storeId });
-    tx.set(memberRef, {
-      role: 'owner',
-      displayName: trimmedDisplay,
-      joinedAt: serverTimestamp(),
-    });
+  // 순차 쓰기 — RNFirebase v24 + 새 아키텍처에서 runTransaction 네이티브 크래시 회피.
+  // 트랜잭션 보장은 잃지만, 1단계 실패 시 매장 자체가 안 만들어져 정합성은 유지됨.
+  // 2단계(코드)/3단계(멤버) 실패 시 사용자가 다시 시도하면 됨 (storeId 는 새로 발급).
+  addBreadcrumb('store.create.step1.storeDoc', { storeId });
+  await storeRef.set({
+    name: trimmedName,
+    code,
+    ownerId: uid,
+    createdAt: serverTimestamp(),
   });
 
-  addBreadcrumb('store.created', { storeId, code });
+  addBreadcrumb('store.create.step2.codeMapping', { code });
+  await codeRef.set({ storeId });
+
+  addBreadcrumb('store.create.step3.memberDoc', { uid });
+  await memberRef.set({
+    role: 'owner',
+    displayName: trimmedDisplay,
+    joinedAt: serverTimestamp(),
+  });
+
+  addBreadcrumb('store.create.success', { storeId, code });
 
   return {
     storeId,
