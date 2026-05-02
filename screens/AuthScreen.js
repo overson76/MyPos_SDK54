@@ -199,21 +199,28 @@ export default function AuthScreen() {
 
 // ── 홈: 두 옵션 카드 ────────────────────────────────────────────
 function HomeView({ onCreate, onJoin }) {
-  const handlePcReset = () => {
-    if (typeof window === 'undefined') return;
+  const handlePcReset = async () => {
     try {
-      navigator.serviceWorker?.getRegistrations().then(r => r.forEach(x => x.unregister()));
-      caches?.keys().then(k => k.forEach(x => caches.delete(x)));
-      // IndexedDB 전체 초기화
-      if (window.indexedDB?.databases) {
-        window.indexedDB.databases().then(dbs => {
-          dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
-        });
+      if (Platform.OS === 'web') {
+        // 웹/Electron — SW + 캐시 + localStorage + IndexedDB 초기화
+        navigator.serviceWorker?.getRegistrations().then(r => r.forEach(x => x.unregister()));
+        caches?.keys().then(k => k.forEach(x => caches.delete(x)));
+        if (window.indexedDB?.databases) {
+          window.indexedDB.databases().then(dbs => {
+            dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
+          });
+        }
+        localStorage?.clear();
+        setTimeout(() => window.location.reload(), 500);
+      } else {
+        // 폰(iOS/Android) — AsyncStorage 전체 초기화 후 앱 재시작
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.clear();
+        const Updates = require('expo-updates');
+        await Updates.reloadAsync();
       }
-      localStorage?.clear();
-      setTimeout(() => window.location.reload(), 500);
     } catch (_) {
-      window.location.reload();
+      if (Platform.OS === 'web') window.location.reload();
     }
   };
 

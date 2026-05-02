@@ -488,6 +488,39 @@ function SystemSettingsView() {
         </>
       ) : null}
 
+      {/* === 폰 연동 복구 — iOS/Android 전용. 동기화 꼬였을 때 앱 캐시 초기화. === */}
+      {Platform.OS !== 'web' ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>폰 연동 복구</Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>앱 데이터 초기화</Text>
+              <Text style={sysStyles.helper}>
+                폰이 매장과 동기화가 안 되거나 화면이 이상할 때.{'\n'}
+                앱 캐시 전체를 초기화하고 재시작합니다.{'\n'}
+                ⚠️ 재시작 후 매장 코드로 다시 참여 필요.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={sysStyles.btnDanger}
+              onPress={async () => {
+                try {
+                  const AsyncStorage =
+                    require('@react-native-async-storage/async-storage').default;
+                  await AsyncStorage.clear();
+                  const { reloadAsync } = require('expo-updates');
+                  await reloadAsync();
+                } catch (e) {
+                  Alert.alert('오류', String(e?.message || e));
+                }
+              }}
+            >
+              <Text style={sysStyles.btnDangerText}>초기화</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
+
       {/* === 진단 — Sentry 연동 확인용. 개발 빌드(__DEV__)에서만 노출. 운영 빌드에서는 자동 숨김. === */}
       {__DEV__ ? (
         <>
