@@ -33,6 +33,7 @@ import {
 import { migrateLocalToCloud } from '../utils/migrateLocalToCloud';
 // RN Alert.alert 가 web 에서 silent no-op → 가입 흐름 에러가 사용자에게 안 보이는 문제 회피.
 import { alert as showAlert } from '../utils/alertCompat';
+import { addBreadcrumb, reportError } from '../utils/sentry';
 
 const MODE = {
   HOME: 'home',
@@ -90,12 +91,23 @@ export default function AuthScreen() {
   const handleCreate = async () => {
     if (busy) return;
     setBusy(true);
+    addBreadcrumb('auth.createStore.start', { name: storeName, displayName: ownerName });
     try {
       const result = await createStore({ name: storeName, displayName: ownerName });
-      setCreatedResult(result);
-      setMode(MODE.CREATED);
+      addBreadcrumb('auth.createStore.success', { storeId: result.storeId, code: result.code });
+      try {
+        setCreatedResult(result);
+        setMode(MODE.CREATED);
+      } catch (renderErr) {
+        // 렌더 단계에서 에러 — 매장은 이미 만들어졌으니 직접 markJoined 시도
+        reportError(renderErr, { ctx: 'AuthScreen.handleCreate.setMode', storeId: result?.storeId });
+        try {
+          await markJoined(result);
+        } catch {}
+      }
     } catch (e) {
-      showAlert('오류', e.message || '매장 생성에 실패했습니다.');
+      reportError(e, { ctx: 'AuthScreen.handleCreate', name: storeName });
+      showAlert('오류', e?.message || '매장 생성에 실패했습니다.');
     } finally {
       setBusy(false);
     }
