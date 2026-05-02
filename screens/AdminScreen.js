@@ -17,6 +17,7 @@ import RevenueScreen from './RevenueScreen';
 import LockGate from '../components/LockGate';
 import RevenueLockGate from '../components/RevenueLockGate';
 import StoreManagementSection from '../components/StoreManagementSection';
+import PrintPolicySection from '../components/PrintPolicySection';
 import PinEntry from '../components/PinEntry';
 import {
   getSpeakAddress,
@@ -336,6 +337,9 @@ function SystemSettingsView() {
           • 메뉴 가격 / 이름 / 배달 주소 / 시간 등 입력값은 자동으로 길이·형식 검증됩니다.
         </Text>
       </View>
+
+      {/* === 주문지 출력 정책 — 매장 단위 글로벌 정책 + 기기별 자동 출력 토글 === */}
+      <PrintPolicySection />
 
       {/* === Electron 자동 업데이트 — PC 카운터 .exe 환경에서만 보임. === */}
       {updateSupported ? (
