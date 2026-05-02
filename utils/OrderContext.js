@@ -478,8 +478,32 @@ export function OrderProvider({ children }) {
   );
 }
 
+// OrderProvider 언마운트 중(매장 떠나기/강퇴 → UNJOINED 전환)에 ctx가 null이 되면
+// throw 대신 안전한 빈 기본값 반환 — iOS 새 아키텍처 크래시 방지.
+const noop = () => {};
+const ORDERS_FALLBACK = {
+  orders: {}, splits: {}, revenue: { total: 0, history: [] },
+  addressBook: { entries: {} }, groups: {},
+  bumpAddress: noop, markAddressDeliveredToday: noop, pinAddress: noop,
+  deleteAddress: noop, setAutoRemember: noop, setAlias: noop, setPhone: noop,
+  addAddress: noop, isSplit: () => false,
+  addItem: noop, removeItem: noop, clearTable: noop,
+  markReady: noop, markPaid: noop, confirmOrder: noop,
+  toggleOption: noop, toggleItemCooked: noop,
+  cycleItemCookState: noop, cycleItemCookStatePortion: noop,
+  toggleItemOption: noop, incrementSlotQty: noop,
+  splitOffWithOptionToggle: noop, setItemLargeQty: noop, setItemMemo: noop,
+  setDeliveryAddress: noop, setDeliveryTime: noop, setDeliveryTimeIsPM: noop,
+  moveOrder: noop, toggleSplit: noop,
+  getOrder: () => ({ items: [], cartItems: [], confirmedItems: [] }),
+  getOrderTotal: () => 0, getOrderQty: () => 0,
+  getCartTotal: () => 0, getCartQty: () => 0,
+  migratePendingCart: noop, clearPendingCart: noop,
+  createGroup: noop, dissolveGroup: noop, getGroupFor: () => null,
+};
+
 export function useOrders() {
   const ctx = useContext(OrderContext);
-  if (!ctx) throw new Error('useOrders must be used within OrderProvider');
+  if (!ctx) return ORDERS_FALLBACK;
   return ctx;
 }

@@ -672,8 +672,19 @@ export function MenuProvider({ children }) {
   return <MenuContext.Provider value={value}>{children}</MenuContext.Provider>;
 }
 
+// MenuProvider 언마운트 중(매장 떠나기/강퇴 → UNJOINED 전환)에 ctx가 null이 되면
+// throw 대신 안전한 빈 기본값 반환 — iOS 새 아키텍처 크래시 방지.
+const MENU_FALLBACK = {
+  items: [], rows: {}, categories: [], optionsList: [], editableOptions: [],
+  updateItem: () => {}, updateItemImage: () => {}, resetItemImage: () => {},
+  addNewItem: () => {}, addNewItemAt: () => {}, deleteItem: () => {},
+  toggleFavorite: () => {}, moveItemInCategory: () => {}, reorderInCategory: () => {},
+  swapInCategory: () => {}, setFavoriteSlot: () => {}, setCategorySlot: () => {},
+  updateOptionLabel: () => {}, moveOption: () => {}, resetEditableOptions: () => {},
+};
+
 export function useMenu() {
   const ctx = useContext(MenuContext);
-  if (!ctx) throw new Error('useMenu must be used within MenuProvider');
+  if (!ctx) return MENU_FALLBACK;
   return ctx;
 }

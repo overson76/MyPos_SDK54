@@ -409,32 +409,32 @@ export default function StoreManagementSection() {
 
       {/* === 매장 떠나기 / 삭제 === */}
       <Text style={styles.sectionTitle}>매장 탈퇴</Text>
-      <View style={styles.row}>
-        <View style={styles.rowText}>
-          <Text style={styles.label}>매장 떠나기</Text>
-          <Text style={styles.helper}>
-            {isOwner
-              ? '대표는 떠날 수 없습니다. 아래 "매장 삭제" 사용.'
-              : '이 매장에서 본인을 제거합니다. 다시 가입하려면 매장 코드로 새로 요청해야 합니다.'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.btnDanger, isOwner && styles.btnDisabled]}
-          disabled={isOwner}
-          onPress={handleLeave}
-        >
-          <Text style={styles.btnDangerText}>떠나기</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* 대표용 매장 통째 삭제 — 운영 정리/이전 시 사용 */}
+      {/* 일반 멤버용 떠나기 — 대표한테는 안 보임 */}
+      {!isOwner && (
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>매장 떠나기</Text>
+            <Text style={styles.helper}>
+              이 매장에서 본인을 제거합니다.{'\n'}
+              다시 가입하려면 대표에게 매장 코드를 받아 새로 가입 요청해야 합니다.
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.btnDanger} onPress={handleLeave}>
+            <Text style={styles.btnDangerText}>떠나기</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 대표용 매장 통째 삭제 — 매장 정리 + 새 매장 시작 시 사용 */}
       {isOwner && (
         <View style={styles.row}>
           <View style={styles.rowText}>
-            <Text style={styles.label}>⚠️ 매장 삭제</Text>
+            <Text style={styles.label}>⚠️ 매장 삭제 후 다시 시작</Text>
             <Text style={styles.helper}>
-              매장과 모든 데이터(메뉴/주문이력/멤버)를 영구 제거합니다.{'\n'}
-              모든 기기가 매장 참여 화면으로 돌아갑니다.
+              대표가 매장에서 나가려면 매장 자체를 삭제해야 합니다.{'\n'}
+              매장과 모든 데이터(메뉴/주문이력/멤버) 영구 제거.{'\n'}
+              모든 기기가 매장 참여 화면으로 돌아가고, 곧바로 새 매장 만들기 가능.
             </Text>
           </View>
           <TouchableOpacity style={styles.btnDanger} onPress={handleDeleteStore}>
