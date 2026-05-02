@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -90,13 +89,10 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     setNewPhone('');
   };
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
@@ -309,7 +305,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
           )}
         </Pressable>
       </Pressable>
-    </Modal>
+    </View>
   );
 }
 
@@ -328,6 +324,15 @@ function formatPhoneDisplay(digits) {
 function makeStyles(scale = 1) {
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    elevation: 9999,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
