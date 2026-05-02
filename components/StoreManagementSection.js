@@ -26,6 +26,7 @@ import {
 } from '../utils/revenuePin';
 import {
   approveJoinRequest,
+  deleteStore as deleteStoreOp,
   formatStoreCode,
   leaveStore as leaveStoreOp,
   rejectJoinRequest,
@@ -152,11 +153,35 @@ export default function StoreManagementSection() {
     }
   };
 
+  const handleDeleteStore = async () => {
+    if (!isOwner) {
+      showAlert('권한 없음', '대표만 매장을 삭제할 수 있습니다.');
+      return;
+    }
+    const ok = await askConfirm(
+      '⚠️ 매장 삭제 (되돌릴 수 없음)',
+      `매장 "${storeInfo.name || ''}" 을(를) 영구 삭제합니다.\n\n` +
+        '· 모든 멤버가 즉시 매장에서 제거됨\n' +
+        '· 메뉴 / 주문 이력 / 매장 정보 모두 삭제\n' +
+        '· 새로 시작하려면 다시 매장을 만들어야 함\n\n' +
+        '정말 진행하시겠습니까?',
+      '삭제'
+    );
+    if (!ok) return;
+    try {
+      await deleteStoreOp({ storeId: storeInfo.storeId });
+      // 본인의 멤버 문서도 같이 삭제됨 → StoreContext 가 자동 UNJOINED 전환.
+      showAlert('완료', '매장이 삭제되었습니다. 매장 참여 화면으로 이동합니다.');
+    } catch (e) {
+      showAlert('오류', e?.message || '매장 삭제 실패');
+    }
+  };
+
   const handleLeave = async () => {
     if (isOwner) {
       showAlert(
         '떠날 수 없습니다',
-        '대표는 매장을 떠날 수 없습니다. 매장 삭제는 추후 추가됩니다.'
+        '대표는 매장을 떠날 수 없습니다. 매장 전체 삭제는 아래 "매장 삭제" 를 사용하세요.'
       );
       return;
     }
@@ -382,14 +407,14 @@ export default function StoreManagementSection() {
         </Text>
       </View>
 
-      {/* === 매장 떠나기 === */}
+      {/* === 매장 떠나기 / 삭제 === */}
       <Text style={styles.sectionTitle}>매장 탈퇴</Text>
       <View style={styles.row}>
         <View style={styles.rowText}>
           <Text style={styles.label}>매장 떠나기</Text>
           <Text style={styles.helper}>
             {isOwner
-              ? '대표는 매장을 떠날 수 없습니다. 매장 삭제는 추후 추가됩니다.'
+              ? '대표는 떠날 수 없습니다. 아래 "매장 삭제" 사용.'
               : '이 매장에서 본인을 제거합니다. 다시 가입하려면 매장 코드로 새로 요청해야 합니다.'}
           </Text>
         </View>
@@ -401,6 +426,22 @@ export default function StoreManagementSection() {
           <Text style={styles.btnDangerText}>떠나기</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 대표용 매장 통째 삭제 — 운영 정리/이전 시 사용 */}
+      {isOwner && (
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>⚠️ 매장 삭제</Text>
+            <Text style={styles.helper}>
+              매장과 모든 데이터(메뉴/주문이력/멤버)를 영구 제거합니다.{'\n'}
+              모든 기기가 매장 참여 화면으로 돌아갑니다.
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.btnDanger} onPress={handleDeleteStore}>
+            <Text style={styles.btnDangerText}>매장 삭제</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {pinModal ? (
         <RevenuePinModal

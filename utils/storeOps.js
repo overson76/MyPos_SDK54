@@ -212,6 +212,58 @@ export async function removeMember({ storeId, memberUid }) {
   addBreadcrumb('store.memberRemoved', { storeId, memberUid });
 }
 
+// ─── 매장 통째 삭제 (대표만) ──────────────────────────────
+// 매장을 완전히 정리할 때 사용. 모든 멤버가 UNJOINED 상태로 전환됨.
+// 서브컬렉션(members/joinRequests/orders/menus/options/addressBook 등) + 매장 코드 + 매장 문서 모두 제거.
+export async function deleteStore({ storeId }) {
+  const db = requireDb();
+  const uid = requireUid();
+  const storeRef = db.collection('stores').doc(storeId);
+
+  const storeSnap = await storeRef.get();
+  if (!snapExists(storeSnap)) {
+    addBreadcrumb('store.deleteSkipped', { storeId, reason: 'notFound' });
+    return;
+  }
+  const storeData = storeSnap.data() || {};
+  if (storeData.ownerId !== uid) {
+    throw new Error('대표만 매장을 삭제할 수 있습니다.');
+  }
+
+  // 알려진 서브컬렉션 삭제 — 새 컬렉션이 추가되면 여기에 추가.
+  const subcollections = ['members', 'joinRequests', 'orders', 'menus', 'options', 'addressBook', 'callLog'];
+  for (const sub of subcollections) {
+    try {
+      const snap = await storeRef.collection(sub).get();
+      if (snap.empty) continue;
+      // Firestore 배치는 최대 500개 — 분할 커밋.
+      let batch = db.batch();
+      let count = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= 450) {
+          await batch.commit();
+          batch = db.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    } catch (e) {
+      // 권한/누락은 무시하고 계속
+    }
+  }
+
+  // 매장 코드 매핑 제거
+  if (storeData.code) {
+    try { await db.collection('storeCodes').doc(storeData.code).delete(); } catch {}
+  }
+
+  // 매장 문서 자체 삭제
+  await storeRef.delete();
+  addBreadcrumb('store.deleted', { storeId });
+}
+
 // ─── 본인 탈퇴 ──────────────────────────────────────────────
 export async function leaveStore({ storeId }) {
   const db = requireDb();
