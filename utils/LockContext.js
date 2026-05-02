@@ -144,8 +144,17 @@ export function LockProvider({ children }) {
   return <LockContext.Provider value={value}>{children}</LockContext.Provider>;
 }
 
+// LockProvider 언마운트 중(강제퇴장/UNJOINED 전환 타이밍)에 ctx가 null이 되면
+// throw 대신 안전한 기본값 반환 — iOS/iPad 크래시 방지.
+const LOCK_FALLBACK = {
+  ready: false, pinSet: false, isUnlocked: true,
+  autoLockMin: 5, autoLockEnabled: false,
+  unlock: () => {}, lock: () => {}, refreshPinStatus: async () => {},
+  reportActivity: () => {}, setAutoLockMin: () => {}, setAutoLockEnabled: () => {},
+};
+
 export function useLock() {
   const ctx = useContext(LockContext);
-  if (!ctx) throw new Error('useLock must be used within LockProvider');
+  if (!ctx) return LOCK_FALLBACK;
   return ctx;
 }
