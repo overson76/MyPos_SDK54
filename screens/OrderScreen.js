@@ -20,6 +20,8 @@ import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
+import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
+import { normalizeAddressKey } from '../utils/orderHelpers';
 import {
   playChangeSound,
   playOrderSound,
@@ -139,6 +141,8 @@ export default function OrderScreen({
     setItemMemo,
     migratePendingCart,
     clearPendingCart,
+    addressBook,
+    addAddress,
   } = useOrders();
 
   const genSlotId = () =>
@@ -188,6 +192,51 @@ export default function OrderScreen({
   const isPending = !hasRealTable;
   const tableId = hasRealTable ? table.id : PENDING_TABLE_ID;
   const order = getOrder(tableId);
+
+  // 배달 헤더 거리 라벨 — 주소 입력 즉시 반영. 주소록 entry 의 좌표가 있으면 그것 우선,
+  // 없으면 500ms 디바운스 후 카카오 호출 (입력 도중 폭증 방지). 매장 좌표 미설정 시 OFF.
+  const [liveDistanceLabel, setLiveDistanceLabel] = useState(null);
+  useEffect(() => {
+    setLiveDistanceLabel(null);
+    if (table?.type !== 'delivery') return;
+    const addr = order?.deliveryAddress;
+    if (!addr) return;
+    if (storeInfo?.lat == null || storeInfo?.lng == null) return;
+    const key = normalizeAddressKey(addr);
+    const entry = key ? addressBook?.entries?.[key] : null;
+    if (entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
+      const km = distanceKm(
+        { lat: entry.lat, lng: entry.lng },
+        { lat: storeInfo.lat, lng: storeInfo.lng }
+      );
+      setLiveDistanceLabel(formatDistance(km));
+      return;
+    }
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      const result = await geocodeAddress(addr);
+      if (cancelled || !result) return;
+      const km = distanceKm(
+        { lat: result.lat, lng: result.lng },
+        { lat: storeInfo.lat, lng: storeInfo.lng }
+      );
+      setLiveDistanceLabel(formatDistance(km));
+      // 주소록 entry 자동 등록 (이미 있으면 noop) — TableScreen 배달 카드도 거리 표시되게.
+      // useAddressBook 의 백그라운드 effect 가 다음 사이클에 lat/lng 채움.
+      addAddress(addr);
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [
+    table?.type,
+    order?.deliveryAddress,
+    addressBook,
+    storeInfo?.lat,
+    storeInfo?.lng,
+  ]);
+
   // 장바구니 = 편집중 내역. items = 이미 주방/테이블에 확정 커밋된 내역.
   const cart = order.cartItems ?? order.items ?? [];
   const committedItems = order.items ?? [];
@@ -624,6 +673,18 @@ export default function OrderScreen({
               placeholder="주소"
               placeholderTextColor="#9ca3af"
             />
+            {liveDistanceLabel ? (
+              <Text
+                style={{
+                  marginHorizontal: 6,
+                  fontSize: 13,
+                  color: '#059669',
+                  fontWeight: '700',
+                }}
+              >
+                📏 {liveDistanceLabel}
+              </Text>
+            ) : null}
             <TouchableOpacity
               style={styles.addressBookBtn}
               onPress={() => setAddressBookOpen(true)}

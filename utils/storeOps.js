@@ -314,6 +314,28 @@ export async function leaveStore({ storeId }) {
   addBreadcrumb('store.left', { storeId });
 }
 
+// ─── 매장 주소 + 좌표 업데이트 (대표) ────────────────────────
+// 주소는 카카오 Local API 로 변환된 좌표와 함께 저장 — 배달 거리 계산 기준점.
+// address/lat/lng 모두 null 허용 (해제). 보안 규칙은 owner 만 stores 문서 update 허용 가정.
+export async function updateStoreAddress({ storeId, address, lat, lng }) {
+  const db = requireDb();
+  const trimmed = typeof address === 'string' ? address.trim().slice(0, 200) : '';
+  const validLat = typeof lat === 'number' && isFinite(lat) && lat >= -90 && lat <= 90;
+  const validLng = typeof lng === 'number' && isFinite(lng) && lng >= -180 && lng <= 180;
+  await db
+    .collection('stores')
+    .doc(storeId)
+    .set(
+      {
+        address: trimmed || null,
+        lat: validLat ? lat : null,
+        lng: validLng ? lng : null,
+      },
+      { merge: true }
+    );
+  addBreadcrumb('store.address.update', { storeId, hasCoord: validLat && validLng });
+}
+
 // ─── 가입 요청 목록 listener (대표 화면) ─────────────────────
 // onChange: (requests: Array<{ uid, displayName, requestedAt }>) => void
 export function subscribeJoinRequests(storeId, onChange) {

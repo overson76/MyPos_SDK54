@@ -108,6 +108,10 @@ export function StoreProvider({ children }) {
           // 매장 공유 수익 PIN — 미설정 시 null. RevenueLockGate 가 검증에 사용.
           revenuePinHash: store?.revenuePinHash || null,
           revenuePinSalt: store?.revenuePinSalt || null,
+          // 매장 주소 + 좌표 — 배달 거리 계산 기준점. 미설정 시 null (거리 표시 OFF).
+          address: store?.address || null,
+          lat: typeof store?.lat === 'number' ? store.lat : null,
+          lng: typeof store?.lng === 'number' ? store.lng : null,
         };
         setStoreInfo(next);
         await saveJSON(CACHE_KEY, { storeId, role: member.role });
