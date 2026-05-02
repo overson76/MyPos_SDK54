@@ -82,6 +82,10 @@ export function StoreProvider({ children }) {
           if (snap?.metadata?.fromCache) return;
           // 서버에서 실제로 문서 없음 확인 — 멤버 제거됨 (강퇴 또는 탈퇴).
           await removeKey(CACHE_KEY);
+          // Electron 파일 캐시도 삭제 — 없애지 않으면 재시작 시 복구돼서 join 화면 안 뜸.
+          if (typeof window !== 'undefined' && window.mypos?.clearMembership) {
+            try { await window.mypos.clearMembership(); } catch {}
+          }
           setStoreInfo(null);
           setState(STORE_STATE.UNJOINED);
           return;

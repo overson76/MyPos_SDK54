@@ -423,7 +423,13 @@ function SystemSettingsView() {
                   'PC를 매장에 다시 연동합니다.\n로컬 데이터가 초기화되고 페이지가 새로고침됩니다.\n계속하시겠습니까?'
                 );
                 if (!ok) return;
-                // 1) Firebase 로그아웃 — IndexedDB 인증 상태 제거
+                // 1) Electron 파일 캐시 삭제 — 재시작 시 storeId 복구 차단
+                try {
+                  if (typeof window !== 'undefined' && window.mypos?.clearMembership) {
+                    await window.mypos.clearMembership();
+                  }
+                } catch {}
+                // 2) Firebase 로그아웃 — IndexedDB 인증 상태 제거
                 try {
                   const { getAuth, signOut } = await import('firebase/auth');
                   await signOut(getAuth());
