@@ -58,17 +58,28 @@ export async function migrateLocalToCloud({ storeId, onProgress }) {
     'addressBook',
   ]);
 
-  // 신규 매장 (로컬에 메뉴 없음) → default 카탈로그를 시드로 사용.
-  // 기존 사용자는 본인 데이터로 덮어쓰기.
-  if (!Array.isArray(data.menu_items) || data.menu_items.length === 0) {
-    data.menu_items = defaultMenuItems;
+  // 신규 사용자(완전 깨끗한 상태) 감지 — 마이그레이션할 사용자 데이터 자체 없음.
+  // 이 경우 업로드 자체를 건너뛰고 플래그만 남김.
+  // 기본 메뉴/카테고리/옵션은 각 기기의 MenuContext 가 로컬에서 로드.
+  // (RNFirebase v24 + 새 아키텍처에서 다수 sequential set 도 크래시 가능성 있어 회피)
+  const hasUserMenu = Array.isArray(data.menu_items) && data.menu_items.length > 0;
+  const hasUserRows = data.menu_rows && typeof data.menu_rows === 'object' && Object.keys(data.menu_rows).length > 0;
+  const hasUserOptions = Array.isArray(data.editable_options) && data.editable_options.length > 0;
+  const hasUserOrders = data.orders && typeof data.orders === 'object' && Object.keys(data.orders).length > 0;
+  const hasUserRevenue = data.revenue && typeof data.revenue === 'object' && (Number(data.revenue.total) > 0 || (Array.isArray(data.revenue.history) && data.revenue.history.length > 0));
+  const hasUserAddrBook = data.addressBook && typeof data.addressBook === 'object' && data.addressBook.entries && Object.keys(data.addressBook.entries).length > 0;
+  const hasAnyUserData = hasUserMenu || hasUserRows || hasUserOptions || hasUserOrders || hasUserRevenue || hasUserAddrBook;
+
+  if (!hasAnyUserData) {
+    addBreadcrumb('store.migrate.skipFreshUser', { storeId });
+    await saveJSON(MIGRATED_KEY, { storeId, at: Date.now(), total: 0, skipped: 0, skippedAll: true });
+    return { total: 0, skipped: 0, skippedDetails: [] };
   }
-  if (!data.menu_rows || typeof data.menu_rows !== 'object') {
-    data.menu_rows = defaultCategoryRows;
-  }
-  if (!Array.isArray(data.editable_options) || data.editable_options.length === 0) {
-    data.editable_options = defaultEditableOptions;
-  }
+
+  // 기존 사용자가 일부 데이터만 누락된 경우에만 default 보충 (덮어쓰기 방지).
+  if (!hasUserMenu) data.menu_items = defaultMenuItems;
+  if (!hasUserRows) data.menu_rows = defaultCategoryRows;
+  if (!hasUserOptions) data.editable_options = defaultEditableOptions;
 
   const storeRef = db.collection('stores').doc(storeId);
   const ops = [];
