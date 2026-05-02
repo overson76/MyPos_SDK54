@@ -41,6 +41,7 @@ import {
   getElectronUpdateStatus,
   subscribeElectronUpdate,
 } from '../utils/electronUpdate';
+import { checkForUpdates } from '../utils/otaUpdates';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -159,6 +160,18 @@ function SystemSettingsView() {
   const updateSupported = isElectronUpdateAvailable();
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updateChecking, setUpdateChecking] = useState(false);
+
+  // OTA(폰 앱) 업데이트 상태 — 네이티브 환경에서만 표시.
+  const [otaStatus, setOtaStatus] = useState(null); // null | 'checking' | 'downloading' | 'downloaded' | 'upToDate' | 'error'
+  const [otaBusy, setOtaBusy] = useState(false);
+
+  const handleOtaCheck = async () => {
+    if (otaBusy) return;
+    setOtaBusy(true);
+    setOtaStatus('checking');
+    await checkForUpdates({ onStatus: setOtaStatus });
+    setOtaBusy(false);
+  };
 
   useEffect(() => {
     if (!updateSupported) return;
@@ -406,6 +419,41 @@ function SystemSettingsView() {
               }}
             >
               <Text style={sysStyles.btnDangerText}>앱 종료</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
+
+      {/* === 폰 앱 OTA 업데이트 — 네이티브 환경에서만 보임. === */}
+      {Platform.OS !== 'web' ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>
+            📱 앱 업데이트
+          </Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>
+                {otaStatus === 'checking' && '🔍 최신 버전 확인 중...'}
+                {otaStatus === 'downloading' && '⬇️ 새 버전 다운로드 중...'}
+                {otaStatus === 'downloaded' && '✅ 다운로드 완료'}
+                {otaStatus === 'upToDate' && '✅ 최신 버전입니다'}
+                {otaStatus === 'error' && '❌ 업데이트 확인 실패'}
+                {!otaStatus && '업데이트 확인'}
+              </Text>
+              <Text style={sysStyles.helper}>
+                {otaStatus === 'downloaded'
+                  ? '앱을 완전히 종료 후 재시작하면 새 버전이 적용됩니다.'
+                  : '새 버전이 있으면 백그라운드에서 다운로드합니다.\n앱 시작 시 자동 확인 — 버튼은 수동 확인용.'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[sysStyles.btnSecondary, otaBusy && { opacity: 0.5 }]}
+              onPress={handleOtaCheck}
+              disabled={otaBusy}
+            >
+              <Text style={sysStyles.btnSecondaryText}>
+                {otaBusy ? '확인 중...' : '지금 확인'}
+              </Text>
             </TouchableOpacity>
           </View>
         </>

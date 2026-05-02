@@ -124,7 +124,21 @@ export default function App() {
     // 네이티브 빌드에서만 OTA 체크. 새 번들 있으면 백그라운드 다운로드 → 다음 시작 시 적용.
     // 영업 중 reload 강제 안 함 — 사장님이 자연스럽게 앱 재시작하는 시점에 갱신.
     // dev 빌드 / Expo Go / 웹은 utils/otaUpdates.web.js 가 no-op.
-    checkForUpdates();
+    checkForUpdates({
+      onStatus: (status) => {
+        if (status === 'downloaded') {
+          // 영업 중 갑작스러운 reload는 없음 — 알림만.
+          if (Platform.OS !== 'web') {
+            const { Alert } = require('react-native');
+            Alert.alert(
+              '✅ 업데이트 완료',
+              '새 버전이 준비됐습니다.\n앱을 완전히 종료 후 재시작하면 적용됩니다.',
+              [{ text: '확인' }]
+            );
+          }
+        }
+      },
+    });
   }, []);
 
   return (
