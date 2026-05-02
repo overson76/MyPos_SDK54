@@ -22,7 +22,7 @@ import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildOrderSlipText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
-import OrderSlipPicker from '../components/OrderSlipPicker';
+import { loadPolicy, resolvePrintKinds } from '../utils/printPolicy';
 
 const typeLabels = {
   regular: '매장',
@@ -44,9 +44,40 @@ export default function KitchenScreen() {
   const { items: menuItems, optionsList: OPTIONS_CATALOG } = useMenu();
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
   const [highlightMenuId, setHighlightMenuId] = useState(null);
-  // 주문지 출력 피커 — null이면 닫힘, 주문 객체이면 열림
-  const [slipOrder, setSlipOrder] = useState(null);
   const printerAvailable = isPrinterAvailable();
+
+  // 🖨️ 버튼 — 모달 없이 글로벌 정책(관리자 → 시스템 → 주문지 출력 정책) 대로 즉시 출력.
+  // 정책이 비어있으면 출력 안 함(가드). 출력 실패는 영업 흐름에 영향 X (silent catch).
+  const handlePrintSlip = async (o) => {
+    if (!o) return;
+    const policy = await loadPolicy();
+    const isDelivery = o.table?.type === 'delivery';
+    const isFresh = !(o.confirmedItems?.length > 0);
+    const kindsSet = resolvePrintKinds(policy, { isDelivery, isFresh });
+    const kinds = [...kindsSet];
+    if (kinds.length === 0) return;
+
+    const rows = computeDiffRows(o.items, o.confirmedItems || []);
+    const resolvedRows = rows.map((r) => ({
+      ...r,
+      item: {
+        ...r.item,
+        optionLabels: (r.item.options || [])
+          .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+          .filter(Boolean),
+      },
+    }));
+    const slipText = buildOrderSlipText({
+      tableLabel: o.table?.label || o.tableId,
+      isDelivery,
+      deliveryAddress: o.deliveryAddress,
+      rows: resolvedRows,
+      kinds,
+      slippedAt: Date.now(),
+    });
+    printReceipt({ rawText: slipText }).catch(() => {});
+  };
+
   // 주문 경과 분수 표시 — 15초마다 리렌더
   const [nowTick, setNowTick] = useState(Date.now());
   useEffect(() => {
@@ -770,7 +801,7 @@ export default function KitchenScreen() {
               {printerAvailable && (
                 <TouchableOpacity
                   style={[styles.printSlipBtn, isPhone && styles.doneBtnPhone]}
-                  onPress={() => setSlipOrder(o)}
+                  onPress={() => handlePrintSlip(o)}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.printSlipBtnText, isPhone && styles.doneBtnTextPhone]}>
@@ -801,39 +832,6 @@ export default function KitchenScreen() {
       })}
       </ScrollView>
       {renderSidebar()}
-
-      <OrderSlipPicker
-        visible={!!slipOrder}
-        isDelivery={slipOrder?.table?.type === 'delivery'}
-        isFresh={!(slipOrder?.confirmedItems?.length > 0)}
-        onClose={() => setSlipOrder(null)}
-        onPrint={(kinds) => {
-          if (!slipOrder) return;
-          const rows = computeDiffRows(
-            slipOrder.items,
-            slipOrder.confirmedItems || []
-          );
-          const resolvedRows = rows.map((r) => ({
-            ...r,
-            item: {
-              ...r.item,
-              optionLabels: (r.item.options || [])
-                .map((oid) => OPTIONS_CATALOG.find((o) => o.id === oid)?.label)
-                .filter(Boolean),
-            },
-          }));
-          const slipText = buildOrderSlipText({
-            tableLabel: slipOrder.table?.label || slipOrder.tableId,
-            isDelivery: slipOrder.table?.type === 'delivery',
-            deliveryAddress: slipOrder.deliveryAddress,
-            rows: resolvedRows,
-            kinds,
-            slippedAt: Date.now(),
-          });
-          printReceipt({ rawText: slipText }).catch(() => {});
-          setSlipOrder(null);
-        }}
-      />
     </View>
   );
 }
