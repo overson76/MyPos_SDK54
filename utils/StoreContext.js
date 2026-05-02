@@ -52,6 +52,7 @@ export function StoreProvider({ children }) {
   //   pendingApproval → { storeId, displayName }
   const memberUnsubRef = useRef(null);
   const requestUnsubRef = useRef(null);
+  const storeUnsubRef = useRef(null);
 
   const teardown = useCallback(() => {
     if (memberUnsubRef.current) {
@@ -61,6 +62,10 @@ export function StoreProvider({ children }) {
     if (requestUnsubRef.current) {
       requestUnsubRef.current();
       requestUnsubRef.current = null;
+    }
+    if (storeUnsubRef.current) {
+      storeUnsubRef.current();
+      storeUnsubRef.current = null;
     }
   }, []);
 
@@ -72,6 +77,34 @@ export function StoreProvider({ children }) {
 
     const memberRef = db.collection('stores').doc(storeId).collection('members').doc(uid);
     const storeRef = db.collection('stores').doc(storeId);
+
+    // stores/{storeId} 문서 실시간 구독 — 매장 주소/PIN 등 변경 시 즉시 반영.
+    // 기존엔 멤버 변경 시점에만 .get() 했어서 다른 기기가 매장 정보 변경해도
+    // 다음 멤버 변경까지 못 받음. 이제 stores 문서 변경도 추적.
+    if (storeUnsubRef.current) storeUnsubRef.current();
+    storeUnsubRef.current = storeRef.onSnapshot(
+      (snap) => {
+        if (!snapExists(snap)) return;
+        const store = snap.data();
+        setStoreInfo((prev) => {
+          if (!prev) return prev; // 멤버 정보 들어오기 전엔 부분 업데이트 의미 없음
+          return {
+            ...prev,
+            code: store.code ?? prev.code,
+            name: store.name ?? prev.name,
+            ownerId: store.ownerId ?? prev.ownerId,
+            revenuePinHash: store.revenuePinHash ?? null,
+            revenuePinSalt: store.revenuePinSalt ?? null,
+            address: store.address ?? null,
+            lat: typeof store.lat === 'number' ? store.lat : null,
+            lng: typeof store.lng === 'number' ? store.lng : null,
+          };
+        });
+      },
+      (err) => {
+        reportError(err, { ctx: 'StoreContext.subscribeStore', storeId });
+      }
+    );
 
     if (memberUnsubRef.current) memberUnsubRef.current();
     memberUnsubRef.current = memberRef.onSnapshot(
