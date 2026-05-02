@@ -25,7 +25,9 @@ export function useResponsive() {
   // 데스크톱 브라우저는 inset 이 0 이라 동일하지만, 노치 시뮬레이션 환경에서
   // viewport 1280 이 width 1192 로 떨어져 lg 진입을 놓치는 이슈를 회피.
   // 미리보기(iPhone Pro Max 가로 932)는 md 영역이라 1.0 유지 → 모바일 레이아웃 미변경.
-  const scale = rawW >= 1200 ? 1.3 : 1.0;
+  // 연속 비례 방식: 기준 폭 932(iPhone Pro Max) 대비 현재 폭 비율로 자동 계산.
+  // 최소 1.0(폰) ~ 최대 1.7(초대형 PC) 클램프.
+  const scale = Math.min(1.7, Math.max(1.0, rawW / 932));
   return {
     width,
     height,

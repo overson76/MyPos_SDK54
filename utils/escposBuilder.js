@@ -162,6 +162,90 @@ export function buildReceiptBytes(receipt, textEncoder) {
   return out;
 }
 
+// 주문지 빌더 — 주방/배달용 슬립. 결제 정보 없음, 항목만 출력.
+//
+// slip: {
+//   tableLabel: string,
+//   isDelivery: boolean,
+//   deliveryAddress?: string,
+//   rows: Array<{ item, kind: 'added'|'changed'|'unchanged'|'removed', previousQty? }>,
+//   kinds: Array<'added'|'changed'|'all'|'delivery'>,
+//   slippedAt?: number,
+// }
+// item 에 optionLabels?: string[] 를 미리 resolve 해서 전달해야 함 (hook 못 씀).
+export function buildOrderSlipText(slip) {
+  const { tableLabel = '', isDelivery, deliveryAddress, rows = [], kinds = ['all'], slippedAt } = slip;
+  const kindSet = new Set(kinds);
+  const showAll = kindSet.has('all');
+  const showDelivery = kindSet.has('delivery') && isDelivery && !!deliveryAddress;
+
+  const toPrint = rows.filter((r) => {
+    if (r.kind === 'removed') return false;
+    if (showAll) return true;
+    return (kindSet.has('added') && r.kind === 'added') ||
+           (kindSet.has('changed') && r.kind === 'changed');
+  });
+  const removed = (showAll || kindSet.has('changed'))
+    ? rows.filter((r) => r.kind === 'removed')
+    : [];
+
+  const lines = [];
+  lines.push(divider('='));
+  lines.push(centerText('주  문  지'));
+  lines.push(centerText(formatDateTime(slippedAt || Date.now())));
+  lines.push(centerText(`[ ${tableLabel} ]`));
+
+  if (showDelivery) {
+    lines.push(divider('-'));
+    lines.push('배달지: ' + deliveryAddress);
+  }
+
+  lines.push(divider('-'));
+
+  if (toPrint.length === 0 && removed.length === 0) {
+    lines.push(centerText('(출력 항목 없음)'));
+  } else {
+    for (const r of toPrint) {
+      const item = r.item;
+      const kindLabel = !showAll
+        ? (r.kind === 'added' ? '[추가] ' : '[변경] ')
+        : '';
+      const lq = item.largeQty || 0;
+      const nq = item.qty - lq;
+
+      if (lq === 0) {
+        lines.push(pad2col(kindLabel + item.name, `×${item.qty}`));
+      } else {
+        if (nq > 0) lines.push(pad2col(kindLabel + item.name + ' 보통', `×${nq}`));
+        if (lq > 0) lines.push(pad2col(`  ${item.name} 대`, `×${lq}`));
+      }
+      const optLabels = item.optionLabels || [];
+      if (optLabels.length > 0) lines.push('  ▸ ' + optLabels.join(' · '));
+      if (item.memo) lines.push('  📝 ' + item.memo);
+      if (!showAll && r.kind === 'changed' && r.previousQty != null) {
+        lines.push(`  (이전 ×${r.previousQty})`);
+      }
+    }
+    for (const r of removed) {
+      lines.push(pad2col('[취소] ' + r.item.name, `×${r.previousQty ?? r.item.qty}`));
+    }
+  }
+
+  lines.push(divider('='));
+  return lines.join('\n');
+}
+
+// 미리 만들어진 텍스트를 ESC/POS bytes 로 래핑. buildOrderSlipText 결과 등에 사용.
+export function buildTextBytes(text, textEncoder) {
+  const encode = textEncoder || ((s) => new TextEncoder().encode(s));
+  const parts = [CMD.init, CMD.alignLeft, encode(text + '\n'), CMD.feed, CMD.feed, CMD.feed, CMD.cutPartial];
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) { out.set(p, offset); offset += p.length; }
+  return out;
+}
+
 // ──────── 헬퍼 ──────────────────────────────────────────────
 
 function centerText(s, width = COL_WIDTH) {

@@ -465,6 +465,13 @@ export default function makeStyles(scale = 1) {
   totalLabel: { fontSize: fp(11), color: '#6b7280' },
   totalValue: { fontSize: fp(15), color: '#111827', fontWeight: '800' },
   totalValuePhone: { fontSize: fp(12) },
+  printSlipBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#374151',
+  },
+  printSlipBtnText: { fontSize: fp(14) },
   doneBtn: {
     paddingHorizontal: 14,
     paddingVertical: 10,

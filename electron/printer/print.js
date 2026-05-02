@@ -18,7 +18,7 @@
 //   });
 
 const net = require('node:net');
-const { buildReceiptText, buildReceiptBytes } = require('../../utils/escposBuilder');
+const { buildReceiptText, buildReceiptBytes, buildTextBytes } = require('../../utils/escposBuilder');
 
 // 매장이 프린터 모델 결정 후 활성화. 그 전엔 simulate 가 default.
 function getDefaultOptions() {
@@ -39,15 +39,15 @@ async function printReceiptIpc(receipt, options = {}) {
   const opts = { ...getDefaultOptions(), ...options };
   try {
     if (opts.mode === 'simulate') {
-      const text = buildReceiptText(receipt);
-      // 실제 출력 안 함 — 콘솔에만 표시. 매장 PC 의 dev 검증용.
+      // rawText: 주문지 등 미리 만들어진 텍스트 직접 전달. 없으면 결제영수증 빌더 사용.
+      const text = receipt.rawText || buildReceiptText(receipt);
       // eslint-disable-next-line no-console
       console.log('[printer/simulate] ----- begin -----\n' + text + '\n----- end -----');
       return { ok: true, mode: 'simulate', info: { lines: text.split('\n').length } };
     }
 
     if (opts.mode === 'network') {
-      const bytes = buildReceiptBytes(receipt);
+      const bytes = receipt.rawText ? buildTextBytes(receipt.rawText) : buildReceiptBytes(receipt);
       const info = await sendToNetworkPrinter(bytes, opts);
       return { ok: true, mode: 'network', info };
     }
@@ -126,7 +126,7 @@ async function sendToUsbPrinter(receipt, opts) {
     throw new Error(`USB 프린터 연결 안 됨: ${opts.iface}`);
   }
 
-  const text = buildReceiptText(receipt);
+  const text = receipt.rawText || buildReceiptText(receipt);
   printer.println(text);
   printer.cut();
   await printer.execute();
