@@ -24,6 +24,7 @@ import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
+import DeliveryMapModal from '../components/DeliveryMapModal';
 
 export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [subTab, setSubTab] = useState('기본홀');
@@ -71,6 +72,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const { width, height, isXS, isSM, isMD, scale } = useResponsive();
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
+  const [mapInfo, setMapInfo] = useState(null);
   // 모든 화면을 한 화면에 Fit — 항상 5 × 4 그리드로 표시
   const isCompact = width < 1200 || height < 700;
   const cols = 5;
@@ -420,11 +422,27 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                 </View>
               </View>
               {t.type === 'delivery' && deliveryAddr ? (
-                <Text style={styles.deliveryAddr} numberOfLines={1}>
-                  📍 {deliveryAddr}
-                  {distanceLabel ? ` · ${distanceLabel}` : ''}
-                  {' 🗺️'}
-                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const dk = normalizeAddressKey(deliveryAddr);
+                    const de = dk ? addressBook?.entries?.[dk] : null;
+                    setMapInfo({
+                      storeCoord: typeof storeInfo?.lat === 'number'
+                        ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
+                      deliveryCoord: typeof de?.lat === 'number'
+                        ? { lat: de.lat, lng: de.lng } : null,
+                      deliveryAddr,
+                      distanceLabel,
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.deliveryAddr} numberOfLines={1}>
+                    📍 {deliveryAddr}
+                    {distanceLabel ? ` · ${distanceLabel}` : ''}
+                    {' 🗺️'}
+                  </Text>
+                </TouchableOpacity>
               ) : null}
               {(() => {
                 const shown = order.items.slice(0, ITEMS_VISIBLE_LIMIT);
@@ -602,26 +620,21 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       </TouchableOpacity>
     );
 
-    // 배달 카드 — DeliveryMapSwiper 로 감싸서 위 스와이프 시 지도 오버레이 표시
+    // 배달 카드 — 위 스와이프로 지도 열기 (PC 에서는 🗺️ 클릭)
     if (t.type === 'delivery') {
       const dKey = deliveryAddr ? normalizeAddressKey(deliveryAddr) : null;
       const dEntry = dKey ? addressBook?.entries?.[dKey] : null;
+      const openMap = () =>
+        setMapInfo({
+          storeCoord: typeof storeInfo?.lat === 'number'
+            ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
+          deliveryCoord: typeof dEntry?.lat === 'number'
+            ? { lat: dEntry.lat, lng: dEntry.lng } : null,
+          deliveryAddr,
+          distanceLabel,
+        });
       return (
-        <DeliveryMapSwiper
-          key={t.id}
-          storeCoord={
-            typeof storeInfo?.lat === 'number'
-              ? { lat: storeInfo.lat, lng: storeInfo.lng }
-              : null
-          }
-          deliveryCoord={
-            typeof dEntry?.lat === 'number'
-              ? { lat: dEntry.lat, lng: dEntry.lng }
-              : null
-          }
-          deliveryAddr={deliveryAddr}
-          distanceLabel={distanceLabel}
-        >
+        <DeliveryMapSwiper key={t.id} onSwipeUp={openMap}>
           {cardNode}
         </DeliveryMapSwiper>
       );
@@ -1077,6 +1090,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           }}
         />
       ) : null}
+
+      {/* 배달 지도 오버레이 — 🗺️ 클릭 또는 위 스와이프로 열림 */}
+      <DeliveryMapModal
+        visible={!!mapInfo}
+        onClose={() => setMapInfo(null)}
+        storeCoord={mapInfo?.storeCoord}
+        deliveryCoord={mapInfo?.deliveryCoord}
+        deliveryAddr={mapInfo?.deliveryAddr}
+        distanceLabel={mapInfo?.distanceLabel}
+      />
     </View>
   );
 }
