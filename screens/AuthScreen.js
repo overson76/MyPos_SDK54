@@ -199,6 +199,24 @@ export default function AuthScreen() {
 
 // ── 홈: 두 옵션 카드 ────────────────────────────────────────────
 function HomeView({ onCreate, onJoin }) {
+  const handlePcReset = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      navigator.serviceWorker?.getRegistrations().then(r => r.forEach(x => x.unregister()));
+      caches?.keys().then(k => k.forEach(x => caches.delete(x)));
+      // IndexedDB 전체 초기화
+      if (window.indexedDB?.databases) {
+        window.indexedDB.databases().then(dbs => {
+          dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
+        });
+      }
+      localStorage?.clear();
+      setTimeout(() => window.location.reload(), 500);
+    } catch (_) {
+      window.location.reload();
+    }
+  };
+
   return (
     <View style={styles.center}>
       <Text style={styles.brand}>MyPos</Text>
@@ -220,6 +238,13 @@ function HomeView({ onCreate, onJoin }) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* PC 연동 끊겼을 때 캐시 초기화 버튼 (웹/Electron 전용) */}
+      {typeof window !== 'undefined' && (
+        <TouchableOpacity onPress={handlePcReset} style={styles.resetBtn}>
+          <Text style={styles.resetBtnText}>🔄 PC 연동 초기화</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -630,5 +655,14 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#2563eb',
     borderRadius: 4,
+  },
+  resetBtn: {
+    marginTop: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  resetBtnText: {
+    fontSize: 12,
+    color: '#9ca3af',
   },
 });
