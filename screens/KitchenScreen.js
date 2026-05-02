@@ -20,6 +20,9 @@ import {
 } from '../utils/notify';
 import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
+import { buildOrderSlipText } from '../utils/escposBuilder';
+import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+import OrderSlipPicker from '../components/OrderSlipPicker';
 
 const typeLabels = {
   regular: '매장',
@@ -41,6 +44,9 @@ export default function KitchenScreen() {
   const { items: menuItems, optionsList: OPTIONS_CATALOG } = useMenu();
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
   const [highlightMenuId, setHighlightMenuId] = useState(null);
+  // 주문지 출력 피커 — null이면 닫힘, 주문 객체이면 열림
+  const [slipOrder, setSlipOrder] = useState(null);
+  const printerAvailable = isPrinterAvailable();
   // 주문 경과 분수 표시 — 15초마다 리렌더
   const [nowTick, setNowTick] = useState(Date.now());
   useEffect(() => {
@@ -761,6 +767,17 @@ export default function KitchenScreen() {
                   {total.toLocaleString()}원
                 </Text>
               </View>
+              {printerAvailable && (
+                <TouchableOpacity
+                  style={[styles.printSlipBtn, isPhone && styles.doneBtnPhone]}
+                  onPress={() => setSlipOrder(o)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.printSlipBtnText, isPhone && styles.doneBtnTextPhone]}>
+                    🖨️
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.doneBtn, isPhone && styles.doneBtnPhone, isReady && styles.doneBtnReady]}
                 onPress={() => {
@@ -784,6 +801,39 @@ export default function KitchenScreen() {
       })}
       </ScrollView>
       {renderSidebar()}
+
+      <OrderSlipPicker
+        visible={!!slipOrder}
+        isDelivery={slipOrder?.table?.type === 'delivery'}
+        isFresh={!(slipOrder?.confirmedItems?.length > 0)}
+        onClose={() => setSlipOrder(null)}
+        onPrint={(kinds) => {
+          if (!slipOrder) return;
+          const rows = computeDiffRows(
+            slipOrder.items,
+            slipOrder.confirmedItems || []
+          );
+          const resolvedRows = rows.map((r) => ({
+            ...r,
+            item: {
+              ...r.item,
+              optionLabels: (r.item.options || [])
+                .map((oid) => OPTIONS_CATALOG.find((o) => o.id === oid)?.label)
+                .filter(Boolean),
+            },
+          }));
+          const slipText = buildOrderSlipText({
+            tableLabel: slipOrder.table?.label || slipOrder.tableId,
+            isDelivery: slipOrder.table?.type === 'delivery',
+            deliveryAddress: slipOrder.deliveryAddress,
+            rows: resolvedRows,
+            kinds,
+            slippedAt: Date.now(),
+          });
+          printReceipt({ rawText: slipText }).catch(() => {});
+          setSlipOrder(null);
+        }}
+      />
     </View>
   );
 }

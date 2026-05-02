@@ -287,8 +287,9 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         ? Math.max(0, Math.floor((nowTick - order.readyAt) / 60000))
         : null;
 
-    // 4개 초과시 펼쳐보기 칩 — top row 뱃지 영역에 노출. items list 는 4개 한도로 표시.
-    const ITEMS_VISIBLE_LIMIT = 4;
+    // isCompact(폰/소형)면 4개 고정. 큰 화면은 scale 비례로 늘어남.
+    // scale 은 폭 기준이지만 타일 높이도 폭에 비례해 커지므로 함께 활용.
+    const ITEMS_VISIBLE_LIMIT = isCompact ? 4 : Math.min(8, Math.round(4 * scale));
     const overflowCount = Math.max(
       0,
       (order.items?.length || 0) - ITEMS_VISIBLE_LIMIT
