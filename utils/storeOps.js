@@ -116,7 +116,9 @@ export async function createStore({ name, displayName }) {
   };
 }
 
-// ─── 매장 코드로 매장 찾기 (직원 가입 전 미리보기) ──────────
+// ─── 매장 코드로 매장 찾기 (가입 전 미리보기) ──────────
+// hasRevenuePin: AuthScreen 이 "대표로 가입(PIN 인증)" 옵션 활성화 여부 결정에 사용.
+// code: lastStore 캐시에 저장하기 위해 함께 반환 (가입 후 사고 시 자가 복구용).
 export async function findStoreByCode(rawCode) {
   const db = requireDb();
   const code = normalizeStoreCode(rawCode);
@@ -133,7 +135,13 @@ export async function findStoreByCode(rawCode) {
     throw new Error('매장 정보를 불러올 수 없습니다.');
   }
   const store = storeSnap.data();
-  return { storeId, name: store.name, ownerId: store.ownerId };
+  return {
+    storeId,
+    name: store.name,
+    code,
+    ownerId: store.ownerId,
+    hasRevenuePin: !!(store.revenuePinHash && store.revenuePinSalt),
+  };
 }
 
 // ─── 가입 요청 (직원) ────────────────────────────────────────

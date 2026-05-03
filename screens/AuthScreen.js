@@ -187,14 +187,26 @@ export default function AuthScreen() {
     }
   };
 
-  const handleRequestJoin = async () => {
+  // mode: 'staff' (기본) | 'owner' (매장 PIN 인증). owner 면 즉시 입장, staff 면 승인 대기.
+  const handleRequestJoin = async ({ mode, pin } = { mode: 'staff' }) => {
     if (busy || !previewStore) return;
     setBusy(true);
     try {
-      await requestJoin({ storeId: previewStore.storeId, displayName: staffName });
-      markPending({ storeId: previewStore.storeId, displayName: staffName });
+      if (mode === 'owner') {
+        const result = await rejoinAsOwnerWithPin({
+          storeId: previewStore.storeId,
+          plainPin: pin,
+          displayName: staffName,
+        });
+        addBreadcrumb('auth.joinAsOwner.success', { storeId: result.storeId });
+        await markJoined(result);
+      } else {
+        await requestJoin({ storeId: previewStore.storeId, displayName: staffName });
+        markPending({ storeId: previewStore.storeId, displayName: staffName });
+      }
     } catch (e) {
-      showAlert('오류', e.message || '가입 요청에 실패했습니다.');
+      reportError(e, { ctx: 'AuthScreen.handleRequestJoin', mode, storeId: previewStore?.storeId });
+      showAlert('오류', e.message || '가입에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -504,7 +516,10 @@ function JoinInputView({ code, setCode, busy, onSubmit, onBack }) {
   );
 }
 
-// ── 매장 미리보기 + 본인 이름 입력 ───────────────────────────────
+// ── 매장 미리보기 + 본인 이름 입력 (+ 대표 모드 PIN 인증) ────────
+// mode='staff' (기본): 가입 요청 → 다른 owner 승인 후 입장.
+// mode='owner': 매장 PIN 입력 → 즉시 입장 (가족 사업 / 본인 다중 기기에 유리).
+//   매장 PIN 미설정 매장이면 owner 옵션 비활성 + 안내.
 function JoinConfirmView({
   previewStore,
   code,
@@ -514,7 +529,15 @@ function JoinConfirmView({
   onSubmit,
   onBack,
 }) {
-  const canSubmit = staffName.trim() && !busy;
+  const [mode, setMode] = useState('staff');
+  const [pin, setPin] = useState('');
+  const ownerAvailable = !!previewStore.hasRevenuePin;
+
+  const canSubmit =
+    staffName.trim() &&
+    !busy &&
+    (mode === 'staff' || (mode === 'owner' && pin.length >= 4));
+
   return (
     <View style={styles.formCenter}>
       <BackBtn onPress={onBack} />
@@ -523,27 +546,82 @@ function JoinConfirmView({
       <View style={styles.codeBadge}>
         <Text style={styles.codeBadgeText}>{formatStoreCode(normalizeStoreCode(code))}</Text>
       </View>
+
+      {/* 가입 모드 선택 — staff (기본) vs owner (PIN 필요) */}
+      <View style={styles.modeRow}>
+        <TouchableOpacity
+          style={[styles.modeOption, mode === 'staff' && styles.modeOptionActive]}
+          onPress={() => setMode('staff')}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.modeOptionTitle, mode === 'staff' && styles.modeOptionTitleActive]}>
+            직원으로 가입
+          </Text>
+          <Text style={styles.modeOptionDesc}>대표 승인 후 입장</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.modeOption,
+            mode === 'owner' && styles.modeOptionActive,
+            !ownerAvailable && styles.modeOptionDisabled,
+          ]}
+          onPress={() => ownerAvailable && setMode('owner')}
+          activeOpacity={ownerAvailable ? 0.85 : 1}
+          disabled={!ownerAvailable}
+        >
+          <Text style={[styles.modeOptionTitle, mode === 'owner' && styles.modeOptionTitleActive]}>
+            대표로 가입
+          </Text>
+          <Text style={styles.modeOptionDesc}>
+            {ownerAvailable ? '매장 PIN 인증 → 즉시' : '매장 PIN 미설정'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>본인 표시 이름</Text>
         <TextInput
           style={styles.input}
           value={staffName}
           onChangeText={setStaffName}
-          placeholder="예: 김알바"
+          placeholder={mode === 'owner' ? '예: 사장' : '예: 김알바'}
           placeholderTextColor="#9ca3af"
           maxLength={20}
         />
       </View>
-      <Text style={styles.note}>대표가 승인하면 자동으로 매장에 들어옵니다.</Text>
+
+      {mode === 'owner' && (
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>매장 PIN (4~8자리)</Text>
+          <TextInput
+            style={[styles.input, styles.codeInput]}
+            value={pin}
+            onChangeText={setPin}
+            placeholder="••••"
+            placeholderTextColor="#cbd5e1"
+            keyboardType="number-pad"
+            secureTextEntry
+            maxLength={8}
+          />
+        </View>
+      )}
+
+      <Text style={styles.note}>
+        {mode === 'owner'
+          ? '⚠ 매장 PIN 알면 누구나 대표 가능. 가족 사업 / 본인 다중 기기에 적합.'
+          : '대표가 승인하면 자동으로 매장에 들어옵니다.'}
+      </Text>
       <TouchableOpacity
         style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-        onPress={onSubmit}
+        onPress={() => onSubmit({ mode, pin })}
         disabled={!canSubmit}
       >
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.submitBtnText}>가입 요청 보내기</Text>
+          <Text style={styles.submitBtnText}>
+            {mode === 'owner' ? '대표로 즉시 가입' : '가입 요청 보내기'}
+          </Text>
         )}
       </TouchableOpacity>
     </View>
@@ -883,4 +961,33 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   lastStoreForgetText: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+
+  // 가입 모드 토글 (직원 vs 대표)
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    marginBottom: 16,
+  },
+  modeOption: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  modeOptionActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#2563eb',
+  },
+  modeOptionDisabled: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+    opacity: 0.5,
+  },
+  modeOptionTitle: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
+  modeOptionTitleActive: { color: '#2563eb' },
+  modeOptionDesc: { fontSize: 11, color: '#6b7280', textAlign: 'center' },
 });
