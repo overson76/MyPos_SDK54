@@ -20,6 +20,7 @@ import { loadJSON, saveJSON, removeKey } from './persistence';
 import { getFirestore, getCurrentUid } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
+import { rememberStore } from './lastStore';
 
 const StoreContext = createContext(null);
 
@@ -148,6 +149,8 @@ export function StoreProvider({ children }) {
         };
         setStoreInfo(next);
         await saveJSON(CACHE_KEY, { storeId, role: member.role });
+        // lastStore 영구 캐시 — 익명 UID 손실 시 매장 코드 prefill 용.
+        try { await rememberStore(next); } catch {}
         setState(STORE_STATE.JOINED);
       },
       (err) => {
@@ -239,6 +242,8 @@ export function StoreProvider({ children }) {
       // info: { storeId, code, name, ownerId, role, displayName }
       const cacheData = { storeId: info.storeId, role: info.role };
       await saveJSON(CACHE_KEY, cacheData);
+      // lastStore 영구 캐시 — 익명 UID 손실 시 매장 코드 prefill 용.
+      try { await rememberStore(info); } catch {}
       // Electron(.exe) 재설치 대비 파일에도 저장
       if (typeof window !== 'undefined' && window.mypos?.saveMembership) {
         try { await window.mypos.saveMembership(cacheData); } catch {}

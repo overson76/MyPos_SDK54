@@ -29,11 +29,13 @@ import {
   cancelJoinRequest,
   formatStoreCode,
   normalizeStoreCode,
+  rejoinAsOwnerWithPin,
 } from '../utils/storeOps';
 import { migrateLocalToCloud } from '../utils/migrateLocalToCloud';
 // RN Alert.alert 가 web 에서 silent no-op → 가입 흐름 에러가 사용자에게 안 보이는 문제 회피.
 import { alert as showAlert } from '../utils/alertCompat';
 import { addBreadcrumb, reportError } from '../utils/sentry';
+import { getLastStore, forgetLastStore } from '../utils/lastStore';
 
 const MODE = {
   HOME: 'home',
@@ -42,6 +44,7 @@ const MODE = {
   JOIN_CONFIRM: 'joinConfirm',
   CREATED: 'created',
   MIGRATING: 'migrating',
+  REJOIN_OWNER: 'rejoinOwner', // 익명 UID 손실 후 매장 PIN 으로 owner 자가 복구
 };
 
 export default function AuthScreen() {
@@ -58,6 +61,63 @@ export default function AuthScreen() {
   const [code, setCode] = useState('');
   const [staffName, setStaffName] = useState('');
   const [previewStore, setPreviewStore] = useState(null);
+
+  // 마지막 가입 매장 캐시 — 익명 UID 손실 시 자동 복구 prefill 용.
+  const [lastStore, setLastStore] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cached = await getLastStore();
+      if (alive) setLastStore(cached);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // 이전 매장 다시 시작 — staff 면 즉시 가입 요청, owner 면 PIN 인증 화면으로.
+  const handleRejoin = async () => {
+    if (busy || !lastStore) return;
+    if (lastStore.role === 'owner') {
+      setMode(MODE.REJOIN_OWNER);
+      return;
+    }
+    // staff: lastStore.code 로 매장 다시 찾고 가입 요청 — 본인 이름은 lastStore.displayName 자동
+    setBusy(true);
+    try {
+      const store = await findStoreByCode(lastStore.code);
+      const name = (lastStore.displayName || '').trim() || '직원';
+      await requestJoin({ storeId: store.storeId, displayName: name });
+      markPending({ storeId: store.storeId, displayName: name });
+    } catch (e) {
+      reportError(e, { ctx: 'AuthScreen.handleRejoin.staff', storeId: lastStore?.storeId });
+      showAlert('오류', e?.message || '재가입 요청에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejoinAsOwner = async ({ pin, name }) => {
+    if (busy || !lastStore) return;
+    setBusy(true);
+    try {
+      const result = await rejoinAsOwnerWithPin({
+        storeId: lastStore.storeId,
+        plainPin: pin,
+        displayName: name,
+      });
+      addBreadcrumb('auth.rejoinAsOwner.success', { storeId: result.storeId });
+      await markJoined(result);
+    } catch (e) {
+      reportError(e, { ctx: 'AuthScreen.handleRejoinAsOwner', storeId: lastStore?.storeId });
+      showAlert('복구 실패', e?.message || '대표 권한 복구에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleForgetLastStore = async () => {
+    await forgetLastStore();
+    setLastStore(null);
+  };
 
   // ── 가입 승인 대기 화면 (별도 분기) ──────────────────────────
   if (state === STORE_STATE.PENDING_APPROVAL) {
@@ -152,6 +212,18 @@ export default function AuthScreen() {
             <HomeView
               onCreate={() => setMode(MODE.CREATE)}
               onJoin={() => setMode(MODE.JOIN_INPUT)}
+              lastStore={lastStore}
+              onRejoin={handleRejoin}
+              onForgetLastStore={handleForgetLastStore}
+              busy={busy}
+            />
+          )}
+          {mode === MODE.REJOIN_OWNER && lastStore && (
+            <RejoinOwnerView
+              lastStore={lastStore}
+              busy={busy}
+              onSubmit={handleRejoinAsOwner}
+              onBack={() => setMode(MODE.HOME)}
             />
           )}
           {mode === MODE.CREATE && (
@@ -197,8 +269,8 @@ export default function AuthScreen() {
   );
 }
 
-// ── 홈: 두 옵션 카드 ────────────────────────────────────────────
-function HomeView({ onCreate, onJoin }) {
+// ── 홈: 두 옵션 카드 (+ 이전 매장 prefill 카드) ─────────────────
+function HomeView({ onCreate, onJoin, lastStore, onRejoin, onForgetLastStore, busy }) {
   const handlePcReset = async () => {
     try {
       if (Platform.OS === 'web') {
@@ -229,6 +301,37 @@ function HomeView({ onCreate, onJoin }) {
       <Text style={styles.brand}>MyPos</Text>
       <Text style={styles.tagline}>매장을 시작하거나 참여하세요</Text>
 
+      {/* 이전 매장 카드 — TestFlight 새 빌드 / .exe autoUpdater 등으로 익명 UID 손실 후 자동 복구.
+          owner 였으면 매장 PIN 인증, staff 였으면 즉시 가입 요청. */}
+      {lastStore && (
+        <View style={styles.lastStoreCard}>
+          <Text style={styles.lastStoreLabel}>이전에 사용한 매장</Text>
+          <Text style={styles.lastStoreName}>{lastStore.name || '(이름 없음)'}</Text>
+          <Text style={styles.lastStoreMeta}>
+            {formatStoreCode(lastStore.code)} · {lastStore.role === 'owner' ? '대표' : '직원'}
+          </Text>
+          <View style={styles.lastStoreBtnRow}>
+            <TouchableOpacity
+              style={[styles.lastStoreSubmitBtn, busy && styles.lastStoreSubmitBtnDisabled]}
+              onPress={onRejoin}
+              disabled={busy}
+              activeOpacity={0.85}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.lastStoreSubmitText}>
+                  {lastStore.role === 'owner' ? '대표로 다시 시작' : '가입 요청 다시 보내기'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onForgetLastStore} style={styles.lastStoreForgetBtn}>
+              <Text style={styles.lastStoreForgetText}>잊기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.optionRow}>
         <TouchableOpacity style={styles.primaryCard} onPress={onCreate} activeOpacity={0.85}>
           <Text style={styles.primaryCardTitle}>새 매장 만들기</Text>
@@ -252,6 +355,62 @@ function HomeView({ onCreate, onJoin }) {
           <Text style={styles.resetBtnText}>🔄 PC 연동 초기화</Text>
         </TouchableOpacity>
       )}
+    </View>
+  );
+}
+
+// ── owner 자가 복구: 매장 PIN 인증 ──────────────────────────────
+// 익명 UID 손실로 owner 권한을 잃은 대표가 본인 매장에 다시 owner 로 들어옴.
+// 매장 PIN 미설정이면 사용자에게 안내만.
+function RejoinOwnerView({ lastStore, busy, onSubmit, onBack }) {
+  const [pin, setPin] = useState('');
+  const [name, setName] = useState(lastStore.displayName || '');
+  const canSubmit = pin.length >= 4 && name.trim() && !busy;
+  return (
+    <View style={styles.formCenter}>
+      <BackBtn onPress={onBack} />
+      <Text style={styles.formTitle}>{lastStore.name || '이전 매장'} 대표 복구</Text>
+      <Text style={styles.formSub}>
+        앱 새 버전이 깔리면서 대표 권한이 풀렸습니다.{'\n'}
+        매장 PIN 으로 본인 인증 후 권한을 복구합니다.
+      </Text>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>매장 PIN (4~8자리)</Text>
+        <TextInput
+          style={[styles.input, styles.codeInput]}
+          value={pin}
+          onChangeText={setPin}
+          placeholder="••••"
+          placeholderTextColor="#cbd5e1"
+          keyboardType="number-pad"
+          secureTextEntry
+          maxLength={8}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>본인 이름</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          maxLength={20}
+        />
+      </View>
+      <Text style={styles.note}>
+        ⚠ 매장 PIN 미설정 매장은 자동 복구 불가.{'\n'}
+        Firebase Console 에서 ownerId 직접 수정 필요.
+      </Text>
+      <TouchableOpacity
+        style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
+        onPress={() => onSubmit({ pin, name })}
+        disabled={!canSubmit}
+      >
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.submitBtnText}>대표 권한 복구</Text>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -672,4 +831,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
   },
+
+  // 이전 매장 prefill 카드
+  lastStoreCard: {
+    width: '100%',
+    maxWidth: 720,
+    backgroundColor: '#fef3c7',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  lastStoreLabel: {
+    fontSize: 12,
+    color: '#92400e',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  lastStoreName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  lastStoreMeta: {
+    fontSize: 13,
+    color: '#374151',
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  lastStoreBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  lastStoreSubmitBtn: {
+    flex: 1,
+    backgroundColor: '#f59e0b',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  lastStoreSubmitBtnDisabled: { backgroundColor: '#cbd5e1' },
+  lastStoreSubmitText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  lastStoreForgetBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  lastStoreForgetText: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
 });

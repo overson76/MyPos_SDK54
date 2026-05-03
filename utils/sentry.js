@@ -1,14 +1,17 @@
 // Sentry 에러 추적 초기화 + 헬퍼.
 // DSN 이 비어있으면 init 을 건너뛴다 — 개발 환경에서 Sentry 미설정 상태라도 앱이 안전하게 뜨도록.
 import * as Sentry from '@sentry/react-native';
+import Constants from 'expo-constants';
 
 // Sentry DSN 은 .env 의 EXPO_PUBLIC_SENTRY_DSN 에서 로드.
 // EXPO_PUBLIC_ prefix 변수는 빌드 시 RN 클라이언트 번들에 inline 됨.
 // .env 가 없거나 값 미설정이면 빈 문자열 → init skip (앱은 정상 동작).
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || '';
 
-// release / dist 식별자 — 빌드별 그루핑용. 추후 EAS Update 와 연동시 자동화 가능.
-const RELEASE = '1.0.0';
+// release 식별자 — app.json 의 version 을 자동으로 쓰도록 동적화.
+// 과거에 '1.0.0' 하드코딩되어 새 빌드(1.0.2 등)에서 발생한 사고를 옛 release 로 잘못 그루핑함.
+// 이제 Sentry 가 진짜 빌드 버전을 알 수 있어 어떤 빌드에서 발생했는지 정확히 추적 가능.
+const RELEASE = Constants.expoConfig?.version || Constants.manifest?.version || '0.0.0';
 
 let _initialized = false;
 
