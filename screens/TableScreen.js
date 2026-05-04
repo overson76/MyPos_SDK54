@@ -103,6 +103,32 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const { storeInfo } = useStore();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
 
+  // 전체 배달 지도 — 좌표 있는 배달 테이블을 한 화면에 모두 표시.
+  const openAllDeliveryMap = () => {
+    const deliveries = tables
+      .filter((t) => t.type === 'delivery')
+      .map((t) => {
+        const o = getOrder(t.id);
+        const addr = o?.deliveryAddress;
+        if (!addr) return null;
+        const key = normalizeAddressKey(addr);
+        const entry = key ? addressBook?.entries?.[key] : null;
+        const coord = entry && typeof entry.lat === 'number'
+          ? { lat: entry.lat, lng: entry.lng } : null;
+        const distLbl = coord && typeof storeInfo?.lat === 'number'
+          ? formatDistance(distanceKm(coord, { lat: storeInfo.lat, lng: storeInfo.lng }))
+          : null;
+        return { coord, addr, label: t.label || t.id, distanceLabel: distLbl };
+      })
+      .filter(Boolean);
+    if (!deliveries.length) return;
+    setMapInfo({
+      storeCoord: typeof storeInfo?.lat === 'number'
+        ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
+      deliveries,
+    });
+  };
+
   const exitAllModes = () => {
     setSplitMode(false);
     setMoveMode(null);
@@ -429,10 +455,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     setMapInfo({
                       storeCoord: typeof storeInfo?.lat === 'number'
                         ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
-                      deliveryCoord: typeof de?.lat === 'number'
-                        ? { lat: de.lat, lng: de.lng } : null,
-                      deliveryAddr,
-                      distanceLabel,
+                      deliveries: [{
+                        coord: typeof de?.lat === 'number' ? { lat: de.lat, lng: de.lng } : null,
+                        addr: deliveryAddr,
+                        label: t.label || t.id,
+                        distanceLabel,
+                      }],
                     });
                   }}
                   activeOpacity={0.7}
@@ -628,10 +656,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         setMapInfo({
           storeCoord: typeof storeInfo?.lat === 'number'
             ? { lat: storeInfo.lat, lng: storeInfo.lng } : null,
-          deliveryCoord: typeof dEntry?.lat === 'number'
-            ? { lat: dEntry.lat, lng: dEntry.lng } : null,
-          deliveryAddr,
-          distanceLabel,
+          deliveries: [{
+            coord: typeof dEntry?.lat === 'number' ? { lat: dEntry.lat, lng: dEntry.lng } : null,
+            addr: deliveryAddr,
+            label: t.label || t.id,
+            distanceLabel,
+          }],
         });
       return (
         <DeliveryMapSwiper key={t.id} onSwipeUp={openMap}>
@@ -688,6 +718,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               </TouchableOpacity>
             );
           })}
+          {/* 전체 배달 지도 — 배달 테이블이 하나 이상 있을 때만 표시 */}
+          {tables.some((t) => t.type === 'delivery') ? (
+            <TouchableOpacity style={styles.allMapBtn} onPress={openAllDeliveryMap}>
+              <Text style={styles.allMapBtnText}>🗺️ 배달지도</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.settingBtn}>
             <Text style={styles.settingIcon}>⚙</Text>
           </TouchableOpacity>
@@ -1093,14 +1129,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
 
       {/* 배달 지도 오버레이 — web 은 .js (iframe + Leaflet),
           폰은 .native.js (absolute overlay + WebView + Leaflet) 가 자동 선택됨.
-          구 EAS 빌드(WebView 미포함) 폰은 .native.js 안에서 안내 카드 fallback. */}
+          단일 배달: deliveries 배열 1개, 전체 배달 지도: 배열 N개. */}
       <DeliveryMapModal
         visible={!!mapInfo}
         onClose={() => setMapInfo(null)}
         storeCoord={mapInfo?.storeCoord}
-        deliveryCoord={mapInfo?.deliveryCoord}
-        deliveryAddr={mapInfo?.deliveryAddr}
-        distanceLabel={mapInfo?.distanceLabel}
+        deliveries={mapInfo?.deliveries || []}
       />
     </View>
   );

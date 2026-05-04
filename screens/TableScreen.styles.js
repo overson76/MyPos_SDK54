@@ -49,6 +49,14 @@ export default function makeStyles(scale = 1) {
   actionBtnTextActive: { color: '#fff', fontWeight: '700' },
   settingBtn: { padding: 6, marginLeft: 4 },
   settingIcon: { fontSize: fp(8), color: '#6b7280' },
+  allMapBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#1f2937',
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  allMapBtnText: { fontSize: fp(8), color: '#f9fafb', fontWeight: '700' },
 
   hintBar: {
     paddingVertical: 8,
