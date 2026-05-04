@@ -10,6 +10,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 날짜 | 파일 | 핵심 주제 | 커밋 |
 |---|---|---|---|
 | 2026-05-03 | [2026-05-03-q-and-a.md](2026-05-03-q-and-a.md) | 익명 UID 손실 자가복구 + 폰 지도 + 대표 가입 + CID 준비 | c523683, 37cb00d |
+| 2026-05-04 | [2026-05-04-firebase-pc-recovery-cid-map.md](2026-05-04-firebase-pc-recovery-cid-map.md) | Firebase v12 PC연동복구 + Cloudflare차단 + CID준비 + 배달지도경로 | 33f8606, d279775 |
 
 ---
 
