@@ -20,6 +20,7 @@ import { loadJSON, saveJSON, removeKey } from './persistence';
 import { getFirestore, getCurrentUid } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
+import { rememberStore } from './lastStore';
 
 const StoreContext = createContext(null);
 
@@ -53,6 +54,8 @@ export function StoreProvider({ children }) {
   const memberUnsubRef = useRef(null);
   const requestUnsubRef = useRef(null);
   const storeUnsubRef = useRef(null);
+  // store onSnapshot 이 먼저 도착하면 여기 캐시 — member 콜백의 storeRef.get() 실패 시 폴백.
+  const latestStoreDataRef = useRef(null);
 
   const teardown = useCallback(() => {
     if (memberUnsubRef.current) {
@@ -86,6 +89,7 @@ export function StoreProvider({ children }) {
       (snap) => {
         if (!snapExists(snap)) return;
         const store = snap.data();
+        latestStoreDataRef.current = store; // member 콜백 폴백용 캐시
         setStoreInfo((prev) => {
           if (!prev) return prev; // 멤버 정보 들어오기 전엔 부분 업데이트 의미 없음
           return {
@@ -124,12 +128,13 @@ export function StoreProvider({ children }) {
           return;
         }
         const member = snap.data();
-        let store = null;
+        // storeRef.get() 실패 시 onSnapshot 캐시로 폴백 — 코드/이름 null 방지.
+        let store = latestStoreDataRef.current;
         try {
           const storeSnap = await storeRef.get();
-          store = snapExists(storeSnap) ? storeSnap.data() : null;
+          if (snapExists(storeSnap)) store = storeSnap.data();
         } catch (e) {
-          // 매장 문서 읽기 실패 — 멤버 정보만으로 진행
+          // 매장 문서 읽기 실패 — onSnapshot 캐시 또는 null 로 진행
         }
         const next = {
           storeId,
@@ -148,6 +153,8 @@ export function StoreProvider({ children }) {
         };
         setStoreInfo(next);
         await saveJSON(CACHE_KEY, { storeId, role: member.role });
+        // lastStore 영구 캐시 — 익명 UID 손실 시 매장 코드 prefill 용.
+        try { await rememberStore(next); } catch {}
         setState(STORE_STATE.JOINED);
       },
       (err) => {
@@ -239,6 +246,8 @@ export function StoreProvider({ children }) {
       // info: { storeId, code, name, ownerId, role, displayName }
       const cacheData = { storeId: info.storeId, role: info.role };
       await saveJSON(CACHE_KEY, cacheData);
+      // lastStore 영구 캐시 — 익명 UID 손실 시 매장 코드 prefill 용.
+      try { await rememberStore(info); } catch {}
       // Electron(.exe) 재설치 대비 파일에도 저장
       if (typeof window !== 'undefined' && window.mypos?.saveMembership) {
         try { await window.mypos.saveMembership(cacheData); } catch {}

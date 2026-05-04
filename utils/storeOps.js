@@ -9,6 +9,7 @@
 import { getFirestore, getCurrentUid, serverTimestamp } from './firebase';
 import { addBreadcrumb } from './sentry';
 import { snapExists } from './firestoreCompat';
+import { verifyRevenuePin } from './revenuePin';
 
 // 매장 코드 알파벳 — 헷갈리는 글자(0/O, 1/I/L) 제외.
 // 31^8 ≈ 8.5조 가지 → 충돌 거의 없음.
@@ -115,7 +116,9 @@ export async function createStore({ name, displayName }) {
   };
 }
 
-// ─── 매장 코드로 매장 찾기 (직원 가입 전 미리보기) ──────────
+// ─── 매장 코드로 매장 찾기 (가입 전 미리보기) ──────────
+// hasRevenuePin: AuthScreen 이 "대표로 가입(PIN 인증)" 옵션 활성화 여부 결정에 사용.
+// code: lastStore 캐시에 저장하기 위해 함께 반환 (가입 후 사고 시 자가 복구용).
 export async function findStoreByCode(rawCode) {
   const db = requireDb();
   const code = normalizeStoreCode(rawCode);
@@ -132,7 +135,13 @@ export async function findStoreByCode(rawCode) {
     throw new Error('매장 정보를 불러올 수 없습니다.');
   }
   const store = storeSnap.data();
-  return { storeId, name: store.name, ownerId: store.ownerId };
+  return {
+    storeId,
+    name: store.name,
+    code,
+    ownerId: store.ownerId,
+    hasRevenuePin: !!(store.revenuePinHash && store.revenuePinSalt),
+  };
 }
 
 // ─── 가입 요청 (직원) ────────────────────────────────────────
@@ -374,4 +383,56 @@ export function subscribeMembers(storeId, onChange) {
         addBreadcrumb('store.members.error', { code: err?.code });
       }
     );
+}
+
+// ─── owner 자가 복구 — 매장 PIN 인증으로 본인 owner 멤버 등록 ──────────
+// 익명 UID 손실(TestFlight 새 빌드 / .exe autoUpdater 첫 부팅 / keychain 분리 등)로
+// 대표가 본인 매장 owner 권한을 잃은 경우, 매장 PIN 으로 본인 인증 후 owner 멤버 자가 등록.
+//
+// 보안 트레이드오프 (필수 인지):
+//   - 매장 PIN 알면 누구나 owner 가 될 수 있음 (직원이 PIN 알면 owner 탈취 가능)
+//   - 매장 PIN 미설정 매장은 자동 복구 불가능 — Firebase Console 에서 직접 ownerId 수정 필요
+//
+// stores.ownerId 는 변경 안 됨 (rules 가 변경 금지). isOwner() 는 members.role 기반이라
+// 권한은 정상 작동하지만, deleteStore() 는 stores.ownerId 와 비교하므로 새 owner 는 매장 삭제 불가.
+export async function rejoinAsOwnerWithPin({ storeId, plainPin, displayName }) {
+  const db = requireDb();
+  const uid = requireUid();
+
+  const storeRef = db.collection('stores').doc(storeId);
+  const snap = await storeRef.get();
+  if (!snapExists(snap)) throw new Error('매장을 찾을 수 없습니다.');
+  const store = snap.data();
+
+  if (!store.revenuePinHash || !store.revenuePinSalt) {
+    throw new Error(
+      '매장 PIN 이 설정돼 있지 않아 자동 복구가 불가능합니다.\n' +
+      '다른 owner 폰의 승인을 받거나, Firebase Console 에서 ownerId 를 직접 수정해주세요.'
+    );
+  }
+
+  const pinOk = await verifyRevenuePin(
+    { revenuePinHash: store.revenuePinHash, revenuePinSalt: store.revenuePinSalt },
+    plainPin
+  );
+  if (!pinOk) throw new Error('매장 PIN 이 일치하지 않습니다.');
+
+  // members/{uid} 에 owner 로 자가 등록.
+  // rules 통과: memberUid == uid() && role == 'owner' (firestore.rules:80).
+  await storeRef.collection('members').doc(uid).set({
+    role: 'owner',
+    displayName: (displayName || '대표').trim(),
+    joinedAt: serverTimestamp(),
+  });
+
+  addBreadcrumb('store.rejoinAsOwner', { storeId });
+
+  return {
+    storeId,
+    code: store.code,
+    name: store.name,
+    ownerId: store.ownerId, // 옛 ownerId 그대로 (rules 가 변경 금지)
+    role: 'owner',
+    displayName: (displayName || '대표').trim(),
+  };
 }

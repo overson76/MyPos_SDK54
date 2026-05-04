@@ -42,6 +42,7 @@ import {
   subscribeElectronUpdate,
 } from '../utils/electronUpdate';
 import { checkForUpdates } from '../utils/otaUpdates';
+import { hasRevenuePin } from '../utils/revenuePin';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -459,7 +460,9 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === PC 재연동 — 자진 탈퇴 + 캐시 초기화 + 새로고침. 운영자가 다시 승인하면 끝. === */}
+      {/* === PC 재연동 — 자진 탈퇴 + 캐시 초기화 + 새로고침.
+            직원: 운영자 다시 승인 후 재입장.
+            대표: 수익 PIN 있으면 재연동 가능 — 재접속 시 매장 코드 + PIN 으로 즉시 입장. === */}
       {Platform.OS === 'web' ? (
         <>
           <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>PC 연동</Text>
@@ -467,24 +470,32 @@ function SystemSettingsView() {
             <View style={sysStyles.rowText}>
               <Text style={sysStyles.label}>매장 재연동 (자진 탈퇴 → 재가입)</Text>
               <Text style={sysStyles.helper}>
-                PC 화면이 폰과 데이터가 다를 때 사용. 본인 멤버 등록을 정리하고{'\n'}
-                매장 참여 화면으로 돌아갑니다. 운영자가 다시 승인하면 정상 연결됩니다.
+                {isOwner
+                  ? hasRevenuePin(storeInfo)
+                    ? 'PC 를 초기화하고 매장 참여 화면으로 돌아갑니다.\n재접속 시 매장 코드 + 수익 PIN 으로 즉시 대표 입장.'
+                    : '⚠ 대표는 수익 PIN 을 먼저 설정해야 재연동할 수 있습니다.\n(PIN 없으면 재접속 시 폰에서 승인이 필요합니다)'
+                  : 'PC 화면이 폰과 데이터가 다를 때 사용. 본인 멤버 등록을 정리하고\n매장 참여 화면으로 돌아갑니다. 운영자가 다시 승인하면 정상 연결됩니다.'}
               </Text>
             </View>
             <TouchableOpacity
-              style={[sysStyles.btnDanger, isOwner && sysStyles.btnDisabled]}
-              disabled={!!isOwner}
+              style={[sysStyles.btnDanger, (isOwner && !hasRevenuePin(storeInfo)) && sysStyles.btnDisabled]}
+              disabled={!!(isOwner && !hasRevenuePin(storeInfo))}
               onPress={async () => {
-                if (isOwner) {
-                  window?.alert?.('대표는 재연동을 사용할 수 없습니다. 매장 삭제 메뉴를 사용하세요.');
+                if (isOwner && !hasRevenuePin(storeInfo)) {
+                  window?.alert?.('수익 PIN 을 먼저 설정하세요.\n매장 관리 탭 → 수익 PIN 설정 후 다시 시도하세요.');
                   return;
                 }
-                const ok = window?.confirm?.(
+                const ownerMsg =
+                  '대표 PC 연동을 해제합니다.\n\n' +
+                  '· 로컬 데이터/캐시 모두 초기화\n' +
+                  '· 재접속 시: 매장 코드 입력 → "대표로 가입" → 수익 PIN 입력\n\n' +
+                  '계속하시겠습니까?';
+                const staffMsg =
                   '본인을 매장에서 자진 탈퇴시킨 후 매장 참여 화면으로 돌아갑니다.\n\n' +
-                    '· 운영자 승인 후 다시 연결\n' +
-                    '· 로컬 데이터/캐시 모두 초기화\n\n' +
-                    '계속하시겠습니까?'
-                );
+                  '· 운영자 승인 후 다시 연결\n' +
+                  '· 로컬 데이터/캐시 모두 초기화\n\n' +
+                  '계속하시겠습니까?';
+                const ok = window?.confirm?.(isOwner ? ownerMsg : staffMsg);
                 if (!ok) return;
                 // 1) Firestore 에서 본인 멤버 문서 삭제 (자진 탈퇴)
                 try {

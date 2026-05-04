@@ -1091,18 +1091,17 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         />
       ) : null}
 
-      {/* 배달 지도 오버레이 — 웹(PC/Electron)에서만 렌더.
-          폰은 react-native-webview 가 EAS 빌드부터 포함됨. 구 빌드에서 크래시 방지. */}
-      {Platform.OS === 'web' ? (
-        <DeliveryMapModal
-          visible={!!mapInfo}
-          onClose={() => setMapInfo(null)}
-          storeCoord={mapInfo?.storeCoord}
-          deliveryCoord={mapInfo?.deliveryCoord}
-          deliveryAddr={mapInfo?.deliveryAddr}
-          distanceLabel={mapInfo?.distanceLabel}
-        />
-      ) : null}
+      {/* 배달 지도 오버레이 — web 은 .js (iframe + Leaflet),
+          폰은 .native.js (absolute overlay + WebView + Leaflet) 가 자동 선택됨.
+          구 EAS 빌드(WebView 미포함) 폰은 .native.js 안에서 안내 카드 fallback. */}
+      <DeliveryMapModal
+        visible={!!mapInfo}
+        onClose={() => setMapInfo(null)}
+        storeCoord={mapInfo?.storeCoord}
+        deliveryCoord={mapInfo?.deliveryCoord}
+        deliveryAddr={mapInfo?.deliveryAddr}
+        distanceLabel={mapInfo?.distanceLabel}
+      />
     </View>
   );
 }
