@@ -11,16 +11,20 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore as fsGetFirestore,
   collection as fsCollection,
   doc as fsDoc,
   getDoc as fsGetDoc,
+  getDocs as fsGetDocs,
   setDoc as fsSetDoc,
+  updateDoc as fsUpdateDoc,
   deleteDoc as fsDeleteDoc,
   onSnapshot as fsOnSnapshot,
   writeBatch as fsWriteBatch,
   runTransaction as fsRunTransaction,
-  enableIndexedDbPersistence,
+  persistentLocalCache,
+  persistentMultipleTabManager,
 } from 'firebase/firestore';
 import {
   getAuth as fsGetAuth,
@@ -67,8 +71,9 @@ export async function initFirebase() {
     return;
   }
 
-  // 이미 init 돼 있으면(HMR 등) 재사용.
-  const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
+  // 이미 init 돼 있으면(HMR 등) 재사용. 새 앱이면 initializeFirestore 로 캐시 구성.
+  const alreadyHadApp = getApps().length > 0;
+  const app = alreadyHadApp ? getApp() : initializeApp(cfg);
 
   const rawAuth = fsGetAuth(app);
   // PC 새로고침/재부팅 시 익명 uid 유지 — IndexedDB 기반 영속화.
@@ -78,13 +83,23 @@ export async function initFirebase() {
     // 일부 사파리 사설 모드에선 실패 가능 — 메모리 영속화로 자동 폴백.
   }
 
-  const rawDb = fsGetFirestore(app);
-  // 매장 인터넷 끊겨도 잠깐 버티게 IndexedDB 캐시 활성.
-  // 여러 탭 동시 사용 시 한 곳에서만 켜지므로 실패 가능 — 무시 OK.
-  try {
-    await enableIndexedDbPersistence(rawDb);
-  } catch (e) {
-    // failed-precondition (다른 탭에서 이미 켬) / unimplemented (브라우저 미지원)
+  // Firebase v11+ 에서 enableIndexedDbPersistence 가 제거됨.
+  // 새 앱이면 initializeFirestore 로 IndexedDB 캐시 구성 (새 API).
+  // 이미 있는 앱이면 getFirestore 로 기존 인스턴스 반환 (HMR 재설정 방지).
+  let rawDb;
+  if (!alreadyHadApp) {
+    try {
+      rawDb = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } catch (e) {
+      // failed-precondition (다른 탭에서 이미 켬) / 브라우저 미지원 시 메모리 캐시로 폴백.
+      rawDb = fsGetFirestore(app);
+    }
+  } else {
+    rawDb = fsGetFirestore(app);
   }
 
   _wrappedDb = wrapDb(rawDb);
@@ -164,7 +179,37 @@ function wrapCollection(rawCol) {
     // doc(id) 또는 doc() (auto-id) 모두 지원.
     doc: (id) =>
       wrapDocRef(id != null ? fsDoc(rawCol, String(id)) : fsDoc(rawCol)),
+    // getDocs 결과를 래핑 — doc.ref.delete() 등이 native처럼 동작하도록.
+    get: async () => {
+      const rawSnap = await fsGetDocs(rawCol);
+      return wrapQuerySnapshot(rawSnap);
+    },
     onSnapshot: (cb, errCb) => fsOnSnapshot(rawCol, cb, errCb),
+  };
+}
+
+// QuerySnapshot 래퍼 — deleteStore 등이 doc.ref.delete() 를 호출할 수 있도록.
+function wrapQuerySnapshot(rawSnap) {
+  return {
+    docs: rawSnap.docs.map((d) => ({
+      id: d.id,
+      data: () => d.data(),
+      exists: () => (typeof d.exists === 'function' ? d.exists() : !!d.exists),
+      metadata: d.metadata,
+      ref: {
+        _raw: d.ref,
+        id: d.ref.id,
+        delete: () => fsDeleteDoc(d.ref),
+        get: () => fsGetDoc(d.ref),
+        set: (data, opts) => opts ? fsSetDoc(d.ref, data, opts) : fsSetDoc(d.ref, data),
+        update: (data) => fsUpdateDoc(d.ref, data),
+        collection: (name) => wrapCollection(fsCollection(d.ref, name)),
+        onSnapshot: (cb, errCb) => fsOnSnapshot(d.ref, cb, errCb),
+      },
+    })),
+    empty: rawSnap.empty,
+    size: rawSnap.size,
+    metadata: rawSnap.metadata,
   };
 }
 
@@ -178,6 +223,8 @@ function wrapDocRef(rawDocRef) {
     get: () => fsGetDoc(rawDocRef),
     set: (data, opts) =>
       opts ? fsSetDoc(rawDocRef, data, opts) : fsSetDoc(rawDocRef, data),
+    // update — RNFirebase namespace 패턴 호환. setRevenuePin / clearRevenuePin 에서 사용.
+    update: (data) => fsUpdateDoc(rawDocRef, data),
     delete: () => fsDeleteDoc(rawDocRef),
     onSnapshot: (cb, errCb) => fsOnSnapshot(rawDocRef, cb, errCb),
   };
