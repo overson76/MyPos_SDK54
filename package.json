@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.2",
+  "version": "1.0.8",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -11,6 +11,8 @@
     "electron": "electron electron/main.js",
     "electron:kiosk": "cross-env MYPOS_KIOSK=1 electron electron/main.js",
     "build:web": "npx expo export --platform web",
+    "kis:build": "dotnet build electron/payment/bridge/KisPaymentBridge.csproj -c Release -p:Platform=x86",
+    "kis:test": "echo {\"dryRun\":true} | electron/payment/bridge/bin/x86/Release/net48/KisPaymentBridge.exe",
     "electron:build": "npm run deploy:web && electron-builder --config electron/builder.config.js",
     "test": "jest",
     "test:watch": "jest --watch"

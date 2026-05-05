@@ -34,6 +34,7 @@ import { checkForUpdates } from './utils/otaUpdates';
 import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
+import UpdateBanner from './components/UpdateBanner';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
 function CrashFallback({ error, resetError }) {
@@ -271,6 +272,9 @@ function MainApp() {
           handleTabPress('주문');
         }}
       />
+      {/* 자동 업데이트 진행/완료/오류 배너 — Electron(.exe) 환경에서만, downloading/downloaded/error 시만 표시.
+          PinchZoom 밖에 둬서 사장님이 화면 줌해도 배너는 고정 크기 유지. */}
+      <UpdateBanner />
       <PinchZoom>
         <View style={styles.zoomRoot}>
           <View style={styles.topTabs}>

@@ -107,40 +107,57 @@ function startCidListener(onIncomingCall) {
   _onCallCb = onIncomingCall;
 
   try {
+    // sip 라이브러리 내부 오류 — main process crash 방지.
+    // INVITE 처리 중 unhandled exception 이 터지면 Electron 전체가 종료됨.
+    sip.on('error', (e) => {
+      console.error('[cid] sip 내부 오류 (무시):', e && e.message || e);
+    });
+
     sip.start({
       host: '0.0.0.0',
       port: cfg.port,
       // UDP 기본 — 일부 환경에서 TCP 필요시 추가
     }, function(request) {
-      // ── INVITE: 전화 수신 ──────────────────────────────────────
-      if (request.method === 'INVITE') {
-        const raw = parseSipFrom(
-          request.headers['from'] || request.headers['p-asserted-identity']
-        );
-        const formatted = formatKoreanPhone(raw || '번호 없음');
-        console.info(`[cid] 📞 착신: ${formatted}`);
+      // 콜백 전체를 try/catch — unhandled exception → main process crash 방지.
+      try {
+        // ── INVITE: 전화 수신 ──────────────────────────────────────
+        if (request.method === 'INVITE') {
+          const raw = parseSipFrom(
+            request.headers['from'] || request.headers['p-asserted-identity']
+          );
+          const formatted = formatKoreanPhone(raw || '번호 없음');
+          console.info(`[cid] 📞 착신: ${formatted}`);
 
-        // 180 Ringing (전화 수신 알림만, 자동 응답 X)
-        try {
-          sip.send(sip.makeResponse(request, 180, 'Ringing'));
-        } catch {}
+          // 180 Ringing (전화 수신 알림만, 자동 응답 X)
+          try {
+            sip.send(sip.makeResponse(request, 180, 'Ringing'));
+          } catch {}
 
-        if (_onCallCb && raw) {
-          _onCallCb(raw, formatted);
+          // 콜백도 try/catch — Firebase 기록 실패해도 앱 유지.
+          try {
+            if (_onCallCb && raw) {
+              _onCallCb(raw, formatted);
+            }
+          } catch (cbErr) {
+            console.error('[cid] 착신 콜백 오류:', cbErr && cbErr.message || cbErr);
+          }
         }
-      }
 
-      // ── 401/407: 인증 필요 (REGISTER 응답) ─────────────────────
-      if ((request.status === 401 || request.status === 407) &&
-          request.headers['www-authenticate']) {
-        const auth = request.headers['www-authenticate'];
-        const authHeader = sip.digest(
-          { user: cfg.user, password: cfg.pass },
-          'REGISTER',
-          `sip:${cfg.domain}`,
-          auth
-        );
-        sendRegister(cfg, 2, authHeader);
+        // ── 401/407: 인증 필요 (REGISTER 응답) ─────────────────────
+        if ((request.status === 401 || request.status === 407) &&
+            request.headers['www-authenticate']) {
+          const auth = request.headers['www-authenticate'];
+          const authHeader = sip.digest(
+            { user: cfg.user, password: cfg.pass },
+            'REGISTER',
+            `sip:${cfg.domain}`,
+            auth
+          );
+          sendRegister(cfg, 2, authHeader);
+        }
+      } catch (e) {
+        // SIP 메시지 처리 중 예외 — 로그만 남기고 앱 유지.
+        console.error('[cid] SIP 요청 처리 오류 (무시):', e && e.message || e);
       }
     });
 

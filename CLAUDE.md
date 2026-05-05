@@ -236,6 +236,85 @@ npm run electron:build   # Windows portable .exe + NSIS installer 빌드 (electr
 - ✅ **Phase 2.1**: 결제 후 영수증 자동 출력 (PaymentMethodPicker 토글)
 - ✅ **Phase 3**: 자동 업데이트 (electron-updater + GitHub Releases)
 - ✅ **Phase 4**: 오프라인 캐시 (dist/ 번들 + network-first + local fallback)
+- ✅ **Phase 5** (코드만, KIS 가맹/단말기 결정 후 활성화): KIS-NAGT 카드 단말기 결제 (simulate / bridge)
+
+### Phase 5 — KIS-NAGT 카드 단말기 결제
+
+KIS 한국정보통신 VAN 단말기(KIS-PAD 등) 와 매장 PC 의 .exe 가 직접 통신해서 카드 결제를 자동화. **KIS 가맹 + 단말기 도입 전이라도 simulate 모드로 모든 매출/회계 흐름 검증 가능** — 영수증 프린터(Phase 2)와 동일한 패턴.
+
+기술적 제약: KIS 의 결제 API 가 32 비트 OCX(ActiveX COM)로 제공됨. Node.js/Electron 에서 직접 호출 불가 → **얇은 C# 콘솔 앱 브릿지** 가 사이에 들어감. 사장님(개발자) 의 C#/.NET 경험을 활용한 자연스러운 선택.
+
+```
+Electron 메인 (electron/payment/kis.js)
+   ↓ child_process.spawn + stdin JSON
+KisPaymentBridge.exe (C#, .NET Framework 4.8, x86)
+   ↓ COM Late Binding (dynamic) — Type.GetTypeFromProgID
+KIS OCX (KisPosAgent.KisPosAgent)
+   ↓ TCP 127.0.0.1:1515
+KIS-NAGT (Network Agent — 매장 카운터 PC 에 설치)
+   ↓
+KIS-PAD 카드 단말기 (LAN 공유기)
+   ↓
+카드사 승인 서버
+```
+
+#### 코드
+- `electron/payment/bridge/` — C# 브릿지 프로젝트.
+  - `KisPaymentBridge.csproj` — `net48`, `Platform=x86`, `UseWindowsForms=true`. 32 비트 강제(64 비트로 빌드하면 ProgID 못 찾음). WinForms 는 향후 비동기 Event 모드 ApplicationContext 용.
+  - `Program.cs` — `[STAThread]` Main → stdin JSON 읽기 → OCX 인스턴스화 → 프로퍼티 설정 → `KIS_ICApproval()` → 응답 JSON stdout. 동기 모드 (`inUnitLockYN="Y"`).
+  - `Models.cs` — `PaymentRequest` / `PaymentResponse` DTO. Newtonsoft.Json 직렬화.
+  - `bin/` `obj/` 는 gitignored. `npm run kis:build` 로 빌드.
+- `electron/payment/kis.js` — Electron IPC 측. `simulate` (가짜 승인) / `bridge` (실 결제) 두 모드.
+  - `resolveBridgePath()` — 패키징된 `process.resourcesPath/bridge/` 1순위, dev 는 `bin/Release/net48/`.
+  - 실패 시 항상 `{ ok, error }` 반환 — 결제 흐름이 절대 throw 안 함.
+- `electron/main.js` — `ipcMain.handle('mypos/kis-pay', ...)` + `ipcMain.handle('mypos/kis-diagnose', ...)`.
+- `electron/preload.js` — `window.mypos.kisPay(req, opts)` / `kisDiagnose()`.
+- `utils/kisPayment.web.js` — `kisPay()` / `kisCancel(originalApproval)` / `kisDiagnose()` / `isKisPaymentAvailable()`.
+- `utils/kisPayment.js` — 네이티브 no-op (폰은 카드 단말기 안 씀).
+- `components/PaymentMethodPicker.js` — Electron + KIS 가능 시 "카드 선택 시 단말기 자동 호출" 토글 (AsyncStorage 영속). 카드 선택 시 진행 모달 → 승인 시 `onSelect('card', { autoPrint, kisApproval })`.
+- `screens/TableScreen.js` / `screens/OrderScreen.js` — `onSelect(code, opts)` 시그니처 (객체로 변경). `kisApproval` 을 `receiptData` 에 첨부 (영수증 빌더가 카드사/승인번호 표시할 때 사용).
+
+#### 환경변수
+```
+MYPOS_KIS_MODE=simulate|bridge       # default: simulate
+MYPOS_KIS_BRIDGE_PATH=...            # .exe 경로 override
+MYPOS_KIS_PROGID=KisPosAgent.KisPosAgent  # OCX ProgID (매장 KIS 버전마다 다름)
+MYPOS_KIS_AGENT_IP=127.0.0.1         # KIS-NAGT 위치 (보통 같은 PC = localhost)
+MYPOS_KIS_AGENT_PORT=1515            # KIS-NAGT 기본 포트
+MYPOS_KIS_CAT_ID=                    # 가맹점단말기번호 (KIS-NAGT 설정 default 사용 시 빈값)
+MYPOS_KIS_TIMEOUT_MS=60000           # 카드 인식 + 서명 대기 시간
+```
+
+#### 명령어
+```bash
+npm run kis:build       # C# 브릿지 빌드 (.NET SDK 7+ 필요)
+npm run kis:test        # 빌드된 브릿지 dry-run (OCX 등록 확인)
+npm run electron:build  # 빌드된 .exe 를 자동으로 .exe 에 번들 (extraResources)
+```
+
+#### 매장 셋업 순서 (KIS 가맹 후)
+1. **KIS POSPORTAL 자료실**(posp.kisvan.co.kr) → `KisAgent_Setup_3460_PosNo_*.zip` 다운로드.
+2. 압축 풀고 동봉된 설치 순서 (VS2008 재배포 → .NET Framework 4.0 → KIS-NAGT 본체).
+3. KIS-NAGT 실행 → 가맹점 다운로드 → 단말기번호 설정.
+4. KIS-PAD 단말기를 같은 LAN 공유기에 연결.
+5. MyPos .exe 배포 + `MYPOS_KIS_MODE=bridge` 환경변수 설정 (또는 사용자 환경변수에 등록).
+6. 관리자 → 시스템에서 진단 실행 → OCX 정상 로드 확인.
+
+#### simulate 모드 동작 (default)
+- KIS 미설정 매장에서도 `PaymentMethodPicker` "카드 선택 시 단말기 자동 호출" 토글 ON 가능.
+- 누르면 즉시 가짜 승인 응답 (`replyCode: "0000"`, `authNo: "SIM..."`) → 매출/회계/영수증 흐름 끝까지 검증.
+- 매장이 카드 단말기 도입을 결정한 시점에 환경변수 한 줄로 실 결제 전환.
+
+#### 운영 안전 정책
+- `simulate` 가 default — 실수로 운영 중 실 카드 결제 안 됨.
+- 브릿지 .exe 미발견 / 타임아웃 / OCX 미등록 — 모두 명확한 에러 + 결제 흐름 정지 (자동 다른 결제수단 X).
+- 사장님이 진행 모달에서 "다시 시도" 또는 "다른 결제수단 선택" 으로 우아하게 복구.
+
+#### 향후 확장
+- **비동기 Event 모드**: 현재 동기. ApplicationContext + `OnApprovalChanged` 이벤트로 진행 단계 (카드 리딩 / 서명 / 승인 중) 실시간 표시.
+- **현금영수증 / 통합간편결제**: 같은 브릿지에 메서드만 추가.
+- **취소 거래**: `utils/kisPayment.web.js` 의 `kisCancel(originalApproval)` 이미 구현됨. UI 측 "취소" 버튼 연결 시 활성화.
+- **영수증 빌더 카드 정보**: `utils/escposBuilder.js` 가 `receipt.kisApproval` 받아서 카드사 / 매입사 / 승인번호 줄 추가.
 
 ### Phase 4 — 오프라인 캐시
 

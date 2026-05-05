@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- KIS-NAGT 가 .NET Framework 4.0 기반이므로 4.8 로 빌드해 OCX 호환성 확보. -->
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>MyPos.KisBridge</RootNamespace>
+    <AssemblyName>KisPaymentBridge</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Platforms>x86</Platforms>
+    <PlatformTarget>x86</PlatformTarget>
+    <!-- KIS OCX 가 32 비트 COM 컴포넌트라 x86 강제. 64 비트로 빌드하면 ProgID 못 찾음. -->
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- ActiveX Event 콜백 받으려면 메시지 루프 필요 → WinForms ApplicationContext 사용. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- dynamic 키워드 (Program.cs 의 OCX Late Binding) — net48 SDK 스타일 빌드는 Microsoft.CSharp 명시 필요. -->
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>

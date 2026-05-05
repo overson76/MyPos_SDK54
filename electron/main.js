@@ -19,6 +19,7 @@ const { app, BrowserWindow, shell, Menu, ipcMain, globalShortcut } = require('el
 const path = require('node:path');
 const fs = require('node:fs');
 const { printReceiptIpc } = require('./printer/print');
+const { kisPayIpc, kisDiagnoseIpc } = require('./payment/kis');
 const { startCidListener } = require('./cid');
 const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
@@ -123,6 +124,14 @@ app.on('second-instance', () => {
 // Cloudflare URL 로 로드되든 로컬 폴백으로 로드되든 동일한 익명 UID 유지.
 const authStatePath = path.join(app.getPath('userData'), 'firebaseAuth.json');
 
+// 현재 실행 중인 .exe 의 앱 버전 (package.json version) — UpdateBanner 가
+// 'downloaded' 보고된 버전 vs 현재 실행 버전 비교에 사용. async invoke 형 — 1.0.5 의
+// sync 형이 sandbox preload 에서 freeze + 즉시 종료 회귀를 일으킴 (1.0.6 에서 fix).
+ipcMain.handle('mypos/get-app-version', () => {
+  try { return app.getVersion(); }
+  catch { return ''; }
+});
+
 // preload 에서 synchronous 로 호출 — Firebase 초기화 전에 localStorage 에 주입하기 위함.
 ipcMain.on('mypos/load-auth-state-sync', (event) => {
   try {
@@ -157,6 +166,17 @@ ipcMain.handle('mypos/clear-membership', () => {
 // 모드 default = simulate (콘솔 로그). 매장이 프린터 결정 후 환경변수 / IPC 옵션으로 전환.
 ipcMain.handle('mypos/print-receipt', async (_event, receipt, options) => {
   return await printReceiptIpc(receipt, options);
+});
+
+// KIS 카드 단말기 결제 IPC.
+// request: { tradeType, amount, vatAmount?, installment?, orgAuthDate?, orgAuthNo? ... }
+// options: { mode: 'simulate' | 'bridge', bridgePath?, timeoutMs? } — 미지정 시 환경변수.
+// 반환: { ok, mode, data? (PaymentResponse), error?, exitCode? }
+ipcMain.handle('mypos/kis-pay', async (_event, request, options) => {
+  return await kisPayIpc(request || {}, options || {});
+});
+ipcMain.handle('mypos/kis-diagnose', async () => {
+  return await kisDiagnoseIpc();
 });
 
 // 앱 종료 IPC — 관리자 화면 "앱 종료" 버튼 또는 preload 의 quitApp() 이 호출.

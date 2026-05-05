@@ -1098,7 +1098,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           total={paymentPicker.total}
           title={`${paymentPicker.label || '테이블'} 결제`}
           onClose={() => setPaymentPicker(null)}
-          onSelect={(code, autoPrint) => {
+          onSelect={(code, opts) => {
+            const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
             // 결제 직전 receipt 데이터 캡처 — clearTable 후 order 사라지므로.
@@ -1112,6 +1113,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   paymentMethod: picked,
                   paymentStatus: 'paid',
                   deliveryAddress: orderSnap?.deliveryAddress || '',
+                  // KIS 단말기 승인 정보 — 영수증 빌더가 있을 때 카드사/승인번호 표시.
+                  kisApproval: kisApproval || null,
                   printedAt: Date.now(),
                 }
               : null;

@@ -13,7 +13,11 @@ const path = require('node:path');
 module.exports = {
   appId: 'com.cadpia.mypos',
   productName: 'MyPos',
-  artifactName: '${productName}-${version}-${arch}.${ext}',
+  // 기본 artifactName 은 NSIS installer 에 적용. portable 은 별도 (아래 portable.artifactName).
+  // 두 타겟이 같은 이름으로 publish 되면 GitHub 에서 덮어쓰면서 latest.yml 의 sha512 와
+  // 실제 파일 해시가 어긋남 → 매장 PC 가 "sha512 checksum mismatch" 거부 → 자동 업데이트 실패.
+  // 매장 운영 사고 직전 케이스라 반드시 분리.
+  artifactName: '${productName}-Setup-${version}-${arch}.${ext}',
   copyright: 'Copyright © 2026 cadpia',
 
   // 빌드된 .exe 의 package.json 의 main 만 override.
@@ -25,14 +29,28 @@ module.exports = {
   // 빌드 산출물에 포함할 파일들.
   // Phase 4: dist/ 를 번들 포함 — 라이브 URL 실패 시 로컬 폴백용.
   // dist/ 가 없으면 offline.js 의 mountLocalServer 가 조용히 skip, 라이브 URL 만 사용.
+  // Phase 5(KIS): C# 브릿지 소스는 빌드 산출물 제외 (extraResources 로 .exe 만 포함).
   files: [
     'electron/**/*',
     'dist/**/*',
     'utils/escposBuilder.js',   // electron/printer/print.js 가 require 함
     'package.json',
+    '!electron/payment/bridge/**',  // 소스/.csproj/bin/obj 제외 — extraResources 로 .exe 만 별도 포함
     '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}',
     '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}',
     '!**/{.DS_Store,.git,.gitignore,.npmrc,.eslintrc.json}',
+  ],
+
+  // Phase 5: KIS 결제 브릿지 .exe 를 process.resourcesPath/bridge 에 복사.
+  // electron/payment/kis.js 의 resolveBridgePath 가 이 위치를 1순위로 찾음.
+  // 브릿지가 빌드 안 됐으면 (KisPaymentBridge.exe 없음) electron-builder 가 from 미존재로 조용히 skip.
+  // 매장이 KIS 가맹 후 dotnet build 한 결과를 .exe 안에 동봉.
+  extraResources: [
+    {
+      from: 'electron/payment/bridge/bin/x86/Release/net48',
+      to: 'bridge',
+      filter: ['KisPaymentBridge.exe', '*.dll', '*.config'],
+    },
   ],
 
   // 별도 폴더에 산출물 모아둠 — 루트 dist/ (Expo web build) 와 충돌 안 나게.
@@ -53,13 +71,23 @@ module.exports = {
 
   // NSIS 인스톨러 옵션 — 매장 사장님이 알아서 설치할 수 있게 친숙한 UI.
   nsis: {
-    oneClick: false, // 사용자 옵션 선택 가능
+    // oneClick: true — silent install. 이전 false 설정에서 기존 파일 잠금 해제 실패로
+    // "Failed to uninstall old application files" 에러가 자동 업데이트마다 반복됨.
+    // true 로 변경 시 설치 다이얼로그 없이 바로 덮어쓰기 → 에러 없어짐.
+    oneClick: true,
     perMachine: false, // 사용자 폴더 (관리자 권한 불필요)
-    allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'MyPos',
     deleteAppDataOnUninstall: false, // 재설치 시 IndexedDB / cookie 유지 (매장 멤버십)
+  },
+
+  // portable 산출물 — auto-update 와 무관, USB 옮기기용.
+  // NSIS installer (auto-update 대상) 와 파일명이 같으면 GitHub publish 시 덮어쓰면서
+  // latest.yml 의 sha512 와 실제 .exe 해시가 어긋남 → 매장 PC 자동 업데이트 거부.
+  // -portable 접미사로 두 산출물 이름 분리.
+  portable: {
+    artifactName: '${productName}-${version}-${arch}-portable.${ext}',
   },
 
   // 자동 업데이트 — GitHub Releases 를 update server 로 사용.

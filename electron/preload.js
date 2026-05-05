@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('mypos', {
     node: process.versions.node,
     chrome: process.versions.chrome,
     electron: process.versions.electron,
+    // app 버전은 비동기로 — 1.0.5 에서 sendSync 가 sandbox 환경에서 freeze + 즉시 종료
+    // 회귀 발생. async getter 로 변경 (UpdateBanner 도 async fetch 로 수정).
+  },
+  async getAppVersion() {
+    try { return await ipcRenderer.invoke('mypos/get-app-version'); }
+    catch { return ''; }
   },
   // 영수증 출력 — 메인 프로세스의 'mypos/print-receipt' IPC 핸들러 호출.
   // receipt: utils/escposBuilder 의 receipt 객체.
@@ -35,6 +41,19 @@ contextBridge.exposeInMainWorld('mypos', {
   // 반환: Promise<{ ok, mode, error?, info? }>
   async printReceipt(receipt, options) {
     return await ipcRenderer.invoke('mypos/print-receipt', receipt, options);
+  },
+
+  // KIS-NAGT 카드 단말기 결제.
+  //   request: { tradeType: 'D1'|'D2', amount, vatAmount?, installment?, orgAuthDate?, orgAuthNo? }
+  //   options: { mode: 'simulate'|'bridge', bridgePath?, timeoutMs? } — 미지정 시 환경변수 default.
+  //   반환: { ok, mode, data?, error?, exitCode? }
+  // simulate 모드 = 가짜 승인 (단말기 미연동 매장 흐름 검증). bridge = 실 결제.
+  async kisPay(request, options) {
+    return await ipcRenderer.invoke('mypos/kis-pay', request, options);
+  },
+  // KIS 셋업 진단 — OCX 등록 / 브릿지 .exe 위치 / 모드 확인. 관리자 화면용.
+  async kisDiagnose() {
+    return await ipcRenderer.invoke('mypos/kis-diagnose');
   },
 
   // 자동 업데이트 — Phase 3.
