@@ -402,8 +402,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     </Text>
                   ) : isReady && !isPaid ? (
                     // 조리완료 미결제: "결제하기" 버튼 직접 노출.
-                    // 누르면 결제수단 선택 모달 → 선택값으로 markPaid + clearTable.
-                    // 총금액은 위 tileTopLeft 의 total 텍스트에 이미 표시됨 — picker 안에서 한 번 더.
+                    // 버튼 안에 금액 함께 표시 — 버튼이 tileTopLeft 금액을 밀어낼 수 있어서
+                    // 결제 금액이 안 보이는 문제 방지.
                     <TouchableOpacity
                       style={styles.tilePayBtn}
                       activeOpacity={0.7}
@@ -417,6 +417,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                       }}
                       accessibilityLabel={`${displayLabel} 결제하기`}
                     >
+                      {total > 0 && (
+                        <Text style={styles.tilePayBtnTotal}>
+                          {total.toLocaleString()}원
+                        </Text>
+                      )}
                       <Text style={styles.tilePayBtnText}>💰 결제하기</Text>
                     </TouchableOpacity>
                   ) : isReady ? (
