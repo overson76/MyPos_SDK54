@@ -71,6 +71,19 @@ export default function makeStyles(scale = 1) {
     paddingHorizontal: 6,
     fontSize: fp(12),
   },
+  kbDoneBtn: {
+    backgroundColor: '#10b981',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  kbDoneBtnText: {
+    color: '#fff',
+    fontSize: fp(13),
+    fontWeight: '700',
+  },
   deliveryLabelTight: {
     fontSize: fp(13),
     color: '#991b1b',

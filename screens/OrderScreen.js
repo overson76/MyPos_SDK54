@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -60,6 +61,7 @@ export default function OrderScreen({
   // 옵션 편집 모달 표시
   const [optionsEditOpen, setOptionsEditOpen] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
+  const [addressFocused, setAddressFocused] = useState(false);
   // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total } | null
   // 선불/후불 버튼이 누르면 모달 띄움 → 사용자 결제수단 선택 → markPaid/clearTable 호출.
   const [paymentPicker, setPaymentPicker] = useState(null);
@@ -672,7 +674,20 @@ export default function OrderScreen({
               onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
               placeholder="주소"
               placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              blurOnSubmit
+              onFocus={() => setAddressFocused(true)}
+              onBlur={() => setAddressFocused(false)}
             />
+            {addressFocused && (
+              <TouchableOpacity
+                style={styles.kbDoneBtn}
+                onPress={() => Keyboard.dismiss()}
+              >
+                <Text style={styles.kbDoneBtnText}>✓</Text>
+              </TouchableOpacity>
+            )}
             {liveDistanceLabel ? (
               <Text
                 style={{
@@ -741,6 +756,9 @@ export default function OrderScreen({
               placeholderTextColor="#9ca3af"
               maxLength={5}
               keyboardType="numeric"
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              blurOnSubmit
             />
           </View>
         ) : (
@@ -1578,7 +1596,8 @@ export default function OrderScreen({
           total={paymentPicker.total}
           title={paymentPicker.mode === 'prepaid' ? '선불 결제수단' : '후불 결제수단'}
           onClose={() => setPaymentPicker(null)}
-          onSelect={(code, autoPrint) => {
+          onSelect={(code, opts) => {
+            const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
             const mode = paymentPicker.mode;
@@ -1593,6 +1612,8 @@ export default function OrderScreen({
                   paymentMethod: picked,
                   paymentStatus: 'paid',
                   deliveryAddress: orderSnap?.deliveryAddress || '',
+                  // KIS 단말기 승인 정보 — 영수증 빌더가 있을 때 카드사/승인번호 표시.
+                  kisApproval: kisApproval || null,
                   printedAt: Date.now(),
                 }
               : null;
