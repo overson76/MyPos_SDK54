@@ -227,6 +227,14 @@ export default function makeStyles(scale = 1) {
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#d97706',
+    alignItems: 'center',
+  },
+  // 결제하기 버튼 안 금액 — 버튼이 tileTopLeft 금액을 밀어내는 문제 방지용.
+  tilePayBtnTotal: {
+    fontSize: fp(12),
+    color: '#7c2d12',
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   tilePayBtnText: {
     fontSize: fp(11),
