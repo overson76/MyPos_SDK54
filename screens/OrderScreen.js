@@ -168,8 +168,6 @@ export default function OrderScreen({
   } = useMenu();
   const [dragFromIdx, setDragFromIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
-  // 폰(native) 전용 메뉴 이동 모드. 웹은 draggable div 처리.
-  const [nativeMoveFromIdx, setNativeMoveFromIdx] = useState(null);
   // === 메뉴 그리드 크기 계산 ===
   // 모든 카테고리는 6열 × 4행 고정 격자. 빈 슬롯은 placeholder 로 표시되고,
   // 사용자가 드래그로 자유롭게 위치 이동 가능.
@@ -792,7 +790,7 @@ export default function OrderScreen({
                   <TouchableOpacity
                     key={cat}
                     style={[styles.categoryTab, isPhone && styles.categoryTabPhone, active && styles.categoryTabActive]}
-                    onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
+                    onPress={() => setActiveCategory(cat)}
                   >
                     <Text
                       style={[
@@ -808,16 +806,6 @@ export default function OrderScreen({
               })}
             </ScrollView>
           </View>
-
-          {/* 폰 이동 모드 배너 */}
-          {Platform.OS !== 'web' && nativeMoveFromIdx !== null ? (
-            <View style={styles.nativeMoveBanner}>
-              <Text style={styles.nativeMoveBannerText}>🔀 이동할 위치를 탭하세요 · 같은 칸 탭하면 취소</Text>
-              <TouchableOpacity style={styles.nativeMoveCancelBtn} onPress={() => setNativeMoveFromIdx(null)}>
-                <Text style={styles.nativeMoveCancelText}>취소</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
 
           {/* 메뉴 그리드 - 모든 카테고리에서 6×4 격자, 드래그로 자유롭게 이동 */}
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
@@ -935,24 +923,9 @@ export default function OrderScreen({
                             },
                             isDragging && styles.tileDragging,
                             isDragTarget && styles.tileDragTarget,
-                            !isWeb && nativeMoveFromIdx === dragIdx && styles.tileNativeMoving,
-                            !isWeb && nativeMoveFromIdx !== null && nativeMoveFromIdx !== dragIdx && styles.tileNativeMoveTarget,
                           ]}
                           activeOpacity={0.7}
-                          onLongPress={() => {
-                            if (!isWeb) setNativeMoveFromIdx(dragIdx);
-                          }}
-                          delayLongPress={400}
                           onPress={() => {
-                            if (!isWeb && nativeMoveFromIdx !== null) {
-                              if (nativeMoveFromIdx === dragIdx) {
-                                setNativeMoveFromIdx(null);
-                              } else {
-                                setCategorySlot?.(activeCategory, nativeMoveFromIdx, dragIdx);
-                                setNativeMoveFromIdx(null);
-                              }
-                              return;
-                            }
                             if (!tableId) return;
                             const def = cart.find(
                               (x) =>
