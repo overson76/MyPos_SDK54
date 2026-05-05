@@ -19,6 +19,7 @@ import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
@@ -65,6 +66,8 @@ export default function OrderScreen({
   // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total } | null
   // 선불/후불 버튼이 누르면 모달 띄움 → 사용자 결제수단 선택 → markPaid/clearTable 호출.
   const [paymentPicker, setPaymentPicker] = useState(null);
+  // 퀵에디트 모달 — 메뉴 타일 꾹 누르면 { id, name, price } 세팅
+  const [quickEditItem, setQuickEditItem] = useState(null);
   const { storeInfo } = useStore();
   // sizePrompt = { items: [...], index: 0, sizeOption, value }
   const {
@@ -925,6 +928,11 @@ export default function OrderScreen({
                             isDragTarget && styles.tileDragTarget,
                           ]}
                           activeOpacity={0.7}
+                          onLongPress={() => {
+                            // 꾹 누르면 퀵에디트 모달 — 이름/가격 바로 수정
+                            setQuickEditItem({ id: item.id, name: item.name, price: item.price });
+                          }}
+                          delayLongPress={500}
                           onPress={() => {
                             if (!tableId) return;
                             const def = cart.find(
@@ -1630,6 +1638,14 @@ export default function OrderScreen({
               printReceipt(receiptData).catch(() => {});
             }
           }}
+        />
+      ) : null}
+
+      {/* 메뉴 퀵에디트 모달 — 타일 꾹 누르면 이름/가격 바로 수정 */}
+      {quickEditItem ? (
+        <MenuQuickEditModal
+          item={quickEditItem}
+          onClose={() => setQuickEditItem(null)}
         />
       ) : null}
     </View>
