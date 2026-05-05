@@ -11,6 +11,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 |---|---|---|---|
 | 2026-05-03 | [2026-05-03-q-and-a.md](2026-05-03-q-and-a.md) | 익명 UID 손실 자가복구 + 폰 지도 + 대표 가입 + CID 준비 | c523683, 37cb00d |
 | 2026-05-04 | [2026-05-04-firebase-pc-recovery-cid-map.md](2026-05-04-firebase-pc-recovery-cid-map.md) | Firebase v12 PC연동복구 + Cloudflare차단 + CID준비 + 배달지도경로 | 33f8606, d279775 |
+| 2026-05-06 | [2026-05-06-KIS카드결제-자동업데이트개선-CID진단.md](2026-05-06-KIS카드결제-자동업데이트개선-CID진단.md) | KIS 카드결제 Phase5 + 자동업데이트 개선(1.0.3→1.0.8) + CID 진단 + UI 개선 | 08794ef, 16c6838, eefc4f6 |
 
 ---
 
