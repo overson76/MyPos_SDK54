@@ -171,6 +171,9 @@ export default function OrderScreen({
   } = useMenu();
   const [dragFromIdx, setDragFromIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  // 폰(native) 전용 메뉴 이동 모드 — 웹은 draggable div 로 처리.
+  // longPress 로 인덱스 선택 → 다른 타일 탭 → 두 슬롯 위치 교환.
+  const [nativeMoveFromIdx, setNativeMoveFromIdx] = useState(null);
   // === 메뉴 그리드 크기 계산 ===
   // 모든 카테고리는 6열 × 4행 고정 격자. 빈 슬롯은 placeholder 로 표시되고,
   // 사용자가 드래그로 자유롭게 위치 이동 가능.
@@ -793,7 +796,7 @@ export default function OrderScreen({
                   <TouchableOpacity
                     key={cat}
                     style={[styles.categoryTab, isPhone && styles.categoryTabPhone, active && styles.categoryTabActive]}
-                    onPress={() => setActiveCategory(cat)}
+                    onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
                   >
                     <Text
                       style={[
@@ -809,6 +812,21 @@ export default function OrderScreen({
               })}
             </ScrollView>
           </View>
+
+          {/* 폰 메뉴 이동 모드 배너 — 선택된 메뉴 타일이 있을 때만 표시 */}
+          {!isWeb && nativeMoveFromIdx !== null ? (
+            <View style={styles.nativeMoveBanner}>
+              <Text style={styles.nativeMoveBannerText}>
+                🔀 이동할 위치를 탭하세요 · 같은 칸 탭하면 취소
+              </Text>
+              <TouchableOpacity
+                style={styles.nativeMoveCancelBtn}
+                onPress={() => setNativeMoveFromIdx(null)}
+              >
+                <Text style={styles.nativeMoveCancelText}>취소</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {/* 메뉴 그리드 - 모든 카테고리에서 6×4 격자, 드래그로 자유롭게 이동 */}
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
@@ -919,21 +937,36 @@ export default function OrderScreen({
                             {
                               backgroundColor: item.color,
                               width: menuTileWidth,
-                              // 비율 제약 제거 — 세로는 행 flex 로 자동 스트레치(alignItems: stretch).
-                              // 테이블 선택 상태에서 헤더가 높이를 잡아먹어도 4행이 모두 보이도록.
                               aspectRatio: undefined,
                               minHeight: 0,
                             },
                             isDragging && styles.tileDragging,
                             isDragTarget && styles.tileDragTarget,
+                            // 폰 이동 모드 스타일
+                            !isWeb && nativeMoveFromIdx === dragIdx && styles.tileNativeMoving,
+                            !isWeb && nativeMoveFromIdx !== null && nativeMoveFromIdx !== dragIdx && styles.tileNativeMoveTarget,
                           ]}
                           activeOpacity={0.7}
                           onLongPress={() => {
-                            // 꾹 누르면 퀵에디트 모달 — 이름/가격 바로 수정
-                            setQuickEditItem({ id: item.id, name: item.name, price: item.price });
+                            // 폰: 꾹 누르면 메뉴 이동 모드 진입
+                            // 웹: draggable div 가 처리하므로 여기선 무시
+                            if (!isWeb) {
+                              setNativeMoveFromIdx(dragIdx);
+                            }
                           }}
-                          delayLongPress={500}
+                          delayLongPress={400}
                           onPress={() => {
+                            // 폰 이동 모드 중: 목적지 선택
+                            if (!isWeb && nativeMoveFromIdx !== null) {
+                              if (nativeMoveFromIdx === dragIdx) {
+                                // 같은 타일 다시 탭 → 취소
+                                setNativeMoveFromIdx(null);
+                              } else {
+                                setCategorySlot?.(activeCategory, nativeMoveFromIdx, dragIdx);
+                                setNativeMoveFromIdx(null);
+                              }
+                              return;
+                            }
                             if (!tableId) return;
                             const def = cart.find(
                               (x) =>
