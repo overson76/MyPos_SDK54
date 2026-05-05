@@ -213,6 +213,17 @@ export default function makeStyles(scale = 1) {
     borderWidth: 3,
     borderColor: '#2563eb',
   },
+  tileNativeMoving: { opacity: 0.5, borderWidth: 3, borderColor: '#f59e0b' },
+  tileNativeMoveTarget: { borderWidth: 2, borderColor: '#10b981' },
+  nativeMoveBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1F2937', paddingHorizontal: 12, paddingVertical: 6, gap: 8,
+  },
+  nativeMoveBannerText: { flex: 1, fontSize: fp(11), color: '#d1d5db', fontWeight: '600' },
+  nativeMoveCancelBtn: {
+    paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#374151', borderRadius: 6,
+  },
+  nativeMoveCancelText: { fontSize: fp(11), color: '#fff', fontWeight: '700' },
   tileEmptySlot: {
     borderWidth: 1,
     borderStyle: 'dashed',
