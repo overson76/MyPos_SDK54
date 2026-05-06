@@ -198,7 +198,15 @@ app.whenReady().then(() => {
   createWindow();
   // 윈도우 만든 후 자동 업데이트 setup — autoUpdater 이벤트가 모든 윈도우에 broadcast.
   // dev 빌드에서는 setupAutoUpdater 가 'disabled' 상태 setStatus 후 즉시 반환.
-  setupAutoUpdater(() => BrowserWindow.getAllWindows());
+  //
+  // portable 빌드는 자동 업데이트 자체 비활성화 — electron-builder 가 portable .exe 를
+  // 압축 해제할 때 PORTABLE_EXECUTABLE_FILE 환경변수를 자동 설정함. 1.0.10 까지는 portable
+  // 도 자동 업데이트 시도 → GitHub 의 NSIS Setup 을 받아오며 "준비됨" 메시지가 영원히 반복
+  // + portable 종료 시 NSIS Setup 자동 실행 트리거로 portable 자체도 자동 종료되는 사고 패턴.
+  // 1.0.11 부터 portable 은 자동 업데이트 skip — USB 옮기기 본디 용도로 단순화.
+  if (!process.env.PORTABLE_EXECUTABLE_FILE) {
+    setupAutoUpdater(() => BrowserWindow.getAllWindows());
+  }
 
   // CID 착신 감지 — Electron 에서만 실행. 전화 오면 모든 기기에 Firebase 이벤트 push.
   // IPC 로 렌더러가 storeId 를 전달하면 CID 활성화.

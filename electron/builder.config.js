@@ -83,6 +83,9 @@ module.exports = {
     createStartMenuShortcut: true,
     shortcutName: 'MyPos',
     deleteAppDataOnUninstall: false, // 재설치 시 IndexedDB / cookie 유지 (매장 멤버십)
+    // 1.0.11: NSIS uninstall 단계 hang 영구 차단 — 사전 hook 으로 mypos*.exe 강제 종료.
+    // include 경로는 buildResources(=electron/build) 기준 상대경로.
+    include: 'installer.nsh',
   },
 
   // portable 산출물 — auto-update 와 무관, USB 옮기기용.

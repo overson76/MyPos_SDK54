@@ -2,7 +2,10 @@
 //
 // 매장 운영 안전 정책:
 //   - autoDownload: true     — 백그라운드 다운로드, UI 차단 X
-//   - autoInstallOnAppQuit   — 영업 종료 후 .exe 닫을 때 자동 적용 (다음 시작 = 새 버전)
+//   - autoInstallOnAppQuit: false — .exe 종료해도 NSIS 인스톨러 자동 실행 절대 X.
+//     1.0.10 까지는 true 였는데 NSIS uninstall 단계 hang 사고("Failed to uninstall old
+//     application files") 가 자동 적용 시점마다 반복돼서 1.0.11 부터 false. 사장님이
+//     명시적으로 "지금 적용" 버튼을 눌러야만 NSIS 인스톨러가 실행됨.
 //   - 절대 quitAndInstall() 강제 호출 X — 영업 중 갑자기 재시작 사고 방지
 //
 // 알림 흐름:
@@ -12,9 +15,9 @@
 
 const { autoUpdater } = require('electron-updater');
 
-// 운영 안전 default — 강제 재시작 막기 위해 명시적으로 false / true 설정.
+// 운영 안전 default — 강제 재시작 막기 위해 명시적으로 설정.
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 
 // 메인 프로세스 → 모든 BrowserWindow 에 이벤트 push.
 function broadcastStatus(getWindows, status) {
