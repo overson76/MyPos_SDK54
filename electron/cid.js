@@ -238,12 +238,16 @@ function startCidListener(onIncomingCall) {
       }
     });
 
+    // 1.0.13 fix: _running = true 를 sendRegister 첫 호출 전으로 이동.
+    // sendRegister 안에 `if (!sip || !_running) return;` 가드가 있어서
+    // 1.0.12 까지는 첫 REGISTER 가 가드에 막혀 즉시 return → 영원히 0회 송신.
+    _running = true;
+
     // 첫 REGISTER
     sendRegister(cfg, 1, null);
 
     // 5분마다 re-REGISTER
     _regTimer = setInterval(() => sendRegister(cfg, 1, null), 270_000);
-    _running = true;
     console.info(`[cid] SIP 리스너 시작 — ${cfg.user}@${cfg.host}:${cfg.port}`);
     return true;
   } catch (e) {
