@@ -34,13 +34,18 @@ const _diag = {
   lastError: null,
 };
 
+// sip 0.0.6 은 EventEmitter 가 아닌 함수 모음. on/digest 가 직접 export 안 돼 있음.
+// digest 는 별도 모듈(sip/digest)로 require 해야 함. on 은 아예 없으므로 호출 X.
 let sip;
+let sipDigest;
 try {
   sip = require('sip');
+  try { sipDigest = require('sip/digest'); } catch { sipDigest = null; }
   _diag.sipPackageLoaded = true;
 } catch (e) {
   // sip 패키지 없으면 조용히 disable + 진단 캡처
   sip = null;
+  sipDigest = null;
   _diag.sipPackageError = (e && e.message) || String(e);
 }
 
@@ -131,7 +136,18 @@ function sendRegister(cfg, cseq, authHeader) {
   };
   if (authHeader) msg.headers.authorization = authHeader;
   try {
-    sip.send(msg);
+    // sip 0.0.6 의 sip.send(msg, responseCallback) — 응답 정확히 캡처.
+    // examples/make_call.js 패턴 따름.
+    sip.send(msg, function(response) {
+      try {
+        if (response && typeof response.status === 'number') {
+          _diag.lastResponseStatus = response.status;
+          _diag.lastResponseAt = new Date().toISOString();
+        }
+      } catch (cbErr) {
+        _diag.lastError = `REGISTER 응답 처리 오류: ${cbErr.message}`;
+      }
+    });
     _diag.registerSentCount += 1;
     _diag.registerLastAt = new Date().toISOString();
   } catch (e) {
@@ -158,12 +174,15 @@ function startCidListener(onIncomingCall) {
   _onCallCb = onIncomingCall;
 
   try {
-    // sip 라이브러리 내부 오류 — main process crash 방지.
-    // INVITE 처리 중 unhandled exception 이 터지면 Electron 전체가 종료됨.
-    sip.on('error', (e) => {
-      _diag.lastError = `sip 내부 오류: ${(e && e.message) || e}`;
-      console.error('[cid] sip 내부 오류 (무시):', e && e.message || e);
-    });
+    // sip 0.0.6 은 EventEmitter 가 아니라 단순 함수 모음 — on() 메서드가 아예 없음.
+    // 1.0.9 진단 빌드에서 "sip.on is not a function" 에러로 SIP 시작 자체 실패한 원인.
+    // 안전하게 typeof 가드. (있으면 등록, 없으면 skip)
+    if (typeof sip.on === 'function') {
+      sip.on('error', (e) => {
+        _diag.lastError = `sip 내부 오류: ${(e && e.message) || e}`;
+        console.error('[cid] sip 내부 오류 (무시):', e && e.message || e);
+      });
+    }
 
     sip.start({
       host: '0.0.0.0',
@@ -205,16 +224,12 @@ function startCidListener(onIncomingCall) {
         }
 
         // ── 401/407: 인증 필요 (REGISTER 응답) ─────────────────────
+        // sip 0.0.6 의 sip.digest 는 직접 export 안 됨 — sip/digest 모듈 별도 require.
+        // 그것마저 calculateDigest / calculateHA1 같은 저수준 함수만 있음.
+        // 진단 단계에서는 일단 401 수신 자체만 캡처. 인증 후 재REGISTER 는 다음 fix.
         if ((request.status === 401 || request.status === 407) &&
             request.headers['www-authenticate']) {
-          const auth = request.headers['www-authenticate'];
-          const authHeader = sip.digest(
-            { user: cfg.user, password: cfg.pass },
-            'REGISTER',
-            `sip:${cfg.domain}`,
-            auth
-          );
-          sendRegister(cfg, 2, authHeader);
+          _diag.lastError = `${request.status} 인증 필요 — 다음 빌드에서 digest 인증 흐름 추가 예정`;
         }
       } catch (e) {
         // SIP 메시지 처리 중 예외 — 로그만 남기고 앱 유지.
