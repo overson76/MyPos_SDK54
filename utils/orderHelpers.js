@@ -57,6 +57,26 @@ export function appendHistory(prev, entry) {
   };
 }
 
+// 결제완료 되돌리기 — entry 자체는 보존하고 reverted 플래그만 박음.
+// 매출 합계/집계는 reverted 인 entry 를 제외 (utils/payment.js).
+// total 도 보정: revenue.total 누적값에서 entry.total 을 뺀다.
+export function markHistoryReverted(prev, entryId) {
+  const idx = (prev.history || []).findIndex((e) => e.id === entryId);
+  if (idx < 0) return prev;
+  const target = prev.history[idx];
+  if (target.reverted) return prev;
+  const nextHistory = prev.history.slice();
+  nextHistory[idx] = { ...target, reverted: true, revertedAt: Date.now() };
+  return {
+    total: Math.max(0, prev.total - (Number(target.total) || 0)),
+    history: nextHistory,
+  };
+}
+
+export function findHistoryEntry(history, entryId) {
+  return (history || []).find((e) => e.id === entryId) || null;
+}
+
 // 배달 주소록 키 정규화.
 // 보수적: trim + 연속 공백 1개로 축소 + 소문자화. 하이픈/숫자/한글은 보존.
 export function normalizeAddressKey(label) {

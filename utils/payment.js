@@ -46,6 +46,12 @@ export function addVatExcluded(supply) {
   return { supply: s, vat, total: s + vat };
 }
 
+// 되돌린(reverted) 매출 entry 는 모든 합계/집계에서 제외.
+// 사장님 실수 보정 — 실제 매출이 아니므로 건수/금액에 잡히면 안 됨.
+function isCounted(entry) {
+  return !!entry && !entry.reverted;
+}
+
 // history 배열을 결제수단별 합계 객체로 집계.
 // 반환: { cash: { count, total }, card: {...}, ..., unspecified: {...} }
 // 옛 history (paymentMethod 없음) 는 unspecified 로 집계.
@@ -55,6 +61,7 @@ export function summarizeByPaymentMethod(history) {
     out[code] = { count: 0, total: 0 };
   }
   for (const entry of history || []) {
+    if (!isCounted(entry)) continue;
     const code = entry?.paymentMethod || PAYMENT_METHOD_UNSPECIFIED;
     const bucket = out[code] || out[PAYMENT_METHOD_UNSPECIFIED];
     bucket.count += 1;
@@ -78,6 +85,7 @@ export function historyToCsv(history) {
     '합계',
     '공급가액',
     '부가세',
+    '되돌림',
   ];
 
   const rows = [headers];
@@ -89,7 +97,11 @@ export function historyToCsv(history) {
     const itemsText = (entry.items || [])
       .map((i) => `${i.name || '?'}×${i.qty || 0}`)
       .join(',');
-    const { supply, vat } = splitVatIncluded(entry.total);
+    // 되돌린(reverted) entry 는 회계 합계에 포함되면 안 되므로 금액/공급가액/부가세 0 으로.
+    // 이력 행 자체는 남겨서 회계 사무소가 "원래 있었지만 취소됨" 을 인지 가능.
+    const isReverted = !!entry.reverted;
+    const total = isReverted ? 0 : (entry.total || 0);
+    const { supply, vat } = splitVatIncluded(total);
 
     rows.push([
       when,
@@ -98,9 +110,10 @@ export function historyToCsv(history) {
       paymentMethodLabel(entry.paymentMethod),
       entry.paymentStatus === 'paid' ? '결제완료' : '미결제',
       entry.deliveryAddress || '',
-      String(entry.total || 0),
+      String(total),
       String(supply),
       String(vat),
+      isReverted ? `Y(${entry.revertedAt ? formatCsvDateTime(entry.revertedAt) : ''})` : '',
     ]);
   }
 
@@ -131,6 +144,7 @@ export function summarizeDaily(history) {
   const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0, total: 0 }));
 
   for (const entry of history || []) {
+    if (!isCounted(entry)) continue;
     // 메뉴별
     for (const item of entry.items || []) {
       const name = item.name || '(이름 없음)';
@@ -183,6 +197,7 @@ export function summarizeMonthly(history) {
   const dateSet = new Set(); // 영업일 카운트용 (yyyy-mm-dd)
 
   for (const entry of history || []) {
+    if (!isCounted(entry)) continue;
     // 메뉴별
     for (const item of entry.items || []) {
       const name = item.name || '(이름 없음)';

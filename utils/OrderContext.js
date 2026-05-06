@@ -13,6 +13,8 @@ import {
   buildHistoryEntry,
   computeItemsTotal,
   detectDynamicSlotPrefix,
+  findHistoryEntry,
+  markHistoryReverted,
   resolveTableForAlert,
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
@@ -220,6 +222,33 @@ export function OrderProvider({ children }) {
     const markReady = (tableId) => {
       addBreadcrumb('order.markReady', { tableId });
       dispatch({ type: 'orders/markReady', tableId });
+    };
+
+    // 조리완료 실수 되돌리기 — 테이블이 살아있는 상태에서 status 만 'preparing' 으로 토글.
+    // KitchenScreen 의 status!=='ready' 필터에 다시 걸려서 즉시 주문현황 목록에 복귀.
+    const undoMarkReady = (tableId) => {
+      if (!tableId) return false;
+      const existing = orders[tableId];
+      if (!existing || existing.status !== 'ready') return false;
+      addBreadcrumb('order.undoMarkReady', { tableId });
+      dispatch({ type: 'orders/undoMarkReady', tableId });
+      return true;
+    };
+
+    // 결제완료/테이블비우기 되돌리기 — history entry 기반으로 테이블 부활.
+    // 같은 tableId 가 이미 살아있으면(누가 새 주문 받음) 거부.
+    // history entry 는 삭제 안 함 — reverted 플래그만 박아 매출 집계에서 제외.
+    // 반환: { ok: true } | { ok: false, reason: 'notFound'|'occupied'|'alreadyReverted' }
+    const revertHistoryEntry = (entryId) => {
+      const entry = findHistoryEntry(revenue?.history, entryId);
+      if (!entry) return { ok: false, reason: 'notFound' };
+      if (entry.reverted) return { ok: false, reason: 'alreadyReverted' };
+      const targetId = entry.tableId;
+      if (orders[targetId]) return { ok: false, reason: 'occupied' };
+      addBreadcrumb('order.revertHistory', { entryId, tableId: targetId });
+      dispatch({ type: 'orders/restoreFromHistory', tableId: targetId, entry });
+      setRevenue((prev) => markHistoryReverted(prev, entryId));
+      return { ok: true };
     };
 
     const setDeliveryAddress = (tableId, address) => {
@@ -443,6 +472,8 @@ export function OrderProvider({ children }) {
       removeItem,
       clearTable,
       markReady,
+      undoMarkReady,
+      revertHistoryEntry,
       markPaid,
       confirmOrder,
       toggleOption,
@@ -488,7 +519,9 @@ const ORDERS_FALLBACK = {
   deleteAddress: noop, setAutoRemember: noop, setAlias: noop, setPhone: noop,
   addAddress: noop, isSplit: () => false,
   addItem: noop, removeItem: noop, clearTable: noop,
-  markReady: noop, markPaid: noop, confirmOrder: noop,
+  markReady: noop, undoMarkReady: () => false,
+  revertHistoryEntry: () => ({ ok: false, reason: 'notFound' }),
+  markPaid: noop, confirmOrder: noop,
   toggleOption: noop, toggleItemCooked: noop,
   cycleItemCookState: noop, cycleItemCookStatePortion: noop,
   toggleItemOption: noop, incrementSlotQty: noop,

@@ -9,6 +9,8 @@ import {
   mergeOrderParts,
   detectDynamicSlotPrefix,
   compactSlotsByPrefix,
+  markHistoryReverted,
+  findHistoryEntry,
 } from '../utils/orderHelpers';
 
 describe('capHistory', () => {
@@ -264,5 +266,60 @@ describe('compactSlotsByPrefix', () => {
     const { orders: next, mapping } = compactSlotsByPrefix(orders, 'y');
     expect(next).toBe(orders);
     expect(mapping.size).toBe(0);
+  });
+});
+
+describe('markHistoryReverted', () => {
+  const sample = {
+    total: 30000,
+    history: [
+      { id: 'a', total: 10000 },
+      { id: 'b', total: 20000 },
+    ],
+  };
+
+  test('해당 entry 에 reverted=true / revertedAt 박고 total 차감', () => {
+    const next = markHistoryReverted(sample, 'a');
+    expect(next.history[0].reverted).toBe(true);
+    expect(next.history[0].revertedAt).toBeGreaterThan(0);
+    expect(next.history[1].reverted).toBeUndefined();
+    expect(next.total).toBe(20000);
+  });
+
+  test('id 못 찾으면 그대로', () => {
+    expect(markHistoryReverted(sample, 'z')).toBe(sample);
+  });
+
+  test('이미 reverted 면 그대로 (중복 차감 방지)', () => {
+    const already = {
+      total: 20000,
+      history: [{ id: 'a', total: 10000, reverted: true, revertedAt: 1 }],
+    };
+    expect(markHistoryReverted(already, 'a')).toBe(already);
+  });
+
+  test('total 이 entry.total 보다 작으면 0 으로 클램프', () => {
+    const skewed = {
+      total: 5000,
+      history: [{ id: 'a', total: 10000 }],
+    };
+    expect(markHistoryReverted(skewed, 'a').total).toBe(0);
+  });
+});
+
+describe('findHistoryEntry', () => {
+  const history = [{ id: 'a' }, { id: 'b' }];
+
+  test('id 일치하는 entry 반환', () => {
+    expect(findHistoryEntry(history, 'b')).toBe(history[1]);
+  });
+
+  test('없으면 null', () => {
+    expect(findHistoryEntry(history, 'z')).toBe(null);
+  });
+
+  test('history 가 falsy 면 null', () => {
+    expect(findHistoryEntry(undefined, 'a')).toBe(null);
+    expect(findHistoryEntry(null, 'a')).toBe(null);
   });
 });

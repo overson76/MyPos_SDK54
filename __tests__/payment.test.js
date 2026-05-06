@@ -300,3 +300,75 @@ describe('PAYMENT_METHODS / PAYMENT_METHOD_LIST', () => {
     expect(PAYMENT_METHOD_LIST).toEqual(['cash', 'card', 'transfer', 'localCurrency']);
   });
 });
+
+describe('reverted entry — 모든 집계에서 제외', () => {
+  const sample = [
+    {
+      id: 'a',
+      total: 10000,
+      paymentMethod: 'cash',
+      clearedAt: new Date(2025, 0, 15, 12, 0).getTime(),
+      items: [{ name: '김치찌개', qty: 1, price: 10000 }],
+    },
+    {
+      id: 'b',
+      total: 20000,
+      paymentMethod: 'card',
+      clearedAt: new Date(2025, 0, 15, 13, 0).getTime(),
+      items: [{ name: '비빔밥', qty: 2, price: 10000 }],
+      reverted: true,
+      revertedAt: new Date(2025, 0, 15, 14, 0).getTime(),
+    },
+    {
+      id: 'c',
+      total: 5000,
+      paymentMethod: 'cash',
+      clearedAt: new Date(2025, 0, 15, 14, 0).getTime(),
+      items: [{ name: '콜라', qty: 1, price: 5000 }],
+    },
+  ];
+
+  test('summarizeByPaymentMethod — reverted 제외', () => {
+    const r = summarizeByPaymentMethod(sample);
+    expect(r.cash.count).toBe(2);
+    expect(r.cash.total).toBe(15000);
+    expect(r.card.count).toBe(0);
+    expect(r.card.total).toBe(0);
+  });
+
+  test('summarizeDaily — reverted 의 메뉴/시간대 모두 제외', () => {
+    const r = summarizeDaily(sample);
+    const names = r.byMenu.map((m) => m.name);
+    expect(names).toContain('김치찌개');
+    expect(names).toContain('콜라');
+    expect(names).not.toContain('비빔밥');
+    expect(r.byHour[13].count).toBe(0);
+    expect(r.byHour[12].count).toBe(1);
+    expect(r.byHour[14].count).toBe(1);
+  });
+
+  test('summarizeMonthly — reverted entry 의 메뉴/요일 제외', () => {
+    const r = summarizeMonthly(sample);
+    expect(r.totalDays).toBe(1);
+    expect(r.byMenu.find((m) => m.name === '비빔밥')).toBeUndefined();
+  });
+
+  test('historyToCsv — reverted row 는 합계 0 + 되돌림 컬럼 표시', () => {
+    const csv = historyToCsv(sample);
+    const lines = csv.split('\n');
+    expect(lines[0]).toContain('되돌림');
+    const bLine = lines.find((l) => l.includes('비빔밥'));
+    expect(bLine).toBeDefined();
+    const cols = bLine.split(',');
+    expect(cols[6]).toBe('0'); // 합계 0
+    expect(cols[cols.length - 1]).toMatch(/^"?Y/);
+  });
+
+  test('historyToCsv — 정상 row 는 되돌림 컬럼 빈값', () => {
+    const csv = historyToCsv(sample);
+    const lines = csv.split('\n');
+    const aLine = lines.find((l) => l.includes('김치찌개'));
+    const cols = aLine.split(',');
+    expect(cols[cols.length - 1]).toBe('');
+  });
+});
