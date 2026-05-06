@@ -510,3 +510,7 @@ OrderContext 의 순수 helper 는 `utils/orderHelpers.js` 로 분리됨 — `no
 - 메인 브랜치: `main`. 작업 브랜치: 자유 (`master` 등 사용 중).
 - 디버그 산출물(`docs/screenshots/`, `android-*.png`, `expo-qr.png`) 은 `.gitignore`.
 - `.idea/`, `.expo/` 도 ignored.
+
+## 협업 규칙
+
+사장님(cadpia) 과의 응답 톤 / 워크플로우 / 용어 표기 / 세션 운영 규칙은 **`docs/collaboration-rules.md`** 에 통합 정리되어 있다. 세션 시작 시 그 파일을 먼저 읽고 따른다. 글로벌 `~/.claude/CLAUDE.md` 는 머신별이라 동기화 안 됨 — 협업 규칙 갱신은 항상 `docs/collaboration-rules.md` 를 수정 후 커밋해서 양쪽 PC(맥북/윈도우) 에 자동 전파.
