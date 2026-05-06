@@ -170,6 +170,54 @@ export function orderReducer(state, action) {
       };
     }
 
+    // 조리완료 되돌리기 — markReady 가 일괄 'cooked' 로 만든 items 를 'cooking' 으로 되돌리고
+    // status 를 'preparing' 으로 복구. KitchenScreen 의 status!=='ready' 필터에 다시 통과되어
+    // 즉시 주문현황 목록에 복귀. 원래 cookState 가 cooked 였더라도 'cooking' 으로 되돌림 —
+    // markReady 이전 상태를 정확히 보관하지 않으므로 안전한 기본값 선택.
+    case 'orders/undoMarkReady': {
+      const { tableId } = action;
+      if (!state[tableId]) return state;
+      const nextItems = state[tableId].items.map((i) => {
+        const { cookStateNormal, cookStateLarge, ...rest } = i;
+        return { ...rest, cookState: 'cooking', cooked: false };
+      });
+      return {
+        ...state,
+        [tableId]: {
+          ...state[tableId],
+          status: 'preparing',
+          items: nextItems,
+          readyAt: null,
+        },
+      };
+    }
+
+    // history entry 로부터 테이블 복원 — 결제완료/테이블비우기 되돌리기.
+    // 이미 같은 tableId 가 살아있으면 abort (호출부가 검사하지만 reducer 도 안전 가드).
+    case 'orders/restoreFromHistory': {
+      const { tableId, entry } = action;
+      if (!tableId || !entry) return state;
+      if (state[tableId]) return state;
+      const items = (entry.items || []).map((i) => ({ ...i }));
+      return {
+        ...state,
+        [tableId]: {
+          ...emptyOrder,
+          items,
+          cartItems: items.map((i) => ({ ...i })),
+          confirmedItems: items.map((i) => ({ ...i })),
+          options: [...(entry.options || [])],
+          deliveryAddress: entry.deliveryAddress || '',
+          deliveryTime: entry.deliveryTime || '',
+          createdAt: Date.now(),
+          status: 'preparing',
+          paymentStatus: 'unpaid',
+          paymentMethod: null,
+          readyAt: null,
+        },
+      };
+    }
+
     case 'orders/markPaid': {
       const { tableId, paymentMethod } = action;
       if (!state[tableId]) return state;

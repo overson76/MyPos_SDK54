@@ -182,6 +182,102 @@ describe('orderReducer · markReady / markPaid', () => {
   });
 });
 
+describe('orderReducer · undoMarkReady', () => {
+  test('ready 인 테이블을 다시 preparing 으로 되돌리고 cookState 를 cooking 으로', () => {
+    const s = {
+      t1: makeOrder({
+        status: 'ready',
+        items: [{ slotId: 's1', cookState: 'cooked', cooked: true, qty: 1 }],
+        readyAt: 5000,
+      }),
+    };
+    const next = orderReducer(s, { type: 'orders/undoMarkReady', tableId: 't1' });
+    expect(next.t1.status).toBe('preparing');
+    expect(next.t1.items[0].cookState).toBe('cooking');
+    expect(next.t1.items[0].cooked).toBe(false);
+    expect(next.t1.readyAt).toBe(null);
+  });
+
+  test('없는 테이블에 undoMarkReady 는 noop', () => {
+    const s = { t1: makeOrder({ status: 'ready' }) };
+    expect(orderReducer(s, { type: 'orders/undoMarkReady', tableId: 'x' })).toBe(s);
+  });
+
+  test('cookStateNormal/Large 도 정리되어 cookState=cooking 으로 단일화', () => {
+    const s = {
+      t1: makeOrder({
+        status: 'ready',
+        items: [
+          {
+            slotId: 's1',
+            qty: 2,
+            largeQty: 1,
+            cookState: 'cooked',
+            cookStateNormal: 'cooked',
+            cookStateLarge: 'cooked',
+            cooked: true,
+          },
+        ],
+        readyAt: 5000,
+      }),
+    };
+    const next = orderReducer(s, { type: 'orders/undoMarkReady', tableId: 't1' });
+    expect(next.t1.items[0].cookState).toBe('cooking');
+    expect(next.t1.items[0].cookStateNormal).toBeUndefined();
+    expect(next.t1.items[0].cookStateLarge).toBeUndefined();
+  });
+});
+
+describe('orderReducer · restoreFromHistory', () => {
+  const entry = {
+    id: 't5-1700000000000',
+    tableId: 't5',
+    items: [
+      { slotId: 'h1', id: 'm1', name: '김치찌개', price: 8000, qty: 2 },
+    ],
+    options: ['opt-x'],
+    deliveryAddress: '서울시 강남구',
+    deliveryTime: '오후 7시',
+    paymentStatus: 'paid',
+    paymentMethod: 'cash',
+    total: 16000,
+    clearedAt: 1700000000000,
+  };
+
+  test('비어있는 테이블에 history entry 의 items 로 복원', () => {
+    const next = orderReducer({}, {
+      type: 'orders/restoreFromHistory',
+      tableId: 't5',
+      entry,
+    });
+    expect(next.t5.items).toHaveLength(1);
+    expect(next.t5.items[0].name).toBe('김치찌개');
+    expect(next.t5.cartItems).toHaveLength(1);
+    expect(next.t5.confirmedItems).toHaveLength(1);
+    expect(next.t5.options).toEqual(['opt-x']);
+    expect(next.t5.deliveryAddress).toBe('서울시 강남구');
+    expect(next.t5.paymentStatus).toBe('unpaid');
+    expect(next.t5.paymentMethod).toBe(null);
+    expect(next.t5.status).toBe('preparing');
+    expect(next.t5.readyAt).toBe(null);
+  });
+
+  test('이미 살아있는 테이블에는 복원 안 함 (덮어쓰기 방지)', () => {
+    const s = { t5: makeOrder({ items: [{ slotId: 'live', qty: 1 }] }) };
+    expect(orderReducer(s, {
+      type: 'orders/restoreFromHistory',
+      tableId: 't5',
+      entry,
+    })).toBe(s);
+  });
+
+  test('인자 누락 시 noop', () => {
+    const s = {};
+    expect(orderReducer(s, { type: 'orders/restoreFromHistory' })).toBe(s);
+    expect(orderReducer(s, { type: 'orders/restoreFromHistory', tableId: 't1' })).toBe(s);
+  });
+});
+
 describe('orderReducer · delivery setters', () => {
   test('setDeliveryAddress 가 빈 테이블에 emptyOrder 로 생성', () => {
     const next = orderReducer({}, {

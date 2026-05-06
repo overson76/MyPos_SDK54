@@ -15,6 +15,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-06 | [2026-05-06-글씨개선-메뉴이동-충돌원인.md](2026-05-06-글씨개선-메뉴이동-충돌원인.md) | 글씨 OTA 재배포 + 폰 메뉴 이동 시도(2회 롤백) + Firestore 중첩배열 크래시 원인 파악 | 62648d6 |
 | 2026-05-06 | [2026-05-06-CID센트릭스-도메인발견-SIP진단필요.md](2026-05-06-CID센트릭스-도메인발견-SIP진단필요.md) | CID 사진 분석 + 매장 네트워크 구조 + 센트릭스 도메인 발견 + 비번 변경 → 1.0.9 진단 빌드 필요 | 63ffecd |
 | 2026-05-06 | [2026-05-06-CID-망분리확정-1.0.9to13.md](2026-05-06-CID-망분리확정-1.0.9to13.md) | CID 진단 빌드 1.0.9~1.0.13 + NSIS 자동업데이트 사이클 영구 fix + 광↔LTE 망분리로 인터넷 SIP 등록 불가능 확정 (응답 404) → USB-LAN 망 합류 결정 | e903a49, c06279e, ed0de8f, fc746ad, 61ee625 |
+| 2026-05-07 | [2026-05-07-결제완료-조리완료-되돌리기.md](2026-05-07-결제완료-조리완료-되돌리기.md) | 결제완료 / 조리완료 되돌리기 안전망 — history append-only + reverted 플래그 + 부활 시 occupied 가드 + KitchenScreen 최근 조리완료 섹션 + 단위 테스트 18 | 94430cd |
 
 ---
 
@@ -39,6 +40,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-02 | [PC-라이브-번들-해시-진단](../learning/2026-05-02-PC-라이브-번들-해시-진단.md) | PC 동기화 안 될 때 30초 진단 흐름 |
 | 2026-05-03 | [kakao-delivery-distance-map](../learning/2026-05-03-kakao-delivery-distance-map.md) | 카카오 배달 거리 계산 + 지도 오버레이 |
 | 2026-05-03 | [uid-loss-diagnosis-and-self-recovery](../learning/2026-05-03-uid-loss-diagnosis-and-self-recovery.md) | 익명 UID 손실 진단 + 자가 복구 흐름 설계 |
+| 2026-05-07 | [undo-reverted-flag-pattern](../learning/2026-05-07-undo-reverted-flag-pattern.md) | append-only history 의 "되돌리기" — reverted 플래그 패턴 (delete vs flag, 모든 집계의 isCounted 가드, idempotent + occupied 가드) |
 
 ---
 

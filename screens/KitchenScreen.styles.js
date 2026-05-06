@@ -483,5 +483,53 @@ export default function makeStyles(scale = 1) {
   doneBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
   doneBtnTextPhone: { fontSize: fp(11) },
   doneBtnTextReady: { color: '#fff' },
+
+  // 조리완료 되돌리기 섹션 — 메인 카드 그리드 아래쪽에 가로 폭 100% 로 깔림.
+  readySection: {
+    flexBasis: '100%',
+    width: '100%',
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#ecfdf5',
+    borderTopWidth: 2,
+    borderTopColor: '#10b981',
+    borderRadius: 8,
+  },
+  readySectionTitle: {
+    fontSize: fp(12),
+    fontWeight: '800',
+    color: '#065f46',
+    marginBottom: 8,
+  },
+  readyList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  readyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 220,
+    flexGrow: 1,
+    flexBasis: 220,
+    paddingVertical: 8,
+    paddingLeft: 10,
+    paddingRight: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#10b981',
+    gap: 8,
+  },
+  readyCardLeft: { flex: 1, minWidth: 0 },
+  readyCardLabel: { fontSize: fp(13), fontWeight: '700', color: '#111827' },
+  readyCardMeta: { fontSize: fp(10), color: '#6b7280', marginTop: 2 },
+  readyUndoBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#dc2626',
+    borderRadius: 6,
+  },
+  readyUndoBtnText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
   });
 }
