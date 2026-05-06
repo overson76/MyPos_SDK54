@@ -20,7 +20,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { printReceiptIpc } = require('./printer/print');
 const { kisPayIpc, kisDiagnoseIpc } = require('./payment/kis');
-const { startCidListener } = require('./cid');
+const { startCidListener, getCidDiagnosis } = require('./cid');
 const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
 const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
 const {
@@ -213,6 +213,16 @@ app.whenReady().then(() => {
       }
     });
     return { ok: true };
+  });
+
+  // CID 진단 — production .exe 에선 console.log 가 안 보임.
+  // 관리자 → 시스템 → CID 진단 카드가 호출.
+  ipcMain.handle('mypos/cid-status', async () => {
+    try {
+      return await getCidDiagnosis();
+    } catch (e) {
+      return { error: (e && e.message) || String(e) };
+    }
   });
 
   // 키오스크 종료 단축키 — 메뉴바 없어도 사용 가능.

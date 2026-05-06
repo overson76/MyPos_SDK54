@@ -96,6 +96,11 @@ contextBridge.exposeInMainWorld('mypos', {
     ipcRenderer.on('mypos/incoming-call', handler);
     return () => ipcRenderer.removeListener('mypos/incoming-call', handler);
   },
+  // CID 진단 — sip 패키지 로드 / 5060 바인딩 / REGISTER 결과 등 스냅샷.
+  // 관리자 → 시스템 → "📞 CID 진단" 카드가 호출.
+  async cidDiagnose() {
+    return await ipcRenderer.invoke('mypos/cid-status');
+  },
 
   async checkUpdate() {
     return await ipcRenderer.invoke('mypos/update-check');

@@ -166,6 +166,22 @@ function SystemSettingsView() {
   const [otaStatus, setOtaStatus] = useState(null); // null | 'checking' | 'downloading' | 'downloaded' | 'upToDate' | 'error'
   const [otaBusy, setOtaBusy] = useState(false);
 
+  // CID 진단 — Electron(.exe) 환경에서만. SIP 가 어디서 막히는지 사장님이 화면으로 확인.
+  const [cidDiag, setCidDiag] = useState(null); // null | { ... 진단 스냅샷 }
+  const [cidBusy, setCidBusy] = useState(false);
+  const handleCidDiagnose = async () => {
+    if (cidBusy) return;
+    setCidBusy(true);
+    try {
+      const r = await window?.mypos?.cidDiagnose?.();
+      setCidDiag(r || { error: '진단 실패 — IPC 응답 없음' });
+    } catch (e) {
+      setCidDiag({ error: String(e?.message || e) });
+    } finally {
+      setCidBusy(false);
+    }
+  };
+
   const handleOtaCheck = async () => {
     if (otaBusy) return;
     setOtaBusy(true);
@@ -390,6 +406,85 @@ function SystemSettingsView() {
               </Text>
             </TouchableOpacity>
           </View>
+        </>
+      ) : null}
+
+      {/* === CID 진단 — Electron(.exe) 환경에서만. SIP 5060 / REGISTER 결과 확인. === */}
+      {isElectron() ? (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>📞 CID 진단 (PC 카운터)</Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>전화 자동 감지(SIP) 상태</Text>
+              <Text style={sysStyles.helper}>
+                매장 PC 의 SIP 리스너가 5060 을 잡았는지, REGISTER 가 가는지, 응답이 어떤지 확인합니다.{'\n'}
+                {storeInfo?.storeId
+                  ? `현재 매장 ID(끝 12자): ${String(storeInfo.storeId).slice(-12)}`
+                  : '⚠ 매장 ID 가 비어있음 — start-cid 가 호출되지 않을 수 있습니다.'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[sysStyles.btnSecondary, cidBusy && { opacity: 0.5 }]}
+              disabled={cidBusy}
+              onPress={handleCidDiagnose}
+            >
+              <Text style={sysStyles.btnSecondaryText}>
+                {cidBusy ? '진단 중…' : '🔍 진단'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {cidDiag ? (
+            <View style={sysStyles.diagBox}>
+              <Text style={sysStyles.diagLine}>
+                sip 패키지: {cidDiag.sipPackageLoaded ? '✅ 로드됨' : `❌ 로드 실패${cidDiag.sipPackageError ? ` (${cidDiag.sipPackageError})` : ''}`}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                리스너 시작 호출: {cidDiag.listenerStartCalled ? `✅ ${cidDiag.listenerStartedAt || ''}` : '❌ 아직 호출 안 됨 (storeId 비어있거나 start-cid 누락)'}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                running: {cidDiag.running ? '✅ true' : '❌ false'}
+                {cidDiag.sipStartError ? `   ⚠ start 실패: ${cidDiag.sipStartError}` : ''}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                UDP {cidDiag.portProbe?.port ?? '?'} 바인딩: {cidDiag.portProbe?.bound ? '✅ 잡혀있음 (SIP 가 잡고 있을 가능성)' : `❌ 비어있음${cidDiag.portProbe?.errorCode ? ` (${cidDiag.portProbe.errorCode})` : ''}`}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                REGISTER 송신: {cidDiag.registerSentCount ?? 0} 회{cidDiag.registerLastAt ? ` · 마지막 ${cidDiag.registerLastAt}` : ''}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                마지막 SIP 응답: {cidDiag.lastResponseStatus ?? '없음'}{cidDiag.lastResponseAt ? ` · ${cidDiag.lastResponseAt}` : ''}
+              </Text>
+              <Text style={sysStyles.diagLine}>
+                마지막 INVITE: {cidDiag.lastInviteFrom ? `${cidDiag.lastInviteFrom} (${cidDiag.lastInviteAt})` : '없음'}
+              </Text>
+              {cidDiag.lastError ? (
+                <Text style={[sysStyles.diagLine, { color: '#dc2626' }]}>
+                  ⚠ 마지막 에러: {cidDiag.lastError}
+                </Text>
+              ) : null}
+              {cidDiag.configSnapshot ? (
+                <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#374151', paddingTop: 6 }}>
+                  <Text style={sysStyles.diagLine}>
+                    설정: {cidDiag.configSnapshot.user}@{cidDiag.configSnapshot.domain}:{cidDiag.configSnapshot.port}
+                  </Text>
+                  <Text style={sysStyles.diagLine}>
+                    host: {cidDiag.configSnapshot.host}{cidDiag.configSnapshot.envHostSet ? '' : ' (env 미설정 → default)'}
+                  </Text>
+                  <Text style={sysStyles.diagLine}>
+                    user: {cidDiag.configSnapshot.envUserSet ? '✅ env' : '❌ default'} · pass: {cidDiag.configSnapshot.passSet ? `✅ ${cidDiag.configSnapshot.passLength}자` : '❌ 빈값'}{cidDiag.configSnapshot.envPassSet ? ' (env)' : ' (default)'}
+                  </Text>
+                  <Text style={sysStyles.diagLine}>
+                    domain: {cidDiag.configSnapshot.envDomainSet ? '✅ env' : '❌ default → lgdacom.net'}
+                  </Text>
+                </View>
+              ) : null}
+              {cidDiag.error ? (
+                <Text style={[sysStyles.diagLine, { color: '#dc2626' }]}>
+                  IPC 오류: {cidDiag.error}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -848,6 +943,20 @@ function makeSysStyles(scale = 1) {
       fontSize: fp(12),
       color: '#9CA3AF',
       fontWeight: '600',
+    },
+    diagBox: {
+      marginTop: 8,
+      padding: 12,
+      backgroundColor: '#1F2937',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#374151',
+    },
+    diagLine: {
+      fontSize: fp(11),
+      color: '#E5E7EB',
+      lineHeight: fp(18),
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
   });
 }

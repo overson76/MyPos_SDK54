@@ -30,11 +30,14 @@ module.exports = {
   // Phase 4: dist/ 를 번들 포함 — 라이브 URL 실패 시 로컬 폴백용.
   // dist/ 가 없으면 offline.js 의 mountLocalServer 가 조용히 skip, 라이브 URL 만 사용.
   // Phase 5(KIS): C# 브릿지 소스는 빌드 산출물 제외 (extraResources 로 .exe 만 포함).
+  // CID(SIP): node_modules/sip 를 명시적으로 포함 — production dependency 자동 포함을
+  // electron-builder 가 처리하지만, asar 빌드에서 누락된 사례 추적 중이라 안전 보장.
   files: [
     'electron/**/*',
     'dist/**/*',
     'utils/escposBuilder.js',   // electron/printer/print.js 가 require 함
     'package.json',
+    'node_modules/sip/**/*',    // CID SIP 리스너 — 명시 포함 (1.0.9 진단)
     '!electron/payment/bridge/**',  // 소스/.csproj/bin/obj 제외 — extraResources 로 .exe 만 별도 포함
     '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}',
     '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}',

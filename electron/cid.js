@@ -9,17 +9,39 @@
 //   MYPOS_SIP_HOST     — SIP 서버 주소 (예: sip.lgdacom.net)
 //   MYPOS_SIP_USER     — SIP 사용자 ID (예: tmpid7133)
 //   MYPOS_SIP_PASS     — SIP 비밀번호
-//   MYPOS_SIP_DOMAIN   — SIP 도메인 (예: lgdacom.net)
+//   MYPOS_SIP_DOMAIN   — SIP 도메인 (예: premium_c_347878.lgdacom.net)
 //   MYPOS_SIP_PORT     — SIP 포트 (기본 5060)
 
 'use strict';
 
+const dgram = require('node:dgram');
+
+// 진단 상태 — production .exe 에서 SIP 가 어디서 막히는지 IPC 로 읽어내기 위함.
+// console.log 는 매장 PC 사장님이 못 봄. 그래서 모든 단계를 메모리에 캡처.
+const _diag = {
+  sipPackageLoaded: false,
+  sipPackageError: null,
+  listenerStartCalled: false,
+  listenerStartedAt: null,
+  configSnapshot: null,
+  sipStartError: null,
+  registerSentCount: 0,
+  registerLastAt: null,
+  lastResponseStatus: null,
+  lastResponseAt: null,
+  lastInviteAt: null,
+  lastInviteFrom: null,
+  lastError: null,
+};
+
 let sip;
 try {
   sip = require('sip');
+  _diag.sipPackageLoaded = true;
 } catch (e) {
-  // sip 패키지 없으면 조용히 disable
+  // sip 패키지 없으면 조용히 disable + 진단 캡처
   sip = null;
+  _diag.sipPackageError = (e && e.message) || String(e);
 }
 
 // ── 설정 ──────────────────────────────────────────────────────────────────────
@@ -32,6 +54,27 @@ function getConfig() {
     domain: process.env.MYPOS_SIP_DOMAIN || 'lgdacom.net',
     ext: process.env.MYPOS_SIP_EXT || '7133',
     transport: process.env.MYPOS_SIP_TRANSPORT || 'udp',
+  };
+}
+
+// 진단용 — PASS 는 길이만, 환경변수 설정 여부도 함께.
+function snapshotConfig() {
+  const cfg = getConfig();
+  return {
+    host: cfg.host,
+    port: cfg.port,
+    user: cfg.user,
+    domain: cfg.domain,
+    ext: cfg.ext,
+    transport: cfg.transport,
+    passSet: !!cfg.pass,
+    passLength: cfg.pass ? cfg.pass.length : 0,
+    envHostSet: !!process.env.MYPOS_SIP_HOST,
+    envUserSet: !!process.env.MYPOS_SIP_USER,
+    envPassSet: !!process.env.MYPOS_SIP_PASS,
+    envDomainSet: !!process.env.MYPOS_SIP_DOMAIN,
+    envPortSet: !!process.env.MYPOS_SIP_PORT,
+    envExtSet: !!process.env.MYPOS_SIP_EXT,
   };
 }
 
@@ -89,7 +132,10 @@ function sendRegister(cfg, cseq, authHeader) {
   if (authHeader) msg.headers.authorization = authHeader;
   try {
     sip.send(msg);
+    _diag.registerSentCount += 1;
+    _diag.registerLastAt = new Date().toISOString();
   } catch (e) {
+    _diag.lastError = `REGISTER 전송 실패: ${e.message}`;
     console.warn('[cid] REGISTER 전송 실패:', e.message);
   }
 }
@@ -97,7 +143,12 @@ function sendRegister(cfg, cseq, authHeader) {
 // ── 메인: CID 리스너 시작 ────────────────────────────────────────────────────
 // onIncomingCall(phoneNumber: string, formattedNumber: string) — 착신 시 호출
 function startCidListener(onIncomingCall) {
+  _diag.listenerStartCalled = true;
+  _diag.listenerStartedAt = new Date().toISOString();
+  _diag.configSnapshot = snapshotConfig();
+
   if (!sip) {
+    _diag.lastError = 'sip 패키지 로드 안 됨';
     console.warn('[cid] sip 패키지 없음 — CID 비활성화');
     return false;
   }
@@ -110,6 +161,7 @@ function startCidListener(onIncomingCall) {
     // sip 라이브러리 내부 오류 — main process crash 방지.
     // INVITE 처리 중 unhandled exception 이 터지면 Electron 전체가 종료됨.
     sip.on('error', (e) => {
+      _diag.lastError = `sip 내부 오류: ${(e && e.message) || e}`;
       console.error('[cid] sip 내부 오류 (무시):', e && e.message || e);
     });
 
@@ -126,6 +178,8 @@ function startCidListener(onIncomingCall) {
             request.headers['from'] || request.headers['p-asserted-identity']
           );
           const formatted = formatKoreanPhone(raw || '번호 없음');
+          _diag.lastInviteAt = new Date().toISOString();
+          _diag.lastInviteFrom = formatted;
           console.info(`[cid] 📞 착신: ${formatted}`);
 
           // 180 Ringing (전화 수신 알림만, 자동 응답 X)
@@ -139,8 +193,15 @@ function startCidListener(onIncomingCall) {
               _onCallCb(raw, formatted);
             }
           } catch (cbErr) {
+            _diag.lastError = `착신 콜백 오류: ${(cbErr && cbErr.message) || cbErr}`;
             console.error('[cid] 착신 콜백 오류:', cbErr && cbErr.message || cbErr);
           }
+        }
+
+        // ── 응답 status 캡처 (200/401/500 등) ────────────────────
+        if (typeof request.status === 'number') {
+          _diag.lastResponseStatus = request.status;
+          _diag.lastResponseAt = new Date().toISOString();
         }
 
         // ── 401/407: 인증 필요 (REGISTER 응답) ─────────────────────
@@ -157,6 +218,7 @@ function startCidListener(onIncomingCall) {
         }
       } catch (e) {
         // SIP 메시지 처리 중 예외 — 로그만 남기고 앱 유지.
+        _diag.lastError = `SIP 요청 처리 오류: ${(e && e.message) || e}`;
         console.error('[cid] SIP 요청 처리 오류 (무시):', e && e.message || e);
       }
     });
@@ -170,6 +232,8 @@ function startCidListener(onIncomingCall) {
     console.info(`[cid] SIP 리스너 시작 — ${cfg.user}@${cfg.host}:${cfg.port}`);
     return true;
   } catch (e) {
+    _diag.sipStartError = (e && e.message) || String(e);
+    _diag.lastError = `SIP 시작 실패: ${_diag.sipStartError}`;
     console.error('[cid] SIP 시작 실패:', e.message);
     return false;
   }
@@ -184,4 +248,53 @@ function stopCidListener() {
   _onCallCb = null;
 }
 
-module.exports = { startCidListener, stopCidListener, formatKoreanPhone };
+// ── 진단 ──────────────────────────────────────────────────────────────────────
+// UDP 포트가 잡혀있는지(EADDRINUSE) 시험으로 확인. SIP 가 정상이면 잡혀있어야 함.
+function probeUdpPort(port) {
+  return new Promise((resolve) => {
+    const sock = dgram.createSocket('udp4');
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try { sock.close(); } catch {}
+      resolve(result);
+    };
+    sock.once('error', (err) => {
+      finish({
+        bound: err.code === 'EADDRINUSE',
+        errorCode: err.code || null,
+        errorMessage: err.message || null,
+      });
+    });
+    try {
+      sock.bind(port, () => {
+        // 우리가 잡았다 = SIP 가 안 잡고 있다
+        finish({ bound: false, errorCode: null, errorMessage: null });
+      });
+    } catch (e) {
+      finish({ bound: false, errorCode: 'BIND_THROW', errorMessage: e.message });
+    }
+    // 1.5 초 안에 결과 못 받으면 timeout
+    setTimeout(() => finish({ bound: false, errorCode: 'TIMEOUT', errorMessage: null }), 1500);
+  });
+}
+
+// 진단 스냅샷 — IPC 'mypos/cid-status' 가 호출.
+async function getCidDiagnosis() {
+  const cfg = getConfig();
+  const probe = await probeUdpPort(cfg.port);
+  return {
+    ...(_diag),
+    running: _running,
+    portProbe: {
+      port: cfg.port,
+      bound: probe.bound,
+      errorCode: probe.errorCode,
+      errorMessage: probe.errorMessage,
+    },
+    nowIso: new Date().toISOString(),
+  };
+}
+
+module.exports = { startCidListener, stopCidListener, formatKoreanPhone, getCidDiagnosis };
