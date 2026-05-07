@@ -53,6 +53,9 @@ expo-qr.png
 # Electron 빌드 산출물 (.exe / installer / portable) — 큰 파일이라 git 제외
 electron-dist/
 
+# Electron 빌드 로그 — 빌드마다 새로 쓰므로 추적 X
+*.log
+
 # editor / OS
 .idea/
 Thumbs.db
