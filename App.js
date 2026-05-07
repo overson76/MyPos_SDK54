@@ -19,6 +19,7 @@ import OrderFlow from './components/OrderFlow';
 import OrderTab from './components/OrderTab';
 import PinchZoom from './components/PinchZoom';
 import KitchenScreen from './screens/KitchenScreen';
+import UndoScreen from './screens/UndoScreen';
 import AdminScreen from './screens/AdminScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OrderProvider } from './utils/OrderContext';
@@ -60,7 +61,7 @@ function CrashFallback({ error, resetError }) {
   );
 }
 
-const TAB_KEYS = ['테이블', '주문', '주문현황', '관리자'];
+const TAB_KEYS = ['테이블', '주문', '주문현황', '되돌리기', '관리자'];
 
 // dev 모드 web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을
 // 강제 주입. 실 iPhone 에서는 OS 가 보고하므로 native 빌드는 그대로 동작.
@@ -336,6 +337,14 @@ function MainApp() {
               ]}
             >
               <KitchenScreen />
+            </View>
+            <View
+              style={[
+                styles.pane,
+                activeTab !== '되돌리기' && styles.paneHidden,
+              ]}
+            >
+              <UndoScreen />
             </View>
             <View
               style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
