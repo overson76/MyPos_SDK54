@@ -48,6 +48,10 @@ export default function OrderScreen({
   autoConfirmIntent,
   clearAutoConfirmIntent,
 }) {
+  // 컴포넌트 전체에서 사용하는 web 여부 — JSX 평가 시점 ReferenceError 방지를 위해
+  // 함수 상단에 한 번 정의. 26a620a 가 line 817 에서 !isWeb 사용 추가했는데
+  // 정의는 IIFE 콜백 안에만 있어 native 폰에서 OrderScreen 마운트 즉시 크래시했음.
+  const isWeb = Platform.OS === 'web';
   const [activeCategory, setActiveCategory] = useState('즐겨찾기');
   const [listening, setListening] = useState(false);
   const [interimText, setInterimText] = useState('');
@@ -832,7 +836,6 @@ export default function OrderScreen({
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
           <View style={styles.favGrid}>
             {(() => {
-              const isWeb = Platform.OS === 'web';
               // 모든 카테고리를 6열 × 4행 격자로 재구성 (null 슬롯 유지).
               const displayRows = (() => {
                 const flat = currentRows.flat();
