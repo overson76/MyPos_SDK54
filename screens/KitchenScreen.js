@@ -39,7 +39,7 @@ function formatElapsed(ts, now) {
 }
 
 export default function KitchenScreen() {
-  const { orders, markReady, cycleItemCookState, cycleItemCookStatePortion } =
+  const { orders, markReady, undoMarkReady, cycleItemCookState, cycleItemCookStatePortion } =
     useOrders();
   const { items: menuItems, optionsList: OPTIONS_CATALOG } = useMenu();
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
@@ -190,6 +190,15 @@ export default function KitchenScreen() {
   const activeOrders = allOrders
     .filter((o) => o.status !== 'ready') // 조리완료된 주문은 주문현황 메인에서 제거
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  // 조리완료 된 주문 — 실수 취소용 별도 섹션. readyAt 최근 순, 최근 30분 / 최대 10건.
+  // 너무 옛날 것까지 보이면 화면 어수선해서 cap. 30분 안 되면 픽업/배달 흐름 정리 안 끝났을 가능성.
+  const READY_RECENT_MS = 30 * 60 * 1000;
+  const READY_MAX = 10;
+  const readyOrders = allOrders
+    .filter((o) => o.status === 'ready' && o.readyAt && (nowTick - o.readyAt) < READY_RECENT_MS)
+    .sort((a, b) => (b.readyAt || 0) - (a.readyAt || 0))
+    .slice(0, READY_MAX);
 
   // 조리해야 하는(=pending) 항목을 메뉴+옵션 조합별로 집계 — cooking/cooked 는 제외.
   // 같은 메뉴라도 옵션이 다르면 별도 행으로 표기 (예: 칼국수 / 칼국수 안맵게).
@@ -370,7 +379,7 @@ export default function KitchenScreen() {
     </View>
   );
 
-  if (activeOrders.length === 0) {
+  if (activeOrders.length === 0 && readyOrders.length === 0) {
     return (
       <View style={[styles.bodyRow, { flex: 1 }]}>
         <View style={styles.empty}>
@@ -833,6 +842,41 @@ export default function KitchenScreen() {
         );
       })}
 
+      {readyOrders.length > 0 && (
+        <View style={styles.readySection}>
+          <Text style={styles.readySectionTitle}>
+            ✓ 최근 조리완료 ({readyOrders.length}) · 실수면 되돌리기
+          </Text>
+          <View style={styles.readyList}>
+            {readyOrders.map((o) => {
+              const color = tableTypeColors[o.table.type] || '#6b7280';
+              const qty = o.items.reduce((s, i) => s + i.qty, 0);
+              return (
+                <View
+                  key={o.tableId}
+                  style={[styles.readyCard, { borderLeftColor: color }]}
+                >
+                  <View style={styles.readyCardLeft}>
+                    <Text style={styles.readyCardLabel} numberOfLines={1}>
+                      {o.table.label}
+                    </Text>
+                    <Text style={styles.readyCardMeta} numberOfLines={1}>
+                      {typeLabels[o.table.type] || ''} · {qty}개 · {formatElapsed(o.readyAt, nowTick)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.readyUndoBtn}
+                    activeOpacity={0.7}
+                    onPress={() => undoMarkReady(o.tableId)}
+                  >
+                    <Text style={styles.readyUndoBtnText}>↶ 취소</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
       </ScrollView>
       {renderSidebar()}
     </View>
