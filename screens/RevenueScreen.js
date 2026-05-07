@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
@@ -39,10 +39,39 @@ function ymLabel(key) {
 export default function RevenueScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { revenue } = useOrders();
+  const { revenue, revertHistoryEntry } = useOrders();
   const { storeInfo } = useStore();
   const history = revenue?.history || [];
 
+  // 되돌리기 — 결제완료/테이블비우기 실수 보정. 같은 테이블이 비어있을 때만 가능.
+  // history entry 자체는 보존하고 reverted 플래그만 박아 합계에서 제외 + "되돌림" 라벨 표시.
+  const handleRevert = (entry) => {
+    const itemNames = (entry.items || []).map((i) => i.name).join(', ');
+    const msg = `테이블 ${entry.tableId} 의 결제 기록을 되돌립니다.\n\n· 주문 항목 (${itemNames}) 이 다시 살아납니다\n· 매출 합계에서 제외되며 "되돌림" 으로 표시됩니다\n· 같은 테이블에 새 주문이 있으면 거부됩니다\n\n진행할까요?`;
+    const proceed = () => {
+      const result = revertHistoryEntry(entry.id);
+      if (result.ok) return;
+      const reasonMap = {
+        notFound: '이력에서 해당 항목을 찾지 못했습니다.',
+        occupied: `테이블 ${entry.tableId} 에 이미 새 주문이 있습니다. 먼저 그 테이블을 정리해야 합니다.`,
+        alreadyReverted: '이미 되돌린 항목입니다.',
+      };
+      const text = reasonMap[result.reason] || '되돌리기에 실패했습니다.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window?.alert?.(text);
+      } else {
+        Alert.alert('되돌리기 실패', text);
+      }
+    };
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window?.confirm?.(msg)) proceed();
+    } else {
+      Alert.alert('결제 되돌리기', msg, [
+        { text: '취소', style: 'cancel' },
+        { text: '되돌리기', style: 'destructive', onPress: proceed },
+      ]);
+    }
+  };
   // 부가세 분리 표시 토글 — ON 시 카드/이력에 공급가액/부가세 분리. OFF 시 합계만.
   const [showVat, setShowVat] = useState(false);
   // Electron(PC 카운터 .exe) 환경에서만 영수증 출력 가능. 일반 브라우저는 버튼 숨김.
@@ -404,6 +433,15 @@ export default function RevenueScreen() {
                     VAT {splitVatIncluded(h.total).vat.toLocaleString()}
                   </Text>
                 ) : null}
+                {!h.reverted && (
+                  <TouchableOpacity
+                    style={styles.historyUndoBtn}
+                    onPress={() => handleRevert(h)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.historyUndoBtnText}>↶ 되돌리기</Text>
+                  </TouchableOpacity>
+                )}
                 {printerAvailable ? (
                   <TouchableOpacity
                     style={[
@@ -654,6 +692,13 @@ function makeStyles(scale = 1) {
   },
   historyPrintBtnBusy: { opacity: 0.5 },
   historyPrintBtnText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
+  historyUndoBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#dc2626',
+    borderRadius: 4,
+  },
+  historyUndoBtnText: { color: '#fff', fontSize: fp(11), fontWeight: '700' },
   historyTotal: {
     fontSize: fp(14),
     fontWeight: '800',
