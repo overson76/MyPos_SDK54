@@ -38,16 +38,25 @@ import IncomingCallBanner from './components/IncomingCallBanner';
 import UpdateBanner from './components/UpdateBanner';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
+// production 에서도 에러 메시지/스택 표시 — Sentry DSN 미설정 폰에서도 진단 가능하도록.
 function CrashFallback({ error, resetError }) {
+  const stackPreview = error?.stack
+    ? String(error.stack).split('\n').slice(0, 6).join('\n')
+    : '';
   return (
     <View style={styles.crashRoot}>
       <Text style={styles.crashTitle}>앱에 문제가 발생했습니다</Text>
       <Text style={styles.crashSubtitle}>
         오류가 자동으로 보고되었습니다. 아래 버튼으로 다시 시도하세요.
       </Text>
-      {__DEV__ && error?.message ? (
+      {error?.message ? (
         <Text style={styles.crashError} numberOfLines={4}>
           {String(error.message)}
+        </Text>
+      ) : null}
+      {stackPreview ? (
+        <Text style={styles.crashStack} numberOfLines={6}>
+          {stackPreview}
         </Text>
       ) : null}
       <TouchableOpacity
@@ -411,8 +420,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
     padding: 8,
     borderRadius: 6,
+    marginBottom: 8,
+    maxWidth: 500,
+  },
+  crashStack: {
+    fontSize: 10,
+    color: '#374151',
+    backgroundColor: '#f3f4f6',
+    padding: 8,
+    borderRadius: 6,
     marginBottom: 16,
-    maxWidth: 400,
+    maxWidth: 600,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
   crashBtn: {
     backgroundColor: '#2563eb',
