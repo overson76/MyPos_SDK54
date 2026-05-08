@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -34,7 +34,6 @@
     "@react-native-firebase/auth": "^24.0.0",
     "@react-native-firebase/firestore": "^24.0.0",
     "@sentry/react-native": "~7.2.0",
-    "electron-printer": "^0.0.5",
     "electron-updater": "^6.8.3",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.12",
@@ -49,7 +48,6 @@
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.17",
     "firebase": "^12.12.1",
-    "node-thermal-printer": "^4.6.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
