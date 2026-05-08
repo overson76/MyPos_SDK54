@@ -91,17 +91,32 @@ function sendToNetworkPrinter(bytes, opts) {
 }
 
 // USB 프린터 — node-thermal-printer 라이브러리 위임.
-// 라이브러리 미설치 시 친절한 에러 메시지. 매장이 프린터 결정 후 npm install.
+// 1.0.17: driver 옵션 누락 fix. node-thermal-printer 4.x 는 interface "printer:이름"
+// 형식 사용 시 driver 옵션에 OS-native 프린터 모듈을 함께 전달해야 함. 안 그러면
+// lib/interfaces/printer.js 가 "No driver set!" 던짐.
 async function sendToUsbPrinter(receipt, opts) {
   let ThermalPrinter;
   try {
-    // 동적 require — 모듈 없으면 catch 진입.
     // eslint-disable-next-line global-require
     ({ printer: ThermalPrinter } = require('node-thermal-printer'));
   } catch (e) {
     throw new Error(
       'node-thermal-printer 패키지가 설치되어 있지 않습니다. 매장 프린터 모델 결정 후 ' +
       '`npm install node-thermal-printer` 로 추가하세요.'
+    );
+  }
+
+  // Electron 환경에서는 electron-printer (prebuild 포함, native 컴파일 X) 사용.
+  // node-thermal-printer README 가 권장하는 패턴: driver: require('electron-printer').
+  let printerDriver;
+  try {
+    // eslint-disable-next-line global-require
+    printerDriver = require('electron-printer');
+  } catch (e) {
+    throw new Error(
+      'electron-printer 패키지가 설치되어 있지 않습니다. ' +
+      '`npm install electron-printer` 로 추가하세요. ' +
+      '(node-thermal-printer 의 USB/printer-queue 모드에 OS 네이티브 driver 모듈로 필요)'
     );
   }
 
@@ -113,8 +128,9 @@ async function sendToUsbPrinter(receipt, opts) {
   }
 
   const printer = new ThermalPrinter({
-    type: opts.type || 'epson', // 'epson' / 'star' / 'bixolon' 일부 라이브러리 버전 지원
+    type: opts.type || 'epson',
     interface: opts.iface,
+    driver: printerDriver, // ← 1.0.17 추가: native printer 모듈 전달 (없으면 "No driver set!")
     width: 32,
     characterSet: 'KOREA',
     removeSpecialCharacters: false,

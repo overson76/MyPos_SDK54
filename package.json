@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -34,6 +34,7 @@
     "@react-native-firebase/auth": "^24.0.0",
     "@react-native-firebase/firestore": "^24.0.0",
     "@sentry/react-native": "~7.2.0",
+    "electron-printer": "^0.0.5",
     "electron-updater": "^6.8.3",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.12",
