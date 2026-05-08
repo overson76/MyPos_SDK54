@@ -19,6 +19,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-07 | [2026-05-07-되돌리기-탭분리.md](2026-05-07-되돌리기-탭분리.md) | 되돌리기 운영 도구 — 상부 탭 메뉴에 별도 "되돌리기" 탭 추가 (주문현황 ↔ 관리자 사이). 결제완료/조리완료 두 모드 토글 + 최신순 정렬. 도메인 로직 변경 없음 | (1.0.15) |
 | 2026-05-08 | [2026-05-08-되돌리기-UI-제거-isweb-디버깅.md](2026-05-08-되돌리기-UI-제거-isweb-디버깅.md) | 주문현황·관리자 수익현황의 되돌리기 UI 제거 (UndoScreen 단일화). 진행 중 폰 fallback 두 차례 사고 → 진단 도구(CrashFallback production 표시) 추가 → 진짜 원인 = OrderScreen 의 isWeb ReferenceError (이틀 잠복) | 09c6d61, ec27b99, 0605740 |
 | 2026-05-08 | [2026-05-08-영수증프린터-USB-매장맥북빌드.md](2026-05-08-영수증프린터-USB-매장맥북빌드.md) | SEWOO SLK-TS400 USB 통합 — 드라이버 4.70(180dpi) 설치 + 환경변수 setx + node-thermal-printer 의존성 등록 + 매장 맥북 macOS→Windows 크로스빌드(wine 자동) + GitHub Releases v1.0.16 publish. 카운터 PC 의 1.0.16 적용은 install-on-quit 미트리거 + NSIS "cannot be closed" 반복 → 다음 세션(집 윈도우 PC) 이어감 | ff60843, 41d4f3e |
+| 2026-05-09 | [2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md](2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md) | "No driver set!" 진단 → 1.0.17 fix(electron-printer 추가) → 매장 PC 검증 시 호환 X (electron-v0.36 prebuild 만 포함) → 다른 fork 모두 native compile 막힘(VS Build Tools 부재) → **1.0.18: PowerShell + Add-Type 인라인 winspool API 우회**로 native 모듈 의존성 통째 제거. 매장 PC SEWOO USB 출력 정상 ✅ | fd842df, f6c89b1 |
 
 ---
 
@@ -44,6 +45,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-03 | [kakao-delivery-distance-map](../learning/2026-05-03-kakao-delivery-distance-map.md) | 카카오 배달 거리 계산 + 지도 오버레이 |
 | 2026-05-03 | [uid-loss-diagnosis-and-self-recovery](../learning/2026-05-03-uid-loss-diagnosis-and-self-recovery.md) | 익명 UID 손실 진단 + 자가 복구 흐름 설계 |
 | 2026-05-07 | [undo-reverted-flag-pattern](../learning/2026-05-07-undo-reverted-flag-pattern.md) | append-only history 의 "되돌리기" — reverted 플래그 패턴 (delete vs flag, 모든 집계의 isCounted 가드, idempotent + occupied 가드) |
+| 2026-05-09 | [PowerShell-winspool-우회-electron-native회피](../learning/2026-05-09-PowerShell-winspool-우회-electron-native회피.md) | Electron 의 native module 의존성을 PowerShell + Add-Type 인라인 C# 으로 우회. winspool.Drv API 직접 호출 패턴 + 함정 5종 + 적용 가능 분야 |
 
 ---
 
