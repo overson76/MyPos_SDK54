@@ -15,8 +15,10 @@
 
 const { autoUpdater } = require('electron-updater');
 
-// 운영 안전 default — 강제 재시작 막기 위해 명시적으로 설정.
-autoUpdater.autoDownload = true;
+// 1.0.28: autoDownload 도 false 로 변경. quitAndInstall silent 실패가 반복돼서 자동
+// 다운로드 자체가 무용 — 백그라운드에서 다운로드만 받고 적용 못 하는 패턴 (사장님 며칠 짜증).
+// 사장님이 GitHub Releases 에서 직접 NSIS Setup 받아 설치하는 단순 흐름으로 전환.
+autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 
 // 메인 프로세스 → 모든 BrowserWindow 에 이벤트 push.

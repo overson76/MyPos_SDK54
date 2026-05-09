@@ -225,56 +225,36 @@ function SystemSettingsView() {
 
       {/* (1.0.22: 주문지 출력 정책은 관리자 → 설정 탭으로 이동) */}
 
-      {/* === Electron 자동 업데이트 — PC 카운터 .exe 환경에서만 보임. === */}
-      {updateSupported ? (
+      {/* === 1.0.28: 자동 업데이트 카드 단순화 — quitAndInstall silent 실패가 며칠 반복돼서
+           "🚀 지금 적용" 버튼 무용지물. 사장님이 GitHub 에서 직접 NSIS Setup 받아 설치하는
+           단순 흐름으로 전환. 자동 다운로드도 비활성 (autoDownload:false). === */}
+      {isElectron() ? (
         <>
           <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>
-            🔄 자동 업데이트 (PC 카운터)
+            🔄 새 버전 받기 (PC 카운터)
           </Text>
           <View style={sysStyles.row}>
             <View style={sysStyles.rowText}>
-              <Text style={sysStyles.label}>
-                {updateStatus?.message || '아직 확인 안 됨'}
-              </Text>
+              <Text style={sysStyles.label}>새 버전이 나오면 직접 다운로드</Text>
               <Text style={sysStyles.helper}>
-                새 버전이 배포되면 백그라운드에서 다운로드합니다. 영업 중 강제 재시작 X —
-                다운로드 완료 후 사장님이 직접 "🚀 지금 적용" 버튼을 누르면 .exe 가 닫히고
-                새 버전이 자동 시작됩니다. (1.0.20+: 영업 안전 차원의 명시 적용 정책)
+                사장님이 영업 끝나고 GitHub Releases 에서 최신 NSIS Setup 받아 설치하세요.{'\n'}
+                현재 .exe 버전: PowerShell 에서 확인 가능
+                {'\n'}
+                {'  '}(Get-Item "$env:LOCALAPPDATA\\Programs\\mypos_sdk54\\MyPos.exe").VersionInfo.FileVersion
               </Text>
-              {updateStatus?.kind === 'downloading' &&
-              typeof updateStatus.percent === 'number' ? (
-                <Text style={sysStyles.helper}>
-                  진행률: {Math.round(updateStatus.percent)}%
-                </Text>
-              ) : null}
             </View>
-            {updateStatus?.kind === 'downloaded' ? (
-              <TouchableOpacity
-                style={[
-                  sysStyles.btnPrimary,
-                  updateApplying && { opacity: 0.5 },
-                ]}
-                disabled={updateApplying}
-                onPress={handleApplyUpdate}
-              >
-                <Text style={sysStyles.btnPrimaryText}>
-                  {updateApplying ? '적용 중…' : '🚀 지금 적용'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  sysStyles.btnSecondary,
-                  updateChecking && { opacity: 0.5 },
-                ]}
-                disabled={updateChecking}
-                onPress={handleCheckUpdate}
-              >
-                <Text style={sysStyles.btnSecondaryText}>
-                  {updateChecking ? '확인 중…' : '지금 확인'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[sysStyles.btnPrimary, { paddingHorizontal: 14 }]}
+              onPress={() => {
+                const url = 'https://github.com/overson76/MyPos_SDK54/releases/latest';
+                if (typeof window !== 'undefined') {
+                  // Electron 의 webContents.setWindowOpenHandler 가 외부 URL 을 OS 기본 브라우저로 분기.
+                  window.open?.(url, '_blank');
+                }
+              }}
+            >
+              <Text style={sysStyles.btnPrimaryText}>🔗 GitHub Releases</Text>
+            </TouchableOpacity>
           </View>
         </>
       ) : null}

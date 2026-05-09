@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyPos_SDK54",
     "slug": "MyPos_SDK54",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

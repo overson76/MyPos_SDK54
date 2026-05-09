@@ -35,7 +35,10 @@ import { checkForUpdates } from './utils/otaUpdates';
 import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
-import UpdateBanner from './components/UpdateBanner';
+// 1.0.28: UpdateBanner 제거 — 자동업데이트 quitAndInstall silent 실패가 반복돼서
+// "다운로드 완료" 배너가 사장님 화면에 spam 처럼 떠있고 클릭해도 작동 안 함.
+// 새 버전은 사장님이 GitHub Releases 에서 직접 다운로드 (관리자 → 시스템 → 🔗 버튼).
+// import UpdateBanner from './components/UpdateBanner';
 import AutoPrintBridge from './components/AutoPrintBridge';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
@@ -298,9 +301,8 @@ function MainApp() {
           handleTabPress('주문');
         }}
       />
-      {/* 자동 업데이트 진행/완료/오류 배너 — Electron(.exe) 환경에서만, downloading/downloaded/error 시만 표시.
-          PinchZoom 밖에 둬서 사장님이 화면 줌해도 배너는 고정 크기 유지. */}
-      <UpdateBanner />
+      {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
+          배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>
         <View style={styles.zoomRoot}>
           <View style={styles.topTabs}>
