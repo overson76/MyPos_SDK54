@@ -73,6 +73,10 @@ export default function OrderScreen({
   const [paymentPicker, setPaymentPicker] = useState(null);
   // 퀵에디트 모달 — 메뉴 타일 꾹 누르면 { id, name, price } 세팅
   const [quickEditItem, setQuickEditItem] = useState(null);
+  // 1.0.26: 메뉴 인라인 편집 모드 — ON 시 빈 [+] 슬롯 + 메뉴 카드 [⋮] 액션 노출.
+  const [editMode, setEditMode] = useState(false);
+  // 빈 슬롯 클릭 시 신규 추가 위치 캡처 — { category, flatIndex }
+  const [menuAddTarget, setMenuAddTarget] = useState(null);
   const { storeInfo } = useStore();
   // sizePrompt = { items: [...], index: 0, sizeOption, value }
   const {
@@ -182,6 +186,8 @@ export default function OrderScreen({
   const [nativeMoveFromIdx, setNativeMoveFromIdx] = useState(null);
   // PanResponder 가 hit-test 할 때 쓸 grid 컨테이너의 절대 좌표 (window 기준 pageX/pageY).
   const gridLayoutRef = useRef(null);
+  // 1.0.26: 즐겨찾기 탭의 절대 좌표 — drag-drop 시 hit-test 용.
+  const favTabLayoutRef = useRef(null);
   // 드래그 중 손가락 위치 (overlay 표시용 — 카드 따라다니는 ghost). null 이면 표시 X.
   const [dragFingerPos, setDragFingerPos] = useState(null);
   // PanResponder 안에서 최신 nativeMoveFromIdx / dragOverIdx 참조용 (closure stale 방지).
@@ -236,7 +242,14 @@ export default function OrderScreen({
         onPanResponderRelease: () => {
           const from = moveFromRef.current;
           const to = dragOverRef.current;
-          if (from !== null && to !== null && from !== to) {
+          if (from !== null && to === 'FAV_TAB') {
+            // 1.0.26: 즐겨찾기 탭에 drop → 해당 메뉴를 즐겨찾기에 추가 (이미 즐겨찾기면 무시).
+            const flat = currentRows.flat();
+            const menuId = flat[from];
+            if (menuId != null) {
+              toggleFavorite(menuId);
+            }
+          } else if (from !== null && to !== null && typeof to === 'number' && from !== to) {
             setCategorySlot?.(activeCategory, from, to);
           }
           setNativeMoveFromIdx(null);
@@ -249,14 +262,30 @@ export default function OrderScreen({
           setDragFingerPos(null);
         },
       }),
-    // setCategorySlot / activeCategory 변경 시 새 responder. 매 render 매번이라 약간
-    // 부담이지만 PanResponder.create 자체는 가벼움.
+    // 1.0.26: deps 에 activeCategory + currentRows 포함 — 매 render 새 responder.
+    // PanResponder.create 자체는 가벼움. closure 안의 currentRows / toggleFavorite 최신.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeCategory]
+    [activeCategory, currentRows]
   );
 
   // grid 컨테이너 안에서 손가락 위치 → cell idx 매핑.
+  // 1.0.26: 즐겨찾기 탭 영역도 우선 hit-test → 'FAV_TAB' sentinel 반환.
   const hitTestAndUpdate = (pageX, pageY) => {
+    // 1) 즐겨찾기 탭 hit-test (현재 활성 카테고리가 즐겨찾기 가 아닐 때만 — 중복 방지)
+    if (activeCategory !== '즐겨찾기') {
+      const fav = favTabLayoutRef.current;
+      if (
+        fav &&
+        pageX >= fav.pageX &&
+        pageX <= fav.pageX + fav.width &&
+        pageY >= fav.pageY &&
+        pageY <= fav.pageY + fav.height
+      ) {
+        if (dragOverRef.current !== 'FAV_TAB') setDragOverIdx('FAV_TAB');
+        return;
+      }
+    }
+    // 2) 그리드 cell hit-test
     const layout = gridLayoutRef.current;
     if (!layout) return;
     const relX = pageX - layout.pageX;
@@ -869,31 +898,105 @@ export default function OrderScreen({
       <View style={[styles.body, stacked && styles.bodyStacked]}>
         {/* 왼쪽: 메뉴 영역 */}
         <View style={styles.menuSide}>
-          {/* 카테고리 탭 */}
-          <View style={styles.categoryBar}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {/* 카테고리 탭 + 편집 모드 토글 */}
+          <View style={[styles.categoryBar, { flexDirection: 'row', alignItems: 'center' }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flex: 1 }}
+            >
               {categories.map((cat) => {
                 const active = activeCategory === cat;
+                const isFav = cat === '즐겨찾기';
+                // 1.0.26: 즐겨찾기 탭 — drag-drop 시 hit-test 용 onLayout + drop zone 강조
+                const isDropTarget = isFav && dragOverIdx === 'FAV_TAB' && nativeMoveFromIdx !== null;
                 return (
                   <TouchableOpacity
                     key={cat}
-                    style={[styles.categoryTab, isPhone && styles.categoryTabPhone, active && styles.categoryTabActive]}
+                    style={[
+                      styles.categoryTab,
+                      isPhone && styles.categoryTabPhone,
+                      active && styles.categoryTabActive,
+                      isDropTarget && {
+                        backgroundColor: '#fef3c7',
+                        borderWidth: 2,
+                        borderColor: '#d97706',
+                      },
+                    ]}
                     onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
+                    onLayout={(e) => {
+                      if (!isFav) return;
+                      const node = e.target;
+                      if (node && typeof node.measureInWindow === 'function') {
+                        node.measureInWindow((x, y, w, h) => {
+                          favTabLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
+                        });
+                      }
+                    }}
                   >
                     <Text
                       style={[
                         styles.categoryText,
                         isPhone && styles.categoryTextPhone,
                         active && styles.categoryTextActive,
+                        isDropTarget && { color: '#d97706', fontWeight: '900' },
                       ]}
                     >
-                      {cat}
+                      {isDropTarget ? '⭐ 즐겨찾기에 추가' : cat}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
+            {/* 1.0.26: 편집 모드 토글 — ON 시 빈 [+] 슬롯 + 메뉴 카드 [⋮] 노출 */}
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                marginHorizontal: 6,
+                borderRadius: 8,
+                backgroundColor: editMode ? '#dc2626' : '#f3f4f6',
+                borderWidth: 1,
+                borderColor: editMode ? '#b91c1c' : '#d1d5db',
+              }}
+              onPress={() => setEditMode(!editMode)}
+              activeOpacity={0.7}
+              accessibilityLabel="메뉴 편집 모드"
+            >
+              <Text
+                style={{
+                  fontSize: isPhone ? 11 : 13,
+                  fontWeight: '700',
+                  color: editMode ? '#fff' : '#374151',
+                }}
+              >
+                {editMode ? '✓ 완료' : '✏️ 편집'}
+              </Text>
+            </TouchableOpacity>
           </View>
+          {/* 1.0.26: 편집 모드 안내 띠 */}
+          {editMode ? (
+            <View
+              style={{
+                backgroundColor: '#fee2e2',
+                borderBottomWidth: 1,
+                borderBottomColor: '#fca5a5',
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: '#991b1b',
+                  fontWeight: '700',
+                  textAlign: 'center',
+                }}
+              >
+                ✏️ 메뉴 편집 중 — 빈 [+] 박스 클릭 = 새 메뉴 추가 / 메뉴 longPress+드래그 = 위치 이동·즐겨찾기 / "✓ 완료" 누르면 종료
+              </Text>
+            </View>
+          ) : null}
 
           {/* 폰 메뉴 이동 모드 배너 — 선택된 메뉴 타일이 있을 때만 표시 */}
           {!isWeb && nativeMoveFromIdx !== null ? (
@@ -994,7 +1097,18 @@ export default function OrderScreen({
                         : {};
                       // 빈 칸 — 모든 카테고리 격자에 존재; 드롭 대상
                       if (!item) {
-                        const emptyBox = (
+                        // 1.0.26: 편집 모드 ON 시 점선 + "+" 표시 + 클릭 시 신규 추가 모달
+                        const editEmptyStyle = editMode
+                          ? {
+                              borderWidth: 2,
+                              borderStyle: 'dashed',
+                              borderColor: '#dc2626',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: '#fef2f2',
+                            }
+                          : null;
+                        const emptyContent = (
                           <View
                             key={`empty-${rowIdx}-${cellIdx}`}
                             style={[
@@ -1003,9 +1117,39 @@ export default function OrderScreen({
                                 minHeight: 0,
                               },
                               styles.tileEmptySlot,
+                              editEmptyStyle,
                               isDragTarget && styles.tileDragTarget,
                             ]}
-                          />
+                          >
+                            {editMode ? (
+                              <Text
+                                style={{
+                                  fontSize: 28,
+                                  color: '#dc2626',
+                                  fontWeight: '900',
+                                }}
+                              >
+                                +
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                        const emptyBox = editMode ? (
+                          <TouchableOpacity
+                            key={`empty-press-${rowIdx}-${cellIdx}`}
+                            onPress={() =>
+                              setMenuAddTarget({
+                                category: activeCategory,
+                                flatIndex: dragIdx,
+                              })
+                            }
+                            activeOpacity={0.6}
+                            accessibilityLabel={`${activeCategory} 카테고리에 새 메뉴 추가`}
+                          >
+                            {emptyContent}
+                          </TouchableOpacity>
+                        ) : (
+                          emptyContent
                         );
                         if (isWeb) {
                           return (
@@ -1049,6 +1193,12 @@ export default function OrderScreen({
                           }}
                           delayLongPress={400}
                           onPress={() => {
+                            // 1.0.26: 편집 모드 ON 시 메뉴 카드 클릭 = 빠른 수정 모달.
+                            // 장바구니 추가 흐름은 일반 모드에서만.
+                            if (editMode) {
+                              setQuickEditItem(item);
+                              return;
+                            }
                             // 폰 이동 모드 중: 목적지 선택
                             if (!isWeb && nativeMoveFromIdx !== null) {
                               if (nativeMoveFromIdx === dragIdx) {
@@ -1772,6 +1922,14 @@ export default function OrderScreen({
         <MenuQuickEditModal
           item={quickEditItem}
           onClose={() => setQuickEditItem(null)}
+        />
+      ) : null}
+
+      {/* 1.0.26: 신규 메뉴 추가 모달 — 편집 모드 ON 시 빈 [+] 슬롯 클릭 */}
+      {menuAddTarget ? (
+        <MenuQuickEditModal
+          addAt={menuAddTarget}
+          onClose={() => setMenuAddTarget(null)}
         />
       ) : null}
     </View>

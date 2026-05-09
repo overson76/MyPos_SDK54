@@ -16,10 +16,15 @@ import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import { sanitizeMenuName, sanitizeMenuPrice, VALIDATE_LIMITS } from '../utils/validate';
 
-export default function MenuQuickEditModal({ item, onClose }) {
-  const { updateItem } = useMenu();
+// 1.0.26: addAt prop 추가 — { category, flatIndex } 면 신규 추가 모드.
+//   - mode='edit' (기본, item prop): 기존 메뉴 이름/가격 빠른 수정
+//   - mode='add' (addAt prop): 빈 슬롯 클릭 시 그 위치에 신규 메뉴 추가 (addNewItemAt)
+export default function MenuQuickEditModal({ item, addAt, onClose }) {
+  const { updateItem, addNewItemAt, deleteItem } = useMenu();
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
+
+  const isAddMode = !!addAt && !item;
 
   const [name, setName] = useState(item?.name || '');
   const [price, setPrice] = useState(item ? String(item.price) : '');
@@ -34,10 +39,15 @@ export default function MenuQuickEditModal({ item, onClose }) {
       setPrice(String(item.price || ''));
       setNameErr('');
       setPriceErr('');
+    } else if (addAt) {
+      setName('');
+      setPrice('');
+      setNameErr('');
+      setPriceErr('');
     }
-  }, [item?.id]);
+  }, [item?.id, addAt?.flatIndex, addAt?.category]);
 
-  if (!item) return null;
+  if (!item && !addAt) return null;
 
   const validate = () => {
     let ok = true;
@@ -60,11 +70,20 @@ export default function MenuQuickEditModal({ item, onClose }) {
     if (!validate()) return;
     const newName = sanitizeMenuName(name);
     const newPrice = sanitizeMenuPrice(price);
-    // 변경 없으면 그냥 닫기
-    if (newName === item.name && newPrice === item.price) { onClose(); return; }
 
     setSaving(true);
-    updateItem(item.id, { name: newName, price: newPrice });
+    if (isAddMode) {
+      // 신규 추가 — addAt 의 category + flatIndex 위치에 메뉴 생성.
+      addNewItemAt({ name: newName, price: newPrice, category: addAt.category }, addAt.flatIndex);
+    } else {
+      // 변경 없으면 그냥 닫기
+      if (newName === item.name && newPrice === item.price) {
+        setSaving(false);
+        onClose();
+        return;
+      }
+      updateItem(item.id, { name: newName, price: newPrice });
+    }
     setSaving(false);
     onClose();
   };
@@ -75,14 +94,16 @@ export default function MenuQuickEditModal({ item, onClose }) {
         <Pressable style={styles.card} onPress={() => {}}>
           {/* 헤더 */}
           <View style={styles.header}>
-            <Text style={styles.title}>✏️ 빠른 메뉴 수정</Text>
+            <Text style={styles.title}>
+              {isAddMode ? '➕ 새 메뉴 추가' : '✏️ 빠른 메뉴 수정'}
+            </Text>
             <TouchableOpacity onPress={onClose} hitSlop={8}>
               <Text style={styles.close}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.subtitle} numberOfLines={1}>
-            {item.name}
+            {isAddMode ? `카테고리: ${addAt.category}` : item.name}
           </Text>
 
           {/* 이름 */}
@@ -122,13 +143,45 @@ export default function MenuQuickEditModal({ item, onClose }) {
               onPress={handleSave}
               disabled={saving}
             >
-              <Text style={styles.saveText}>저장</Text>
+              <Text style={styles.saveText}>{isAddMode ? '추가' : '저장'}</Text>
             </TouchableOpacity>
           </View>
 
+          {/* 1.0.26: 삭제 버튼 — 수정 모드에서만 노출. confirm 필수. */}
+          {!isAddMode ? (
+            <TouchableOpacity
+              style={{
+                marginTop: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                backgroundColor: '#fef2f2',
+                borderWidth: 1,
+                borderColor: '#fecaca',
+                alignItems: 'center',
+              }}
+              onPress={() => {
+                const ok =
+                  typeof window !== 'undefined'
+                    ? window?.confirm?.(
+                        `'${item.name}' 메뉴를 삭제할까요?\n매출 이력에는 영향 없음. 격자 슬롯이 비워집니다.`
+                      )
+                    : true;
+                if (!ok) return;
+                deleteItem(item.id);
+                onClose();
+              }}
+            >
+              <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>
+                🗑️ 메뉴 삭제
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
           {/* 상세 수정 안내 */}
           <Text style={styles.hint}>
-            이미지·카테고리 등 상세 수정 → 관리자 → 메뉴 관리
+            {isAddMode
+              ? '이미지·색상 등 추가 설정 → 저장 후 관리자 → 메뉴 관리'
+              : '이미지·카테고리 등 상세 수정 → 관리자 → 메뉴 관리'}
           </Text>
         </Pressable>
       </Pressable>
