@@ -74,15 +74,15 @@ function CrashFallback({ error, resetError }) {
 const TAB_KEYS = ['테이블', '주문', '주문현황', '되돌리기', '관리자'];
 
 // 1.0.22: 탭별 강조색 — 활성/비활성 시 borderBottom + text 색상.
-// Tailwind tone 의 차분한 채도 — 매장 운영 분위기 깨지 않게.
+// 1.0.24: contrast 강화 — idle 색을 더 진하게(active 와 비슷한 톤) + 활성 시 배경 강조 강화.
 //   테이블=blue (메인 운영), 주문=emerald (주문 입력), 주문현황=amber (주방 진행 중),
 //   되돌리기=rose (위험 행동), 관리자=slate (차분 회색)
 const TAB_COLORS = {
-  '테이블':    { active: '#2563eb', idle: '#3b82f6' }, // blue
-  '주문':      { active: '#059669', idle: '#10b981' }, // emerald
-  '주문현황':  { active: '#d97706', idle: '#f59e0b' }, // amber
-  '되돌리기':  { active: '#e11d48', idle: '#f43f5e' }, // rose
-  '관리자':    { active: '#334155', idle: '#475569' }, // slate
+  '테이블':    { active: '#1d4ed8', idle: '#2563eb' }, // blue (700/600)
+  '주문':      { active: '#047857', idle: '#059669' }, // emerald (700/600)
+  '주문현황':  { active: '#b45309', idle: '#d97706' }, // amber (700/600)
+  '되돌리기':  { active: '#be123c', idle: '#e11d48' }, // rose (700/600)
+  '관리자':    { active: '#1e293b', idle: '#334155' }, // slate (800/700)
 };
 
 // dev 모드 web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을
@@ -316,7 +316,8 @@ function MainApp() {
                     // 활성 탭만 진한 borderBottom + 옅은 배경 강조 (촌스럽지 않게)
                     isActive && {
                       borderBottomColor: c.active,
-                      backgroundColor: c.active + '14', // 약 8% opacity 톤
+                      borderBottomWidth: 3, // 1.0.24: 활성 강조 더 명확히
+                      backgroundColor: c.active + '22', // 약 13% opacity (1.0.22 의 14 → 22 로 강화)
                     },
                   ]}
                   onPress={() => handleTabPress(key)}

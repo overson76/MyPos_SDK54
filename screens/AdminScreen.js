@@ -18,7 +18,7 @@ import LockGate from '../components/LockGate';
 import RevenueLockGate from '../components/RevenueLockGate';
 import StoreManagementSection from '../components/StoreManagementSection';
 import AdminSettingsView from '../components/AdminSettingsView';
-import PinEntry from '../components/PinEntry';
+import PinManageModal, { PIN_LENGTH } from '../components/PinManageModal';
 import {
   getSpeakAddress,
   getVolume,
@@ -65,94 +65,8 @@ const SECTIONS = [
   { key: 'system', label: '시스템' },
 ];
 
-const PIN_LENGTH = 4;
-
-// PIN 설정 / 변경 / 해제 모달.
-// mode: 'set' (신규) | 'change' (변경 — old + new) | 'clear' (해제 — old 검증)
-function PinManageModal({ mode, onClose, onDone }) {
-  const { scale } = useResponsive();
-  const pinStyles = useMemo(() => makePinStyles(scale), [scale]);
-  const [step, setStep] = useState(mode === 'change' || mode === 'clear' ? 'old' : 'new');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [firstNew, setFirstNew] = useState(''); // 'new' 단계에서 처음 입력한 값
-
-  const titleByStep =
-    step === 'old'
-      ? mode === 'change'
-        ? '기존 PIN 입력'
-        : 'PIN 잠금 해제 — 현재 PIN 입력'
-      : step === 'new'
-      ? '새 PIN 입력 (4자리)'
-      : '새 PIN 한 번 더 입력';
-
-  const subtitleByStep =
-    step === 'old'
-      ? '확인을 위해 기존 PIN 을 입력하세요'
-      : step === 'new'
-      ? '메뉴 가격 / 매출 보호용 PIN'
-      : '확인을 위해 다시 입력하세요';
-
-  const onSubmit = async (pin) => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      if (step === 'old') {
-        const ok = await verifyPin(pin);
-        if (!ok) {
-          setError('PIN 이 일치하지 않습니다.');
-        } else if (mode === 'clear') {
-          await clearPin();
-          onDone?.('cleared');
-        } else {
-          // change → 새 PIN 입력 단계로
-          setStep('new');
-        }
-      } else if (step === 'new') {
-        setFirstNew(pin);
-        setStep('confirm');
-      } else {
-        // confirm
-        if (pin !== firstNew) {
-          setError('두 번 입력한 PIN 이 다릅니다. 다시 시작하세요.');
-          setFirstNew('');
-          setStep('new');
-        } else {
-          await savePin(pin);
-          onDone?.(mode === 'set' ? 'set' : 'changed');
-        }
-      }
-    } catch (e) {
-      setError(e?.message || 'PIN 처리 중 오류');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // RN <Modal> 대신 absolute 오버레이 — iOS new arch + nested Pressable 호환성 이슈 우회
-  return (
-    <View style={pinStyles.overlay} pointerEvents="auto">
-      <Pressable style={pinStyles.backdrop} onPress={onClose}>
-        <Pressable style={pinStyles.card} onPress={() => {}}>
-          <View style={pinStyles.header}>
-            <Text style={pinStyles.headerTitle}>{titleByStep}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
-              <Text style={pinStyles.close}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <PinEntry
-            title=""
-            subtitle={subtitleByStep}
-            errorMessage={error}
-            length={PIN_LENGTH}
-            onSubmit={onSubmit}
-          />
-        </Pressable>
-      </Pressable>
-    </View>
-  );
-}
+// 1.0.24: PinManageModal + PIN_LENGTH 는 components/PinManageModal.js 로 이동
+// (AdminSettingsView 와 공유). 아래에서 import.
 
 function SystemSettingsView() {
   const { scale } = useResponsive();
@@ -301,104 +215,7 @@ function SystemSettingsView() {
       {/* === 매장 관리 (매장 정보 + 수익 PIN, 대표 전용 항목 포함) === */}
       <StoreManagementSection />
 
-      {/* === 보안 / PIN 잠금 (기기 PIN — 자동 잠금) === */}
-      <Text style={sysStyles.sectionTitle}>기기 잠금 / 자동 잠금</Text>
-      <View style={sysStyles.row}>
-        <View style={sysStyles.rowText}>
-          <Text style={sysStyles.label}>
-            PIN 잠금 {lock.pinSet ? '설정됨' : '미설정'}
-            {lock.pinSet && (lock.isUnlocked ? ' · 🔓 해제' : ' · 🔒 잠김')}
-          </Text>
-          <Text style={sysStyles.helper}>
-            수익 현황 등 민감한 영역을 4자리 PIN 으로 보호합니다.
-            앱이 백그라운드로 가거나 일정 시간 미사용 시 자동 잠금.
-          </Text>
-        </View>
-        {!lock.pinSet ? (
-          <TouchableOpacity
-            style={sysStyles.btnPrimary}
-            onPress={() => setPinModal('set')}
-          >
-            <Text style={sysStyles.btnPrimaryText}>PIN 설정</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            <TouchableOpacity
-              style={sysStyles.btnSecondary}
-              onPress={() => setPinModal('change')}
-            >
-              <Text style={sysStyles.btnSecondaryText}>변경</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={sysStyles.btnSecondary}
-              onPress={() => setPinModal('clear')}
-            >
-              <Text style={sysStyles.btnSecondaryText}>해제</Text>
-            </TouchableOpacity>
-            {lock.isUnlocked ? (
-              <TouchableOpacity
-                style={sysStyles.btnPrimary}
-                onPress={() => lock.lock()}
-              >
-                <Text style={sysStyles.btnPrimaryText}>지금 잠그기</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        )}
-      </View>
-
-      {lock.pinSet ? (
-        <View style={sysStyles.row}>
-          <View style={sysStyles.rowText}>
-            <Text style={sysStyles.label}>
-              자동 잠금 — {lock.autoLockMin}분 비활성 후
-            </Text>
-            <Text style={sysStyles.helper}>
-              마지막 활동 후 시간이 지나면 자동으로 다시 잠금. 백그라운드 진입 시는 즉시.
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <Slider
-                style={{ flex: 1, height: 28 }}
-                minimumValue={1}
-                maximumValue={30}
-                step={1}
-                value={lock.autoLockMin}
-                onSlidingComplete={(v) =>
-                  lock.setAutoLockMin(Math.round(v))
-                }
-                minimumTrackTintColor="#2563eb"
-                maximumTrackTintColor="#d1d5db"
-                disabled={!lock.autoLockEnabled}
-              />
-              <Text style={sysStyles.sliderValue}>{lock.autoLockMin}분</Text>
-            </View>
-          </View>
-          <Switch
-            value={lock.autoLockEnabled}
-            onValueChange={(v) => lock.setAutoLockEnabled(v)}
-            accessibilityLabel="자동 잠금 사용"
-          />
-        </View>
-      ) : null}
-
-      {/* === 개인정보 (배달 주소 음성 안내) === */}
-      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>
-        개인정보
-      </Text>
-      <View style={sysStyles.row}>
-        <View style={sysStyles.rowText}>
-          <Text style={sysStyles.label}>배달 주소 음성 안내</Text>
-          <Text style={sysStyles.helper}>
-            끄면 매장 스피커에서 고객 주소를 읽지 않습니다 (화면에는 그대로 표시).
-            매장 운영 환경에 다른 손님이 있다면 OFF 권장.
-          </Text>
-        </View>
-        <Switch
-          value={speakAddr}
-          onValueChange={toggleSpeakAddr}
-          accessibilityLabel="배달 주소 음성 안내"
-        />
-      </View>
+      {/* (1.0.24: PIN 잠금 / 자동 잠금 / 음성 안내 모두 관리자 → 설정 탭으로 이동) */}
 
       <View style={sysStyles.note}>
         <Text style={sysStyles.noteText}>
@@ -744,13 +561,7 @@ function SystemSettingsView() {
         </Text>
       </View>
 
-      {pinModal ? (
-        <PinManageModal
-          mode={pinModal}
-          onClose={() => setPinModal(null)}
-          onDone={onPinDone}
-        />
-      ) : null}
+      {/* (1.0.24: PinManageModal 은 AdminSettingsView 로 이동) */}
     </ScrollView>
   );
 }
@@ -986,43 +797,4 @@ function makeSysStyles(scale = 1) {
   });
 }
 
-function makePinStyles(scale = 1) {
-  const fp = (n) => Math.round(n * scale);
-  return StyleSheet.create({
-    // <Modal> 대체용 풀스크린 absolute 오버레이
-    overlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 9999,
-      elevation: 9999,
-    },
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 16,
-    },
-    card: {
-      width: '100%',
-      maxWidth: 380,
-      backgroundColor: '#fff',
-      borderRadius: 12,
-      overflow: 'hidden',
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: '#e5e7eb',
-    },
-    headerTitle: { fontSize: fp(14), fontWeight: '800', color: '#111827' },
-    close: { fontSize: fp(18), color: '#6b7280', paddingHorizontal: 4 },
-  });
-}
+// 1.0.24: makePinStyles 도 components/PinManageModal.js 로 이동.

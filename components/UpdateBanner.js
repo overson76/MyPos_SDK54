@@ -61,8 +61,9 @@ export default function UpdateBanner() {
   }
 
   // downloaded 이고 사장님이 이미 닫은 (같은) 버전이면 안 보임.
-  // version 이 비어와도 dismiss 가능하도록 sentinel(__no_version__) 사용.
-  if (kind === 'downloaded' && dismissedVersion === versionKey) return null;
+  // 1.0.24: NO_VERSION sentinel 매치는 무시 — 옛날 dismiss(version 정보 안 옴)가
+  // 새 버전 표시를 영원히 막는 사고 방지. version 정보 있을 때만 dismiss 매치 적용.
+  if (kind === 'downloaded' && dismissedVersion === versionKey && versionKey !== NO_VERSION) return null;
 
   // 평소엔 안 보임 — 화면 깔끔. error 도 매번 보이면 거슬리니 일단 표시 (진단 필요).
   const visibleKinds = ['downloading', 'downloaded', 'error'];

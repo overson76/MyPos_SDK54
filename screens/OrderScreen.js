@@ -4,6 +4,7 @@ import {
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -176,8 +177,18 @@ export default function OrderScreen({
   const [dragFromIdx, setDragFromIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   // 폰(native) 전용 메뉴 이동 모드 — 웹은 draggable div 로 처리.
-  // longPress 로 인덱스 선택 → 다른 타일 탭 → 두 슬롯 위치 교환.
+  // 1.0.24: longPress 진입 → 그대로 손가락 드래그 → 손 떼면 swap (PC 와 동일 UX).
+  // 손가락 떼버린 fallback 으로 다른 타일 탭 패턴도 같이 동작.
   const [nativeMoveFromIdx, setNativeMoveFromIdx] = useState(null);
+  // PanResponder 가 hit-test 할 때 쓸 grid 컨테이너의 절대 좌표 (window 기준 pageX/pageY).
+  const gridLayoutRef = useRef(null);
+  // 드래그 중 손가락 위치 (overlay 표시용 — 카드 따라다니는 ghost). null 이면 표시 X.
+  const [dragFingerPos, setDragFingerPos] = useState(null);
+  // PanResponder 안에서 최신 nativeMoveFromIdx / dragOverIdx 참조용 (closure stale 방지).
+  const moveFromRef = useRef(null);
+  const dragOverRef = useRef(null);
+  useEffect(() => { moveFromRef.current = nativeMoveFromIdx; }, [nativeMoveFromIdx]);
+  useEffect(() => { dragOverRef.current = dragOverIdx; }, [dragOverIdx]);
   // === 메뉴 그리드 크기 계산 ===
   // 모든 카테고리는 6열 × 4행 고정 격자. 빈 슬롯은 placeholder 로 표시되고,
   // 사용자가 드래그로 자유롭게 위치 이동 가능.
@@ -199,6 +210,73 @@ export default function OrderScreen({
     _gridTileWidth,
     Math.round(Math.max(24, _rawTileHeight) * TILE_MAX_ASPECT)
   );
+
+  // 1.0.24: 폰 메뉴 드래그 PanResponder — longPress 진입 후 손가락 떼지 않고 그대로
+  // 드래그 → 손 떼면 swap. PC 의 HTML5 drag-and-drop 과 동일한 UX.
+  // - nativeMoveFromIdx 가 set 됐을 때만 활성 (longPress 진입 후)
+  // - onPanResponderMove 에서 손가락 위치 → cell hit-test → setDragOverIdx
+  // - onPanResponderRelease 에서 dragOverIdx 가 valid 면 setCategorySlot 호출
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => moveFromRef.current !== null,
+        onStartShouldSetPanResponderCapture: () => moveFromRef.current !== null,
+        onMoveShouldSetPanResponder: () => moveFromRef.current !== null,
+        onMoveShouldSetPanResponderCapture: () => moveFromRef.current !== null,
+        onPanResponderGrant: (e) => {
+          const { pageX, pageY } = e.nativeEvent;
+          setDragFingerPos({ x: pageX, y: pageY });
+          hitTestAndUpdate(pageX, pageY);
+        },
+        onPanResponderMove: (e) => {
+          const { pageX, pageY } = e.nativeEvent;
+          setDragFingerPos({ x: pageX, y: pageY });
+          hitTestAndUpdate(pageX, pageY);
+        },
+        onPanResponderRelease: () => {
+          const from = moveFromRef.current;
+          const to = dragOverRef.current;
+          if (from !== null && to !== null && from !== to) {
+            setCategorySlot?.(activeCategory, from, to);
+          }
+          setNativeMoveFromIdx(null);
+          setDragOverIdx(null);
+          setDragFingerPos(null);
+        },
+        onPanResponderTerminate: () => {
+          // 다른 컴포넌트가 responder 가져가면 cancel (시각만 정리).
+          setDragOverIdx(null);
+          setDragFingerPos(null);
+        },
+      }),
+    // setCategorySlot / activeCategory 변경 시 새 responder. 매 render 매번이라 약간
+    // 부담이지만 PanResponder.create 자체는 가벼움.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCategory]
+  );
+
+  // grid 컨테이너 안에서 손가락 위치 → cell idx 매핑.
+  const hitTestAndUpdate = (pageX, pageY) => {
+    const layout = gridLayoutRef.current;
+    if (!layout) return;
+    const relX = pageX - layout.pageX;
+    const relY = pageY - layout.pageY;
+    if (relX < 0 || relY < 0 || relX > layout.width || relY > layout.height) {
+      setDragOverIdx(null);
+      return;
+    }
+    const colW = layout.width / GRID_COLS;
+    const rowH = layout.height / GRID_ROWS;
+    const col = Math.floor(relX / colW);
+    const row = Math.floor(relY / rowH);
+    if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) {
+      setDragOverIdx(null);
+      return;
+    }
+    const idx = row * GRID_COLS + col;
+    if (dragOverRef.current !== idx) setDragOverIdx(idx);
+  };
+
   // 실제 테이블이 없어도(주문 탭 선진입) PENDING 가상 테이블로 장바구니를 담는다.
   const hasRealTable = !!table?.id;
   const isPending = !hasRealTable;
@@ -834,7 +912,19 @@ export default function OrderScreen({
 
           {/* 메뉴 그리드 - 모든 카테고리에서 6×4 격자, 드래그로 자유롭게 이동 */}
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
-          <View style={styles.favGrid}>
+          {/* 1.0.24: PanResponder 부착 + onLayout 으로 절대 좌표 측정 (폰 드래그 hit-test 용) */}
+          <View
+            style={styles.favGrid}
+            onLayout={(e) => {
+              const node = e.target;
+              if (node && typeof node.measureInWindow === 'function') {
+                node.measureInWindow((x, y, w, h) => {
+                  gridLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
+                });
+              }
+            }}
+            {...(!isWeb ? panResponder.panHandlers : {})}
+          >
             {(() => {
               // 모든 카테고리를 6열 × 4행 격자로 재구성 (null 슬롯 유지).
               const displayRows = (() => {

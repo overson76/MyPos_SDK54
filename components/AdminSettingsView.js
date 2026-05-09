@@ -1,26 +1,33 @@
-// 관리자 → 설정 탭의 본문 — 1.0.22.
+// 관리자 → 설정 탭의 본문.
 //
-// 사장님이 "자주 안 쓰는 옵션들 한 곳에 모으기" 요청한 항목 묶음:
-//   1. 배달 주소 자동 기억 토글 (메뉴 관리에서 이동)
-//   2. 주문지 출력 정책 (PrintPolicySection — 시스템 탭에서 이동)
-//   3. PC 카운터 앱 종료 (시스템 탭에서 이동)
+// 1.0.22: 자주 안 쓰는 설정성 옵션 모음 (배달 주소 자동 기억 / 주문지 출력 정책 / 앱 종료).
+// 1.0.24: 핀잠금 / 자동 잠금 / 배달 음성 안내 추가 이동 (시스템 탭에서).
 //
-// 시스템 탭에는 운영 / 진단 도구 (자동 업데이트, CID 진단, KIS 진단, OTA, 앱 데이터 초기화,
-// Sentry 테스트 등 자주 들여다보는 항목) 만 남음.
+// 시스템 탭에는 운영·진단 도구 (자동 업데이트, CID 진단, KIS 진단, OTA, 앱 데이터 초기화,
+// Sentry 테스트 등) 만 남음.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useResponsive } from '../utils/useResponsive';
 import { useOrders } from '../utils/OrderContext';
+import { useLock } from '../utils/LockContext';
+import {
+  getSpeakAddress,
+  setSpeakAddress,
+} from '../utils/notify';
+import { loadJSON, saveJSON } from '../utils/persistence';
 import PrintPolicySection from './PrintPolicySection';
+import PinManageModal from './PinManageModal';
 
 function isElectron() {
   return typeof window !== 'undefined' && !!window.mypos?.isElectron;
@@ -36,13 +43,147 @@ export default function AdminSettingsView() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { addressBook, setAutoRemember } = useOrders();
+  const lock = useLock();
   const addressCount = Object.keys(addressBook?.entries || {}).length;
   const electron = isElectron();
 
+  const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
+  const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
+
+  useEffect(() => {
+    let cancelled = false;
+    loadJSON('speakAddress', false).then((v) => {
+      if (cancelled) return;
+      const flag = !!v;
+      setSpeakAddrState(flag);
+      setSpeakAddress(flag);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleSpeakAddr = (next) => {
+    setSpeakAddrState(next);
+    setSpeakAddress(next);
+    saveJSON('speakAddress', next);
+  };
+
+  const onPinDone = async (action) => {
+    setPinModal(null);
+    await lock.refreshPinStatus();
+    if (typeof window !== 'undefined') {
+      const msg =
+        action === 'set'
+          ? 'PIN 잠금이 설정됐습니다.'
+          : action === 'changed'
+          ? 'PIN 이 변경됐습니다.'
+          : 'PIN 잠금이 해제됐습니다.';
+      window?.alert?.(msg);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* === 기기 잠금 / 자동 잠금 === */}
+      <Text style={styles.sectionTitle}>🔒 기기 잠금 / 자동 잠금</Text>
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.label}>
+            PIN 잠금 {lock.pinSet ? '설정됨' : '미설정'}
+            {lock.pinSet && (lock.isUnlocked ? ' · 🔓 해제' : ' · 🔒 잠김')}
+          </Text>
+          <Text style={styles.helper}>
+            수익 현황 등 민감한 영역을 4자리 PIN 으로 보호합니다.
+            앱이 백그라운드로 가거나 일정 시간 미사용 시 자동 잠금.
+          </Text>
+        </View>
+        {!lock.pinSet ? (
+          <TouchableOpacity
+            style={styles.btnPrimary}
+            onPress={() => setPinModal('set')}
+          >
+            <Text style={styles.btnPrimaryText}>PIN 설정</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <TouchableOpacity
+              style={styles.btnSecondary}
+              onPress={() => setPinModal('change')}
+            >
+              <Text style={styles.btnSecondaryText}>변경</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnSecondary}
+              onPress={() => setPinModal('clear')}
+            >
+              <Text style={styles.btnSecondaryText}>해제</Text>
+            </TouchableOpacity>
+            {lock.isUnlocked ? (
+              <TouchableOpacity
+                style={styles.btnPrimary}
+                onPress={() => lock.lock()}
+              >
+                <Text style={styles.btnPrimaryText}>지금 잠그기</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+      </View>
+
+      {lock.pinSet ? (
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>
+              자동 잠금 — {lock.autoLockMin}분 비활성 후
+            </Text>
+            <Text style={styles.helper}>
+              마지막 활동 후 시간이 지나면 자동으로 다시 잠금. 백그라운드 진입 시는 즉시.
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Slider
+                style={{ flex: 1, height: 28 }}
+                minimumValue={1}
+                maximumValue={30}
+                step={1}
+                value={lock.autoLockMin}
+                onSlidingComplete={(v) =>
+                  lock.setAutoLockMin(Math.round(v))
+                }
+                minimumTrackTintColor="#2563eb"
+                maximumTrackTintColor="#d1d5db"
+                disabled={!lock.autoLockEnabled}
+              />
+              <Text style={styles.sliderValue}>{lock.autoLockMin}분</Text>
+            </View>
+          </View>
+          <Switch
+            value={lock.autoLockEnabled}
+            onValueChange={(v) => lock.setAutoLockEnabled(v)}
+            accessibilityLabel="자동 잠금 사용"
+          />
+        </View>
+      ) : null}
+
+      {/* === 개인정보 — 배달 주소 음성 안내 === */}
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🔊 개인정보</Text>
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.label}>배달 주소 음성 안내</Text>
+          <Text style={styles.helper}>
+            끄면 매장 스피커에서 고객 주소를 읽지 않습니다 (화면에는 그대로 표시).
+            매장 운영 환경에 다른 손님이 있다면 OFF 권장.
+          </Text>
+        </View>
+        <Switch
+          value={speakAddr}
+          onValueChange={toggleSpeakAddr}
+          accessibilityLabel="배달 주소 음성 안내"
+        />
+      </View>
+
       {/* === 배달 주소 자동 기억 === */}
-      <Text style={styles.sectionTitle}>📍 배달 주소</Text>
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>📍 배달 주소</Text>
       <View style={styles.row}>
         <View style={styles.rowText}>
           <Text style={styles.label}>배달 주소 자동 기억</Text>
@@ -68,13 +209,13 @@ export default function AdminSettingsView() {
         </TouchableOpacity>
       </View>
 
-      {/* === 주문지 출력 정책 (별도 컴포넌트) === */}
+      {/* === 주문지 출력 정책 === */}
       <PrintPolicySection />
 
       {/* === PC 카운터 앱 종료 (Electron 환경에서만) === */}
       {electron ? (
         <>
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>앱 종료</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🛑 앱 종료</Text>
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.label}>PC 카운터 앱 종료</Text>
@@ -101,6 +242,14 @@ export default function AdminSettingsView() {
             </TouchableOpacity>
           </View>
         </>
+      ) : null}
+
+      {pinModal ? (
+        <PinManageModal
+          mode={pinModal}
+          onClose={() => setPinModal(null)}
+          onDone={onPinDone}
+        />
       ) : null}
     </ScrollView>
   );
@@ -134,6 +283,13 @@ function makeStyles(scale = 1) {
       marginTop: 2,
       lineHeight: fp(15),
     },
+    sliderValue: {
+      fontSize: fp(11),
+      color: '#374151',
+      fontWeight: '600',
+      minWidth: 36,
+      textAlign: 'right',
+    },
     toggleTrack: {
       width: 48,
       height: 28,
@@ -154,6 +310,22 @@ function makeStyles(scale = 1) {
       elevation: 1,
     },
     toggleKnobOn: { transform: [{ translateX: 20 }] },
+    btnPrimary: {
+      backgroundColor: '#2563eb',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 8,
+    },
+    btnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: fp(13) },
+    btnSecondary: {
+      backgroundColor: '#f3f4f6',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+    },
+    btnSecondaryText: { color: '#374151', fontWeight: '700', fontSize: fp(12) },
     btnDanger: {
       backgroundColor: '#dc2626',
       paddingHorizontal: 16,

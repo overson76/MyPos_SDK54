@@ -121,10 +121,20 @@ function applyNow() {
     };
   }
   try {
-    // 동기적으로 quitAndInstall 호출. Electron 이 .exe 종료 + NSIS 트리거.
-    // 주의: 이 호출 후 메인 프로세스는 곧 종료됨 → 응답 보내고 즉시.
+    // 1.0.24: quitAndInstall 이 .exe 종료 못 하는 케이스 (KIS bridge / SIP / 프린터 spool 등
+    // child 프로세스 잔존) 대비 — 호출 후 8초 안에 앱이 안 닫혔으면 강제 app.exit(0).
+    // NSIS 가 잠금 해제 후 새 버전 시작 가능. 1.0.21~1.0.23 에서 매번 매장 PC 가
+    // "🚀 지금 적용" 클릭 후에도 옛 버전 그대로 였던 패턴 영구 차단.
     setTimeout(() => {
       try { autoUpdater.quitAndInstall(false, true); } catch {}
+      // 8초 후 강제 종료 fallback. quitAndInstall 이 정상 종료되면 이 setTimeout 도 같이 죽음.
+      setTimeout(() => {
+        try {
+          // eslint-disable-next-line global-require
+          const { app } = require('electron');
+          app.exit(0);
+        } catch {}
+      }, 8000);
     }, 50);
     return { ok: true, message: '잠시 후 .exe 가 닫히고 새 버전이 자동 시작됩니다' };
   } catch (e) {
