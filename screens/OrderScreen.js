@@ -40,6 +40,7 @@ import {
   isVoiceInputSupported,
   parseVoiceOrder,
 } from '../utils/voice';
+import { reportError } from '../utils/sentry';
 
 export default function OrderScreen({
   table,
@@ -186,8 +187,12 @@ export default function OrderScreen({
   const [nativeMoveFromIdx, setNativeMoveFromIdx] = useState(null);
   // PanResponder 가 hit-test 할 때 쓸 grid 컨테이너의 절대 좌표 (window 기준 pageX/pageY).
   const gridLayoutRef = useRef(null);
+  // 1.0.29: View 직접 ref — 폰(RN native) 의 measureInWindow 호출용. e.target 은 폰에서
+  // number(reactTag) 라 measureInWindow 메서드 X — 그래서 ref 직접 받기.
+  const gridViewRef = useRef(null);
   // 1.0.26: 즐겨찾기 탭의 절대 좌표 — drag-drop 시 hit-test 용.
   const favTabLayoutRef = useRef(null);
+  const favTabViewRef = useRef(null);
   // 드래그 중 손가락 위치 (overlay 표시용 — 카드 따라다니는 ghost). null 이면 표시 X.
   const [dragFingerPos, setDragFingerPos] = useState(null);
   // PanResponder 안에서 최신 nativeMoveFromIdx / dragOverIdx 참조용 (closure stale 방지).
@@ -229,43 +234,58 @@ export default function OrderScreen({
         onStartShouldSetPanResponderCapture: () => moveFromRef.current !== null,
         onMoveShouldSetPanResponder: () => moveFromRef.current !== null,
         onMoveShouldSetPanResponderCapture: () => moveFromRef.current !== null,
+        // 1.0.29: 모든 핸들러에 try/catch + Sentry — 폰 crash 차단 + 정확한 stack 캡처.
         onPanResponderGrant: (e) => {
-          const { pageX, pageY } = e.nativeEvent;
-          setDragFingerPos({ x: pageX, y: pageY });
-          hitTestAndUpdate(pageX, pageY);
+          try {
+            const { pageX, pageY } = e.nativeEvent;
+            setDragFingerPos({ x: pageX, y: pageY });
+            hitTestAndUpdate(pageX, pageY);
+          } catch (err) {
+            try { reportError(err, { ctx: 'panResponder.grant' }); } catch {}
+          }
         },
         onPanResponderMove: (e) => {
-          const { pageX, pageY } = e.nativeEvent;
-          setDragFingerPos({ x: pageX, y: pageY });
-          hitTestAndUpdate(pageX, pageY);
+          try {
+            const { pageX, pageY } = e.nativeEvent;
+            setDragFingerPos({ x: pageX, y: pageY });
+            hitTestAndUpdate(pageX, pageY);
+          } catch (err) {
+            try { reportError(err, { ctx: 'panResponder.move' }); } catch {}
+          }
         },
         onPanResponderRelease: () => {
-          const from = moveFromRef.current;
-          const to = dragOverRef.current;
-          if (from !== null && to === 'FAV_TAB') {
-            // 1.0.26: 즐겨찾기 탭에 drop → 해당 메뉴를 즐겨찾기에 추가 (이미 즐겨찾기면 무시).
-            const flat = currentRows.flat();
-            const menuId = flat[from];
-            if (menuId != null) {
-              toggleFavorite(menuId);
+          try {
+            const from = moveFromRef.current;
+            const to = dragOverRef.current;
+            if (from !== null && to === 'FAV_TAB') {
+              // 1.0.26: 즐겨찾기 탭에 drop → toggleFavorite (이미 즐겨찾기면 무시).
+              const flat = Array.isArray(currentRows) ? currentRows.flat() : [];
+              const menuId = flat[from];
+              if (menuId != null && typeof toggleFavorite === 'function') {
+                toggleFavorite(menuId);
+              }
+            } else if (
+              from !== null &&
+              to !== null &&
+              typeof to === 'number' &&
+              from !== to &&
+              typeof setCategorySlot === 'function'
+            ) {
+              setCategorySlot(activeCategory, from, to);
             }
-          } else if (from !== null && to !== null && typeof to === 'number' && from !== to) {
-            setCategorySlot?.(activeCategory, from, to);
+          } catch (err) {
+            try { reportError(err, { ctx: 'panResponder.release' }); } catch {}
           }
+          // 정리 — 어떤 케이스든 실행
           setNativeMoveFromIdx(null);
           setDragOverIdx(null);
           setDragFingerPos(null);
         },
         onPanResponderTerminate: () => {
-          // 다른 컴포넌트가 responder 가져가면 cancel (시각만 정리).
           setDragOverIdx(null);
           setDragFingerPos(null);
         },
       }),
-    // 1.0.27: deps 다시 [activeCategory] 만. 1.0.26 에서 currentRows 포함 시 매 render 마다
-    // 새 PanResponder 생성 → RN web 의 responder lifecycle 충돌 의심 (빈 화면 원인 후보).
-    // closure 안의 currentRows 가 약간 stale 가능하지만, activeCategory 변경 시 새 responder
-    // 라 사장님 흐름 (한 카테고리 안 드래그) 에 미치는 영향 미미.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCategory]
   );
@@ -911,6 +931,7 @@ export default function OrderScreen({
                 return (
                   <TouchableOpacity
                     key={cat}
+                    ref={isFav ? favTabViewRef : null}
                     style={[
                       styles.categoryTab,
                       isPhone && styles.categoryTabPhone,
@@ -922,16 +943,18 @@ export default function OrderScreen({
                       },
                     ]}
                     onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
-                    onLayout={(e) => {
+                    onLayout={() => {
                       if (!isFav) return;
                       try {
-                        const node = e.target;
-                        if (node && typeof node.measureInWindow === 'function') {
-                          node.measureInWindow((x, y, w, h) => {
+                        const ref = favTabViewRef.current;
+                        if (ref && typeof ref.measureInWindow === 'function') {
+                          ref.measureInWindow((x, y, w, h) => {
                             favTabLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
                           });
                         }
-                      } catch {}
+                      } catch (err) {
+                        try { reportError(err, { ctx: 'favTabLayout.measure' }); } catch {}
+                      }
                     }}
                   >
                     <Text
@@ -1015,19 +1038,23 @@ export default function OrderScreen({
 
           {/* 메뉴 그리드 - 모든 카테고리에서 6×4 격자, 드래그로 자유롭게 이동 */}
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
-          {/* 1.0.24: PanResponder 부착 + onLayout 으로 절대 좌표 측정 (폰 드래그 hit-test 용) */}
-          {/* 1.0.27: try/catch 로 measureInWindow 호출 안전화 — RN web 일부 환경에서 throw 가능 */}
+          {/* 1.0.29: gridViewRef 직접 ref 받기 — 폰(RN native) 의 measureInWindow 호출용.
+               기존 e.target.measureInWindow 는 폰에서 e.target 이 number(reactTag) 라
+               메서드 X. ref 직접 받으면 RN native 의 component instance 라 method 정상. */}
           <View
+            ref={gridViewRef}
             style={styles.favGrid}
-            onLayout={(e) => {
+            onLayout={() => {
               try {
-                const node = e.target;
-                if (node && typeof node.measureInWindow === 'function') {
-                  node.measureInWindow((x, y, w, h) => {
+                const ref = gridViewRef.current;
+                if (ref && typeof ref.measureInWindow === 'function') {
+                  ref.measureInWindow((x, y, w, h) => {
                     gridLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
                   });
                 }
-              } catch {}
+              } catch (err) {
+                try { reportError(err, { ctx: 'gridLayout.measure' }); } catch {}
+              }
             }}
             {...(!isWeb ? panResponder.panHandlers : {})}
           >

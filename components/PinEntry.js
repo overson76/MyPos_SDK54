@@ -109,36 +109,47 @@ export default function PinEntry({
 }
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
-// 1.0.22: 사장님이 "PIN 4자리 숫자가 너무 작다" — 박스/폰트 크게 + dot 크게 + 가독성 확대.
+// 1.0.22: 사장님이 "PIN 4자리 숫자가 너무 작다" — 박스/폰트 크게.
+// 1.0.29: 폰(landscape) 에서 한 화면에 안 들어오는 문제 — Dimensions 로 판별 후 작은 박스.
 function makeStyles(scale = 1) {
   const fp = (n) => Math.round(n * scale);
+  // 폰(landscape) 판별 — height < 500 이면 폰 가로. 키 박스 작게.
+  const { Dimensions } = require('react-native');
+  const { width: W, height: H } = Dimensions.get('window');
+  const isCompact = H < 500 || W < 700;
+  const KEY = isCompact ? 44 : 64;
+  const KEY_FONT = isCompact ? 18 : 26;
+  const KEY_DEL_FONT = isCompact ? 16 : 22;
+  const DOT = isCompact ? 12 : 16;
+  const DOT_GAP = isCompact ? 12 : 18;
+  const PAD_GAP = isCompact ? 6 : 10;
   return StyleSheet.create({
   root: {
-    padding: 18,
+    padding: isCompact ? 10 : 18,
     alignItems: 'center',
     backgroundColor: '#fff',
   },
   title: {
-    fontSize: fp(18),
+    fontSize: fp(isCompact ? 14 : 18),
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: fp(14),
+    fontSize: fp(isCompact ? 11 : 14),
     color: '#6b7280',
-    marginBottom: 12,
+    marginBottom: isCompact ? 6 : 12,
     textAlign: 'center',
   },
   dots: {
     flexDirection: 'row',
-    gap: 18,
-    marginVertical: 10,
+    gap: DOT_GAP,
+    marginVertical: isCompact ? 4 : 10,
   },
   dot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
     borderWidth: 2,
     borderColor: '#9ca3af',
     backgroundColor: 'transparent',
@@ -148,30 +159,30 @@ function makeStyles(scale = 1) {
     borderColor: '#111827',
   },
   error: {
-    fontSize: fp(13),
+    fontSize: fp(isCompact ? 11 : 13),
     color: '#dc2626',
-    marginTop: 6,
-    marginBottom: 4,
+    marginTop: isCompact ? 2 : 6,
+    marginBottom: isCompact ? 2 : 4,
     fontWeight: '600',
-    minHeight: 18,
+    minHeight: isCompact ? 14 : 18,
   },
-  errorPlaceholder: { minHeight: 18, marginTop: 6, marginBottom: 4 },
-  pad: { marginTop: 10, gap: 10 },
-  padRow: { flexDirection: 'row', gap: 10 },
+  errorPlaceholder: { minHeight: isCompact ? 14 : 18, marginTop: isCompact ? 2 : 6, marginBottom: isCompact ? 2 : 4 },
+  pad: { marginTop: isCompact ? 4 : 10, gap: PAD_GAP },
+  padRow: { flexDirection: 'row', gap: PAD_GAP },
   key: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: KEY,
+    height: KEY,
+    borderRadius: KEY / 2,
     backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   keyEmpty: { backgroundColor: 'transparent' },
   keyText: {
-    fontSize: fp(26),
+    fontSize: fp(KEY_FONT),
     color: '#111827',
     fontWeight: '700',
   },
-  keyTextDelete: { fontSize: fp(22), color: '#6b7280' },
+  keyTextDelete: { fontSize: fp(KEY_DEL_FONT), color: '#6b7280' },
   });
 }
