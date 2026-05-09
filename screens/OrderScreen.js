@@ -262,10 +262,12 @@ export default function OrderScreen({
           setDragFingerPos(null);
         },
       }),
-    // 1.0.26: deps 에 activeCategory + currentRows 포함 — 매 render 새 responder.
-    // PanResponder.create 자체는 가벼움. closure 안의 currentRows / toggleFavorite 최신.
+    // 1.0.27: deps 다시 [activeCategory] 만. 1.0.26 에서 currentRows 포함 시 매 render 마다
+    // 새 PanResponder 생성 → RN web 의 responder lifecycle 충돌 의심 (빈 화면 원인 후보).
+    // closure 안의 currentRows 가 약간 stale 가능하지만, activeCategory 변경 시 새 responder
+    // 라 사장님 흐름 (한 카테고리 안 드래그) 에 미치는 영향 미미.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeCategory, currentRows]
+    [activeCategory]
   );
 
   // grid 컨테이너 안에서 손가락 위치 → cell idx 매핑.
@@ -898,13 +900,9 @@ export default function OrderScreen({
       <View style={[styles.body, stacked && styles.bodyStacked]}>
         {/* 왼쪽: 메뉴 영역 */}
         <View style={styles.menuSide}>
-          {/* 카테고리 탭 + 편집 모드 토글 */}
-          <View style={[styles.categoryBar, { flexDirection: 'row', alignItems: 'center' }]}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ flex: 1 }}
-            >
+          {/* 카테고리 탭 (1.0.27: layout 원복 — 1.0.26 의 inline flexDirection 제거) */}
+          <View style={styles.categoryBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {categories.map((cat) => {
                 const active = activeCategory === cat;
                 const isFav = cat === '즐겨찾기';
@@ -926,12 +924,14 @@ export default function OrderScreen({
                     onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
                     onLayout={(e) => {
                       if (!isFav) return;
-                      const node = e.target;
-                      if (node && typeof node.measureInWindow === 'function') {
-                        node.measureInWindow((x, y, w, h) => {
-                          favTabLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
-                        });
-                      }
+                      try {
+                        const node = e.target;
+                        if (node && typeof node.measureInWindow === 'function') {
+                          node.measureInWindow((x, y, w, h) => {
+                            favTabLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
+                          });
+                        }
+                      } catch {}
                     }}
                   >
                     <Text
@@ -948,12 +948,35 @@ export default function OrderScreen({
                 );
               })}
             </ScrollView>
-            {/* 1.0.26: 편집 모드 토글 — ON 시 빈 [+] 슬롯 + 메뉴 카드 [⋮] 노출 */}
+          </View>
+          {/* 1.0.27: 편집 모드 토글 + 안내 띠를 별도 행으로 분리 (1.0.26 의 layout 충돌 회피) */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              backgroundColor: editMode ? '#fee2e2' : 'transparent',
+            }}
+          >
+            {editMode ? (
+              <Text
+                style={{
+                  flex: 1,
+                  fontSize: 11,
+                  color: '#991b1b',
+                  fontWeight: '700',
+                }}
+              >
+                ✏️ 메뉴 편집 중 — 빈 [+] 클릭 = 추가 · 메뉴 클릭 = 수정/삭제 · longPress+드래그 = 이동/즐겨찾기
+              </Text>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
             <TouchableOpacity
               style={{
                 paddingHorizontal: 12,
                 paddingVertical: 6,
-                marginHorizontal: 6,
                 borderRadius: 8,
                 backgroundColor: editMode ? '#dc2626' : '#f3f4f6',
                 borderWidth: 1,
@@ -965,7 +988,7 @@ export default function OrderScreen({
             >
               <Text
                 style={{
-                  fontSize: isPhone ? 11 : 13,
+                  fontSize: 12,
                   fontWeight: '700',
                   color: editMode ? '#fff' : '#374151',
                 }}
@@ -974,29 +997,6 @@ export default function OrderScreen({
               </Text>
             </TouchableOpacity>
           </View>
-          {/* 1.0.26: 편집 모드 안내 띠 */}
-          {editMode ? (
-            <View
-              style={{
-                backgroundColor: '#fee2e2',
-                borderBottomWidth: 1,
-                borderBottomColor: '#fca5a5',
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 11,
-                  color: '#991b1b',
-                  fontWeight: '700',
-                  textAlign: 'center',
-                }}
-              >
-                ✏️ 메뉴 편집 중 — 빈 [+] 박스 클릭 = 새 메뉴 추가 / 메뉴 longPress+드래그 = 위치 이동·즐겨찾기 / "✓ 완료" 누르면 종료
-              </Text>
-            </View>
-          ) : null}
 
           {/* 폰 메뉴 이동 모드 배너 — 선택된 메뉴 타일이 있을 때만 표시 */}
           {!isWeb && nativeMoveFromIdx !== null ? (
@@ -1016,15 +1016,18 @@ export default function OrderScreen({
           {/* 메뉴 그리드 - 모든 카테고리에서 6×4 격자, 드래그로 자유롭게 이동 */}
           {/* 한 화면에 모든 행이 들어가도록 외부 스크롤 제거 */}
           {/* 1.0.24: PanResponder 부착 + onLayout 으로 절대 좌표 측정 (폰 드래그 hit-test 용) */}
+          {/* 1.0.27: try/catch 로 measureInWindow 호출 안전화 — RN web 일부 환경에서 throw 가능 */}
           <View
             style={styles.favGrid}
             onLayout={(e) => {
-              const node = e.target;
-              if (node && typeof node.measureInWindow === 'function') {
-                node.measureInWindow((x, y, w, h) => {
-                  gridLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
-                });
-              }
+              try {
+                const node = e.target;
+                if (node && typeof node.measureInWindow === 'function') {
+                  node.measureInWindow((x, y, w, h) => {
+                    gridLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
+                  });
+                }
+              } catch {}
             }}
             {...(!isWeb ? panResponder.panHandlers : {})}
           >
