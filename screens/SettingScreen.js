@@ -362,30 +362,7 @@ export default function SettingScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        <View style={styles.prefRow}>
-          <View style={styles.prefTextWrap}>
-            <Text style={styles.prefTitle}>📍 배달 주소 자동 기억</Text>
-            <Text style={styles.prefDesc}>
-              배달이 완료되면 주소를 주소록에 자동 저장합니다 · 현재 {addressCount}개
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.toggleTrack,
-              addressBook?.autoRemember && styles.toggleTrackOn,
-            ]}
-            onPress={() => setAutoRemember(!addressBook?.autoRemember)}
-            activeOpacity={0.7}
-          >
-            <View
-              style={[
-                styles.toggleKnob,
-                addressBook?.autoRemember && styles.toggleKnobOn,
-              ]}
-            />
-          </TouchableOpacity>
-        </View>
-
+        {/* (1.0.22: '배달 주소 자동 기억' 토글은 관리자 → 설정 탭으로 이동) */}
         {orderedItems.map((item) => {
           const catIdx = getItemFlatIdx(item.category, item.id);
           const catLen = getCategoryFlatLen(item.category);

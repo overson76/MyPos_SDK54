@@ -109,35 +109,36 @@ export default function PinEntry({
 }
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
+// 1.0.22: 사장님이 "PIN 4자리 숫자가 너무 작다" — 박스/폰트 크게 + dot 크게 + 가독성 확대.
 function makeStyles(scale = 1) {
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
   root: {
-    padding: 12,
+    padding: 18,
     alignItems: 'center',
     backgroundColor: '#fff',
   },
   title: {
-    fontSize: fp(14),
+    fontSize: fp(18),
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: fp(11),
+    fontSize: fp(14),
     color: '#6b7280',
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
   },
   dots: {
     flexDirection: 'row',
-    gap: 12,
-    marginVertical: 6,
+    gap: 18,
+    marginVertical: 10,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: '#9ca3af',
     backgroundColor: 'transparent',
@@ -147,30 +148,30 @@ function makeStyles(scale = 1) {
     borderColor: '#111827',
   },
   error: {
-    fontSize: fp(11),
+    fontSize: fp(13),
     color: '#dc2626',
-    marginTop: 4,
-    marginBottom: 2,
+    marginTop: 6,
+    marginBottom: 4,
     fontWeight: '600',
-    minHeight: 14,
+    minHeight: 18,
   },
-  errorPlaceholder: { minHeight: 14, marginTop: 4, marginBottom: 2 },
-  pad: { marginTop: 6, gap: 6 },
-  padRow: { flexDirection: 'row', gap: 6 },
+  errorPlaceholder: { minHeight: 18, marginTop: 6, marginBottom: 4 },
+  pad: { marginTop: 10, gap: 10 },
+  padRow: { flexDirection: 'row', gap: 10 },
   key: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   keyEmpty: { backgroundColor: 'transparent' },
   keyText: {
-    fontSize: fp(18),
+    fontSize: fp(26),
     color: '#111827',
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  keyTextDelete: { fontSize: fp(16), color: '#6b7280' },
+  keyTextDelete: { fontSize: fp(22), color: '#6b7280' },
   });
 }

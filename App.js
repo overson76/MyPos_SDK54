@@ -73,6 +73,18 @@ function CrashFallback({ error, resetError }) {
 
 const TAB_KEYS = ['테이블', '주문', '주문현황', '되돌리기', '관리자'];
 
+// 1.0.22: 탭별 강조색 — 활성/비활성 시 borderBottom + text 색상.
+// Tailwind tone 의 차분한 채도 — 매장 운영 분위기 깨지 않게.
+//   테이블=blue (메인 운영), 주문=emerald (주문 입력), 주문현황=amber (주방 진행 중),
+//   되돌리기=rose (위험 행동), 관리자=slate (차분 회색)
+const TAB_COLORS = {
+  '테이블':    { active: '#2563eb', idle: '#3b82f6' }, // blue
+  '주문':      { active: '#059669', idle: '#10b981' }, // emerald
+  '주문현황':  { active: '#d97706', idle: '#f59e0b' }, // amber
+  '되돌리기':  { active: '#e11d48', idle: '#f43f5e' }, // rose
+  '관리자':    { active: '#334155', idle: '#475569' }, // slate
+};
+
 // dev 모드 web 미리보기에서만 iPhone 15 Pro Max 가로의 SafeArea 인셋(노치/홈인디케이터)을
 // 강제 주입. 실 iPhone 에서는 OS 가 보고하므로 native 빌드는 그대로 동작.
 // production web 빌드(매장 PC 운영용)에서는 시뮬을 꺼서 풀스크린으로 그려지게 한다.
@@ -294,13 +306,18 @@ function MainApp() {
           <View style={styles.topTabs}>
             {TAB_KEYS.map((key) => {
               const isActive = activeTab === key;
+              const c = TAB_COLORS[key] || { active: '#111827', idle: '#6b7280' };
               return (
                 <TouchableOpacity
                   key={key}
                   style={[
                     styles.tabBtn,
                     isMobile && styles.tabBtnMobile,
-                    isActive && styles.tabBtnActive,
+                    // 활성 탭만 진한 borderBottom + 옅은 배경 강조 (촌스럽지 않게)
+                    isActive && {
+                      borderBottomColor: c.active,
+                      backgroundColor: c.active + '14', // 약 8% opacity 톤
+                    },
                   ]}
                   onPress={() => handleTabPress(key)}
                   activeOpacity={0.8}
@@ -309,7 +326,10 @@ function MainApp() {
                     style={[
                       styles.tabText,
                       isMobile && styles.tabTextMobile,
-                      isActive && styles.tabTextActive,
+                      // 활성: 진한 색 + bold, 비활성: 옅은 같은 색 (정체성 유지하면서 차분)
+                      isActive
+                        ? { color: c.active, fontWeight: '800' }
+                        : { color: c.idle, fontWeight: '600' },
                       { fontSize: tabFontSize },
                     ]}
                   >

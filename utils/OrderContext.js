@@ -458,6 +458,17 @@ export function OrderProvider({ children }) {
         return;
       }
       dispatch({ type: 'orders/markPaid', tableId, paymentMethod });
+
+      // 1.0.22: 단체(그룹) 의 일부였다면 결제 완료 시 그룹 자동 분리 — 사장님 의도
+      // "본 테이블로 분리". clearTable 은 슬롯도 정리하지만 markPaid 는 결제 완료
+      // 표시만 + 그룹 묶임만 해제 (items / 슬롯 그대로 유지). leader id 또는 멤버 id
+      // 어느 쪽으로 호출돼도 매칭.
+      for (const [lid, members] of Object.entries(groups)) {
+        if (lid === tableId || (Array.isArray(members) && members.includes(tableId))) {
+          dissolveGroup(lid);
+          break;
+        }
+      }
     };
 
     const getOrder = (tableId) => orders[tableId] || emptyOrder;

@@ -17,7 +17,7 @@ import RevenueScreen from './RevenueScreen';
 import LockGate from '../components/LockGate';
 import RevenueLockGate from '../components/RevenueLockGate';
 import StoreManagementSection from '../components/StoreManagementSection';
-import PrintPolicySection from '../components/PrintPolicySection';
+import AdminSettingsView from '../components/AdminSettingsView';
 import PinEntry from '../components/PinEntry';
 import {
   getSpeakAddress,
@@ -55,9 +55,13 @@ function quitElectron() {
   }
 }
 
+// 1.0.22: '설정' 탭 신설 — 자주 안 쓰는 설정성 옵션 모음
+//   (배달 주소 자동 기억 / 주문지 출력 정책 / 앱 종료).
+// 시스템 탭은 운영·진단 도구 (자동 업데이트, CID/KIS 진단, OTA, Sentry, 초기화) 만 남음.
 const SECTIONS = [
   { key: 'menu', label: '메뉴 관리' },
   { key: 'revenue', label: '수익 현황' },
+  { key: 'settings', label: '설정' },
   { key: 'system', label: '시스템' },
 ];
 
@@ -402,8 +406,7 @@ function SystemSettingsView() {
         </Text>
       </View>
 
-      {/* === 주문지 출력 정책 — 매장 단위 글로벌 정책 + 기기별 자동 출력 토글 === */}
-      <PrintPolicySection />
+      {/* (1.0.22: 주문지 출력 정책은 관리자 → 설정 탭으로 이동) */}
 
       {/* === Electron 자동 업데이트 — PC 카운터 .exe 환경에서만 보임. === */}
       {updateSupported ? (
@@ -538,37 +541,7 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === 앱 종료 — Electron(.exe) 키오스크 환경에서만 보임. X 버튼 없을 때 사용. === */}
-      {isElectron() ? (
-        <>
-          <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>앱 종료</Text>
-          <View style={sysStyles.row}>
-            <View style={sysStyles.rowText}>
-              <Text style={sysStyles.label}>PC 카운터 앱 종료</Text>
-              <Text style={sysStyles.helper}>
-                영업 종료 후 앱을 닫습니다. 다음 시작 시 자동 업데이트가 있으면 적용됩니다.{'\n'}
-                단축키: Ctrl + Shift + Q (언제든 사용 가능)
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={sysStyles.btnDanger}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  const ok = window?.confirm?.('앱을 종료하시겠습니까?');
-                  if (ok) quitElectron();
-                } else {
-                  Alert.alert('앱 종료', '앱을 종료하시겠습니까?', [
-                    { text: '취소', style: 'cancel' },
-                    { text: '종료', style: 'destructive', onPress: quitElectron },
-                  ]);
-                }
-              }}
-            >
-              <Text style={sysStyles.btnDangerText}>앱 종료</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : null}
+      {/* (1.0.22: 앱 종료는 관리자 → 설정 탭으로 이동) */}
 
       {/* === 폰 앱 OTA 업데이트 — 네이티브 환경에서만 보임. === */}
       {Platform.OS !== 'web' ? (
@@ -870,6 +843,8 @@ export default function AdminScreen() {
           <RevenueLockGate length={PIN_LENGTH}>
             <RevenueScreen />
           </RevenueLockGate>
+        ) : section === 'settings' ? (
+          <AdminSettingsView />
         ) : (
           <SystemSettingsView />
         )}
