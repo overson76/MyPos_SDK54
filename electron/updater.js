@@ -84,7 +84,12 @@ function setupAutoUpdater(getWindows) {
   });
 
   // 부팅 시 한 번 자동 체크. 실패해도 throw X — error 이벤트로 흘러감.
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  // 1.0.21: checkForUpdatesAndNotify → checkForUpdates 로 변경.
+  // AndNotify 는 update-downloaded 이벤트마다 OS Toast 알림을 자동 발송함 → 매장 PC 가 24/7
+  // 켜진 상태에서 부팅/체크 사이클마다 누적되어 Windows 알림 센터에 spam (사장님 화면 19개).
+  // 우리는 자체 자동업데이트 카드(관리자 → 시스템 → 🔄 자동 업데이트) + "🚀 지금 적용" 버튼으로
+  // 충분히 안내하므로 OS 알림 불필요. 알림 spam 영원히 0.
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 // 수동 체크 — 관리자 화면 "지금 확인" 버튼 IPC.
