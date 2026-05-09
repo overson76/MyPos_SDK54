@@ -20,6 +20,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-08 | [2026-05-08-되돌리기-UI-제거-isweb-디버깅.md](2026-05-08-되돌리기-UI-제거-isweb-디버깅.md) | 주문현황·관리자 수익현황의 되돌리기 UI 제거 (UndoScreen 단일화). 진행 중 폰 fallback 두 차례 사고 → 진단 도구(CrashFallback production 표시) 추가 → 진짜 원인 = OrderScreen 의 isWeb ReferenceError (이틀 잠복) | 09c6d61, ec27b99, 0605740 |
 | 2026-05-08 | [2026-05-08-영수증프린터-USB-매장맥북빌드.md](2026-05-08-영수증프린터-USB-매장맥북빌드.md) | SEWOO SLK-TS400 USB 통합 — 드라이버 4.70(180dpi) 설치 + 환경변수 setx + node-thermal-printer 의존성 등록 + 매장 맥북 macOS→Windows 크로스빌드(wine 자동) + GitHub Releases v1.0.16 publish. 카운터 PC 의 1.0.16 적용은 install-on-quit 미트리거 + NSIS "cannot be closed" 반복 → 다음 세션(집 윈도우 PC) 이어감 | ff60843, 41d4f3e |
 | 2026-05-09 | [2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md](2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md) | "No driver set!" 진단 → 1.0.17 fix(electron-printer 추가) → 매장 PC 검증 시 호환 X (electron-v0.36 prebuild 만 포함) → 다른 fork 모두 native compile 막힘(VS Build Tools 부재) → **1.0.18: PowerShell + Add-Type 인라인 winspool API 우회**로 native 모듈 의존성 통째 제거. 매장 PC SEWOO USB 출력 정상 ✅ | fd842df, f6c89b1 |
+| 2026-05-09 | [2026-05-09-올레의-대항해-1.0.20-to-1.0.28.md](2026-05-09-올레의-대항해-1.0.20-to-1.0.28.md) | 1.0.20→1.0.28 9단계 점프. "🚀 지금 적용" / 배달 자동 출력 / 알림 spam fix / 단체 dissolve / 설정 탭 / PIN 박스 / 5탭 컬러 / 분홍 반짝이 / 포장 픽업완료 / 폰 PanResponder / EUC-KR / quitAndInstall 8초 timeout / 메뉴 인라인 편집 (Phase A~D) → 1.0.26 빈 화면 사고 후 1.0.27 보수적 재작성 → 결국 자동업데이트 메커니즘 단순화 (1.0.28: 분홍 배너 제거, GitHub 직접 다운로드만). wrangler deploy 누락이 모든 fix 가 매장 PC 에 안 닿게 한 결정타 진단. | 3850368, ddb450e, 4e1e498, 202ee94, 17cc39e, bcd9542, 8c66430, 5326208, a7fa350 |
 
 ---
 
@@ -46,6 +47,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-03 | [uid-loss-diagnosis-and-self-recovery](../learning/2026-05-03-uid-loss-diagnosis-and-self-recovery.md) | 익명 UID 손실 진단 + 자가 복구 흐름 설계 |
 | 2026-05-07 | [undo-reverted-flag-pattern](../learning/2026-05-07-undo-reverted-flag-pattern.md) | append-only history 의 "되돌리기" — reverted 플래그 패턴 (delete vs flag, 모든 집계의 isCounted 가드, idempotent + occupied 가드) |
 | 2026-05-09 | [PowerShell-winspool-우회-electron-native회피](../learning/2026-05-09-PowerShell-winspool-우회-electron-native회피.md) | Electron 의 native module 의존성을 PowerShell + Add-Type 인라인 C# 으로 우회. winspool.Drv API 직접 호출 패턴 + 함정 5종 + 적용 가능 분야 |
+| 2026-05-09 | [electron-updater-한계-그리고-단순화](../learning/2026-05-09-electron-updater-한계-그리고-단순화.md) | JS 측(라이브 URL) vs native(.exe) 이원화 빌드 + electron-updater quitAndInstall silent 실패의 한계 + 1.0.28 GitHub 직접 다운로드 단순화 결정 + version sync (package.json + app.json) + 향후 재도입 옵션 4종 |
 
 ---
 
