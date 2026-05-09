@@ -72,14 +72,13 @@ export default function UpdateBanner() {
   if (kind === 'downloading') {
     const percent = typeof status.percent === 'number' ? Math.round(status.percent) : null;
     return (
-      <View style={[styles.bar, styles.barInfo]}>
-        <Text style={styles.icon}>⬇</Text>
-        <Text style={styles.text}>
+      <View style={[styles.bar, styles.barDownloadingPink]}>
+        <Text style={[styles.icon, styles.iconPink]}>⬇</Text>
+        <Text style={[styles.text, styles.textPink]}>
           새 버전 다운로드 중… {percent !== null ? `${percent}%` : ''}
           {'  '}
-          <Text style={styles.subtle}>다운로드 끝나면 알려드려요. 그때까지 평소처럼 사용 OK.</Text>
+          <Text style={styles.subtlePink}>다운로드 끝나면 알려드려요. 그때까지 평소처럼 사용 OK.</Text>
         </Text>
-        {/* downloading 중엔 닫기 버튼 X — 모르고 종료 시 처음부터 재다운로드 되는 것 방지 알림. */}
       </View>
     );
   }
@@ -105,23 +104,48 @@ export default function UpdateBanner() {
   );
 }
 
-// 1.0.23: 새 버전 준비됨 배너 — 사장님이 시각적으로 잘 보이도록 분홍색 + 부드러운 반짝이 효과.
-// Animated.loop 으로 opacity 펄스 (1.0 ↔ 0.85). 부드럽게 — 영업 중 시야 방해 X.
+// 1.0.25: 새 버전 준비됨 배너 — 강화된 반짝이 효과 (1.0.23 의 opacity 만 펄스 → 사장님이
+// "반짝이지도 않았다" 피드백). backgroundColor pink-200 ↔ pink-400 + scale 1.0 ↔ 1.015 +
+// 사이클 1.4초 (이전 1.8초 → 빠르게). 시각적으로 명확.
 function ReadyBanner({ version, versionKey, setDismissedVersion }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.85, duration: 900, useNativeDriver: false }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 700, useNativeDriver: false }),
       ])
     );
     anim.start();
     return () => anim.stop();
   }, [pulseAnim]);
 
+  // 0~1 펄스값을 backgroundColor / scale 에 매핑.
+  const animatedBg = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#fbcfe8', '#f472b6'], // pink-200 ↔ pink-400 (확연히 다른 톤)
+  });
+  const animatedBorder = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#f472b6', '#db2777'], // pink-400 ↔ pink-600
+  });
+  const animatedScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.015],
+  });
+
   return (
-    <Animated.View style={[styles.bar, styles.barReadyPink, { opacity: pulseAnim }]}>
+    <Animated.View
+      style={[
+        styles.bar,
+        styles.barReadyPink,
+        {
+          backgroundColor: animatedBg,
+          borderBottomColor: animatedBorder,
+          transform: [{ scale: animatedScale }],
+        },
+      ]}
+    >
       <Text style={[styles.icon, styles.iconPink]}>🎉</Text>
       <Text style={[styles.text, styles.textPink]}>
         새 버전 준비 완료{version ? ` (${version})` : ''} —{' '}
@@ -165,10 +189,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#065F46',
     borderBottomColor: '#0B7461',
   },
-  // 1.0.23: 분홍 반짝이 — 새 버전 준비됨을 사장님이 즉시 인지.
+  // 1.0.25: 분홍 반짝이 — 새 버전 준비됨. backgroundColor 는 Animated 가 동적으로 덮어쓰니
+  // 여기는 정적 fallback 색만. borderBottomWidth / 패딩만 명시.
   barReadyPink: {
-    backgroundColor: '#fbcfe8', // pink-200 (밝은 분홍)
-    borderBottomColor: '#f472b6', // pink-400 진한 테두리
+    backgroundColor: '#fbcfe8',
+    borderBottomColor: '#f472b6',
+    borderBottomWidth: 3,
+  },
+  // 1.0.25: 다운로드 중 배너 — 옛 검은 띠(#1F2937) 대신 옅은 분홍 (downloaded 와 일관성).
+  // 정적, 반짝임 없음 (downloading 은 진행 중 상태라 안 두드러져도 OK).
+  barDownloadingPink: {
+    backgroundColor: '#fce7f3', // pink-100 (가장 옅은 분홍)
+    borderBottomColor: '#fbcfe8', // pink-200
     borderBottomWidth: 2,
   },
   iconPink: { color: '#9d174d', fontSize: 18 }, // pink-800
