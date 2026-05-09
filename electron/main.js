@@ -22,7 +22,7 @@ const { printReceiptIpc } = require('./printer/print');
 const { kisPayIpc, kisDiagnoseIpc } = require('./payment/kis');
 const { startCidListener, getCidDiagnosis } = require('./cid');
 const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
-const { setupAutoUpdater, checkNow, getLastStatus } = require('./updater');
+const { setupAutoUpdater, checkNow, applyNow, getLastStatus } = require('./updater');
 const {
   registerOfflineScheme,
   mountLocalServer,
@@ -190,6 +190,10 @@ ipcMain.handle('mypos/update-check', async () => {
 });
 ipcMain.handle('mypos/update-status', () => {
   return getLastStatus();
+});
+// 1.0.20: "지금 적용" — 다운로드된 새 버전을 즉시 적용. 사장님 명시 클릭.
+ipcMain.handle('mypos/update-apply-now', () => {
+  return applyNow();
 });
 
 app.whenReady().then(() => {

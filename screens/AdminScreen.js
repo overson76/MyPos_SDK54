@@ -37,6 +37,7 @@ import Constants from 'expo-constants';
 import { BUILD_NUMBER } from '../utils/buildInfo';
 import {
   isElectronUpdateAvailable,
+  applyElectronUpdateNow,
   checkForElectronUpdate,
   getElectronUpdateStatus,
   subscribeElectronUpdate,
@@ -161,6 +162,7 @@ function SystemSettingsView() {
   const updateSupported = isElectronUpdateAvailable();
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateApplying, setUpdateApplying] = useState(false);
 
   // OTA(폰 앱) 업데이트 상태 — 네이티브 환경에서만 표시.
   const [otaStatus, setOtaStatus] = useState(null); // null | 'checking' | 'downloading' | 'downloaded' | 'upToDate' | 'error'
@@ -215,6 +217,38 @@ function SystemSettingsView() {
     } finally {
       setUpdateChecking(false);
     }
+  };
+
+  // 1.0.20: "지금 적용" — 다운로드된 새 버전을 즉시 적용. 사장님이 영업 종료 후 명시 클릭.
+  // 영업 중 실수 클릭 방지로 confirm 다이얼로그 + destructive style.
+  const handleApplyUpdate = async () => {
+    if (updateApplying) return;
+    const newVersion = updateStatus?.version || '새 버전';
+    Alert.alert(
+      '새 버전 적용',
+      `지금 ${newVersion} 을(를) 적용할까요?\n\n` +
+        `.exe 가 잠시 닫히고 새 버전이 자동으로 시작됩니다.\n` +
+        `영업 중에는 권장하지 않습니다 — 잠시 결제 / 주문이 중단됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '지금 적용',
+          style: 'destructive',
+          onPress: async () => {
+            setUpdateApplying(true);
+            const r = await applyElectronUpdateNow();
+            if (!r?.ok) {
+              setUpdateApplying(false);
+              Alert.alert(
+                '적용 실패',
+                r?.message || r?.error || r?.reason || '알 수 없는 오류'
+              );
+            }
+            // ok=true 면 곧 .exe 가 종료되니 응답 처리 불필요.
+          },
+        },
+      ]
+    );
   };
 
   useEffect(() => {
@@ -384,7 +418,8 @@ function SystemSettingsView() {
               </Text>
               <Text style={sysStyles.helper}>
                 새 버전이 배포되면 백그라운드에서 다운로드합니다. 영업 중 강제 재시작 X —
-                다음 앱 시작 시 자동 적용. 영업 종료 후 .exe 닫고 다시 열면 새 버전.
+                다운로드 완료 후 사장님이 직접 "🚀 지금 적용" 버튼을 누르면 .exe 가 닫히고
+                새 버전이 자동 시작됩니다. (1.0.20+: 영업 안전 차원의 명시 적용 정책)
               </Text>
               {updateStatus?.kind === 'downloading' &&
               typeof updateStatus.percent === 'number' ? (
@@ -393,18 +428,33 @@ function SystemSettingsView() {
                 </Text>
               ) : null}
             </View>
-            <TouchableOpacity
-              style={[
-                sysStyles.btnSecondary,
-                updateChecking && { opacity: 0.5 },
-              ]}
-              disabled={updateChecking}
-              onPress={handleCheckUpdate}
-            >
-              <Text style={sysStyles.btnSecondaryText}>
-                {updateChecking ? '확인 중…' : '지금 확인'}
-              </Text>
-            </TouchableOpacity>
+            {updateStatus?.kind === 'downloaded' ? (
+              <TouchableOpacity
+                style={[
+                  sysStyles.btnPrimary,
+                  updateApplying && { opacity: 0.5 },
+                ]}
+                disabled={updateApplying}
+                onPress={handleApplyUpdate}
+              >
+                <Text style={sysStyles.btnPrimaryText}>
+                  {updateApplying ? '적용 중…' : '🚀 지금 적용'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  sysStyles.btnSecondary,
+                  updateChecking && { opacity: 0.5 },
+                ]}
+                disabled={updateChecking}
+                onPress={handleCheckUpdate}
+              >
+                <Text style={sysStyles.btnSecondaryText}>
+                  {updateChecking ? '확인 중…' : '지금 확인'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </>
       ) : null}

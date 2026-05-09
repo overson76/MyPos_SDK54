@@ -36,6 +36,7 @@ import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
 import UpdateBanner from './components/UpdateBanner';
+import AutoPrintBridge from './components/AutoPrintBridge';
 
 // 앱 트리에서 throw 된 React 렌더 에러를 Sentry 로 보고 + 매장에서 흰화면 대신 복구 UI 노출.
 // production 에서도 에러 메시지/스택 표시 — Sentry DSN 미설정 폰에서도 진단 가능하도록.
@@ -176,6 +177,9 @@ function JoinedAppTree() {
       <MenuProvider>
         <OrderProvider>
           <MainApp />
+          {/* 1.0.20: 주문 확정 시 자동 주문지 출력 — 정책(loadAutoOn + loadPolicy) 따라 동작.
+              UI 없는 hook 컴포넌트 — useOrders + useMenu 둘 다 접근 가능 위치. */}
+          <AutoPrintBridge />
         </OrderProvider>
       </MenuProvider>
     </LockProvider>

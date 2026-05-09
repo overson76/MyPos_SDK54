@@ -1,9 +1,12 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useReducer,
+  useRef,
 } from 'react';
+import { computeDiffRows } from './orderDiff';
 import {
   sanitizeDeliveryAddress,
   sanitizeDeliveryTimeRaw,
@@ -40,6 +43,17 @@ export { PENDING_TABLE_ID };
 
 export function OrderProvider({ children }) {
   const [orders, dispatch] = useReducer(orderReducer, {});
+
+  // 1.0.20: 주문 확정 listeners — 자동 출력 hook(AutoPrintBridge) 등 외부 구독자.
+  // ref 패턴으로 useMemo 의 deps 와 무관하게 stable. confirmOrder 가 호출 시 emit.
+  const confirmListenersRef = useRef(new Set());
+  const subscribeConfirmed = useCallback((cb) => {
+    if (typeof cb !== 'function') return () => {};
+    confirmListenersRef.current.add(cb);
+    return () => {
+      confirmListenersRef.current.delete(cb);
+    };
+  }, []);
 
   const { splits, setSplits, isSplit, toggleSplit } = useSplits({
     orders,
@@ -366,6 +380,15 @@ export function OrderProvider({ children }) {
     };
 
     const confirmOrder = (tableId) => {
+      // 1.0.20: 자동 출력 hook 을 위해 호출 시점에 메타/diff 캡처. dispatch 후엔
+      // confirmedItems 가 새 값으로 바뀌어 diff 가 모두 unchanged 가 되므로 의미 없음.
+      const orderSnap = orders[tableId];
+      const wasConfirmed = (orderSnap?.confirmedItems?.length ?? 0) > 0;
+      const tblForListener = resolveTableForAlert(tableId);
+      const diffRows = orderSnap
+        ? computeDiffRows(orderSnap.items, orderSnap.confirmedItems || [])
+        : [];
+
       addBreadcrumb('order.confirm', {
         tableId,
         cartCount: (orders[tableId]?.cartItems || []).length,
@@ -380,6 +403,25 @@ export function OrderProvider({ children }) {
         }
       }
       dispatch({ type: 'orders/confirmOrder', tableId });
+
+      // 자동 출력 listeners 호출 — 다음 tick (영업 흐름 안 막게) + 캡처한 데이터 전달.
+      // listener 가 throw 해도 다른 listener / 영업 흐름 보호.
+      if (confirmListenersRef.current.size > 0) {
+        setTimeout(() => {
+          for (const cb of confirmListenersRef.current) {
+            try {
+              cb({
+                tableId,
+                isFresh: !wasConfirmed,
+                rows: diffRows,
+                isDelivery: tblForListener?.type === 'delivery',
+                deliveryAddress: orderSnap?.deliveryAddress || '',
+                tableLabel: tblForListener?.label || tableId,
+              });
+            } catch {}
+          }
+        }, 0);
+      }
     };
 
     const toggleOption = (tableId, optionId) => {
@@ -476,6 +518,7 @@ export function OrderProvider({ children }) {
       revertHistoryEntry,
       markPaid,
       confirmOrder,
+      subscribeConfirmed,
       toggleOption,
       toggleItemCooked,
       cycleItemCookState,
@@ -521,7 +564,7 @@ const ORDERS_FALLBACK = {
   addItem: noop, removeItem: noop, clearTable: noop,
   markReady: noop, undoMarkReady: () => false,
   revertHistoryEntry: () => ({ ok: false, reason: 'notFound' }),
-  markPaid: noop, confirmOrder: noop,
+  markPaid: noop, confirmOrder: noop, subscribeConfirmed: () => () => {},
   toggleOption: noop, toggleItemCooked: noop,
   cycleItemCookState: noop, cycleItemCookStatePortion: noop,
   toggleItemOption: noop, incrementSlotQty: noop,

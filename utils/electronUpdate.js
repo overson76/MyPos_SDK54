@@ -15,3 +15,7 @@ export async function getElectronUpdateStatus() {
 export function subscribeElectronUpdate(_callback) {
   return () => {};
 }
+
+export async function applyElectronUpdateNow() {
+  return { ok: false, reason: 'native' };
+}

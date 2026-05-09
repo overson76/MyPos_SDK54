@@ -97,6 +97,36 @@ async function checkNow() {
   }
 }
 
+// 1.0.20: "지금 적용" 버튼 IPC — 다운로드 완료(downloaded) 상태일 때만 호출 안전.
+// 사장님이 영업 종료 후 명시 클릭 → quitAndInstall(false, true) → .exe 자동 닫힘 +
+// NSIS Setup 자동 실행 + 새 버전 자동 시작. 영업 중 실수 클릭 방지는 UI 의 confirm 다이얼로그로.
+//
+// quitAndInstall(isSilent, isForceRunAfter):
+//   - isSilent=false: NSIS 설치 진행 다이얼로그 보임 (안전 — 사장님이 진행 상황 확인 가능)
+//   - isForceRunAfter=true: 새 버전 자동 시작 (영업 중단 최소)
+//
+// downloaded 가 아니면 no-op + 이유 반환 — 호출부가 사용자에게 안내.
+function applyNow() {
+  if (lastStatus.kind !== 'downloaded') {
+    return {
+      ok: false,
+      reason: 'not-downloaded',
+      kind: lastStatus.kind,
+      message: '다운로드된 새 버전이 없습니다. (현재 상태: ' + lastStatus.kind + ')',
+    };
+  }
+  try {
+    // 동기적으로 quitAndInstall 호출. Electron 이 .exe 종료 + NSIS 트리거.
+    // 주의: 이 호출 후 메인 프로세스는 곧 종료됨 → 응답 보내고 즉시.
+    setTimeout(() => {
+      try { autoUpdater.quitAndInstall(false, true); } catch {}
+    }, 50);
+    return { ok: true, message: '잠시 후 .exe 가 닫히고 새 버전이 자동 시작됩니다' };
+  } catch (e) {
+    return { ok: false, reason: 'exception', error: String(e?.message || e) };
+  }
+}
+
 function getLastStatus() {
   return lastStatus;
 }
@@ -104,5 +134,6 @@ function getLastStatus() {
 module.exports = {
   setupAutoUpdater,
   checkNow,
+  applyNow,
   getLastStatus,
 };

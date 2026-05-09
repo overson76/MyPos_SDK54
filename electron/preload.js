@@ -108,6 +108,11 @@ contextBridge.exposeInMainWorld('mypos', {
   async getUpdateStatus() {
     return await ipcRenderer.invoke('mypos/update-status');
   },
+  // 1.0.20: 다운로드된 새 버전을 즉시 적용 — 관리자 → 시스템 → "지금 적용" 버튼.
+  // 반환: { ok, reason?, message? } — ok=true 면 곧 .exe 종료 + NSIS 트리거 + 새 버전 시작.
+  async applyUpdateNow() {
+    return await ipcRenderer.invoke('mypos/update-apply-now');
+  },
   onUpdateStatus(callback) {
     if (typeof callback !== 'function') return () => {};
     const handler = (_event, status) => callback(status);
