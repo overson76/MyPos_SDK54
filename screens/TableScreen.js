@@ -432,6 +432,21 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   {isPaid && (
                     <Text style={styles.tilePaidBadge}>✓ 결제완료</Text>
                   )}
+                  {/* 1.0.23: 포장 결제완료 + 조리완료 시 "픽업 완료" 버튼 노출.
+                      사장님 요청: 포장 선불 결제 후 슬롯 유지 → 손님 픽업 시 사장님이 명시 클릭. */}
+                  {isPaid && isReady && t.type === 'takeout' ? (
+                    <TouchableOpacity
+                      style={styles.tilePickupBtn}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        payClickedAtRef.current = Date.now();
+                        clearTable(readTableId);
+                      }}
+                      accessibilityLabel="픽업 완료"
+                    >
+                      <Text style={styles.tilePickupBtnText}>📦 픽업 완료</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   {!isReady && !anyCooking && !isPaid && (
                     <Text style={styles.tileQtyBadge}>{qty}개</Text>
                   )}

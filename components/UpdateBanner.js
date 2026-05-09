@@ -8,8 +8,8 @@
 //
 // 일반 브라우저 / 폰 빌드: window.mypos 없음 → subscribe 가 no-op → 절대 렌더 X.
 
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   isElectronUpdateAvailable,
   getElectronUpdateStatus,
@@ -84,25 +84,7 @@ export default function UpdateBanner() {
   }
 
   if (kind === 'downloaded') {
-    return (
-      <View style={[styles.bar, styles.barReady]}>
-        <Text style={styles.icon}>✓</Text>
-        <Text style={styles.text}>
-          새 버전 준비 완료{version ? ` (${version})` : ''} —{' '}
-          <Text style={styles.subtle}>영업 종료 후 앱을 닫고 다시 열면 자동 적용됩니다.</Text>
-        </Text>
-        <Pressable
-          style={styles.closeBtn}
-          onPress={() => {
-            saveJSON(DISMISSED_KEY, versionKey);
-            setDismissedVersion(versionKey);
-          }}
-          hitSlop={8}
-        >
-          <Text style={styles.closeText}>알겠습니다 ✕</Text>
-        </Pressable>
-      </View>
-    );
+    return <ReadyBanner version={version} versionKey={versionKey} setDismissedVersion={setDismissedVersion} />;
   }
 
   // error
@@ -119,6 +101,42 @@ export default function UpdateBanner() {
         <Text style={styles.actionText}>다시 시도</Text>
       </Pressable>
     </View>
+  );
+}
+
+// 1.0.23: 새 버전 준비됨 배너 — 사장님이 시각적으로 잘 보이도록 분홍색 + 부드러운 반짝이 효과.
+// Animated.loop 으로 opacity 펄스 (1.0 ↔ 0.85). 부드럽게 — 영업 중 시야 방해 X.
+function ReadyBanner({ version, versionKey, setDismissedVersion }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.85, duration: 900, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: false }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim]);
+
+  return (
+    <Animated.View style={[styles.bar, styles.barReadyPink, { opacity: pulseAnim }]}>
+      <Text style={[styles.icon, styles.iconPink]}>🎉</Text>
+      <Text style={[styles.text, styles.textPink]}>
+        새 버전 준비 완료{version ? ` (${version})` : ''} —{' '}
+        <Text style={styles.subtlePink}>관리자 → 시스템 → "🚀 지금 적용" 버튼을 눌러주세요.</Text>
+      </Text>
+      <Pressable
+        style={styles.closeBtnPink}
+        onPress={() => {
+          saveJSON(DISMISSED_KEY, versionKey);
+          setDismissedVersion(versionKey);
+        }}
+        hitSlop={8}
+      >
+        <Text style={styles.closeTextPink}>알겠습니다 ✕</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -146,6 +164,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#065F46',
     borderBottomColor: '#0B7461',
   },
+  // 1.0.23: 분홍 반짝이 — 새 버전 준비됨을 사장님이 즉시 인지.
+  barReadyPink: {
+    backgroundColor: '#fbcfe8', // pink-200 (밝은 분홍)
+    borderBottomColor: '#f472b6', // pink-400 진한 테두리
+    borderBottomWidth: 2,
+  },
+  iconPink: { color: '#9d174d', fontSize: 18 }, // pink-800
+  textPink: { color: '#831843', fontWeight: '700' }, // pink-900
+  subtlePink: { color: '#9d174d', fontWeight: '500' },
+  closeBtnPink: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#ec4899', // pink-500
+  },
+  closeTextPink: { color: '#fff', fontSize: 12, fontWeight: '700' },
   barError: {
     backgroundColor: '#7F1D1D',
     borderBottomColor: '#991B1B',

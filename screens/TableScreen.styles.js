@@ -241,6 +241,23 @@ export default function makeStyles(scale = 1) {
     color: '#fff',
     fontWeight: '800',
   },
+  // 1.0.23: 포장 결제완료 + 조리완료 시 "픽업 완료" 버튼.
+  // 결제완료 amber 와 시각적 구분 — 초록 톤 (완료 / 마무리 의미).
+  tilePickupBtn: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  tilePickupBtnText: {
+    fontSize: fp(10),
+    color: '#fff',
+    fontWeight: '800',
+  },
   tileDeliveringBadge: {
     fontSize: fp(8),
     color: '#fff',

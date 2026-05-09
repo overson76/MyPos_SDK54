@@ -432,31 +432,10 @@ export function OrderProvider({ children }) {
     //   결제수단 선택 모달이 사용자 선택값을 전달. 미선택(null) 도 허용 — 회계엔 '미분류'.
     const markPaid = (tableId, paymentMethod = null) => {
       addBreadcrumb('order.markPaid', { tableId, paymentMethod });
-      // 포장(p prefix) 은 결제 완료 = 픽업 종료 → 매출 기록 + 슬롯 제거 + compact.
-      // 그 외(일반/배달/예약/분할) 는 기존 동작: paymentStatus 만 'paid' 로 변경.
-      const prefix = detectDynamicSlotPrefix(tableId);
-      if (prefix === 'p') {
-        const existing = orders[tableId];
-        if (existing && (existing.items || []).length > 0) {
-          const total = computeItemsTotal(existing.items);
-          setRevenue((prev) =>
-            appendHistory(
-              prev,
-              buildHistoryEntry({
-                tableId,
-                items: existing.items,
-                options: existing.options,
-                paymentStatus: 'paid',
-                paymentMethod,
-                total,
-              })
-            )
-          );
-        }
-        dispatch({ type: 'orders/removeTable', tableId });
-        dispatch({ type: 'orders/compactSlots', prefix: 'p' });
-        return;
-      }
+      // 1.0.23: 포장(p prefix) 도 일반 테이블처럼 paymentStatus 만 'paid' 로 변경.
+      // 사장님 요청: "포장은 선불이 많기 때문에 선불결재 시 바로 사라지면 안 되고
+      // 픽업완료 버튼을 눌렀을 때 사라지게". → 매출 기록 + 슬롯 제거는 별도 pickupComplete
+      // 액션이 담당. (clearTable 또는 새 함수)
       dispatch({ type: 'orders/markPaid', tableId, paymentMethod });
 
       // 1.0.22: 단체(그룹) 의 일부였다면 결제 완료 시 그룹 자동 분리 — 사장님 의도
