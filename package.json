@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -48,6 +48,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.17",
     "firebase": "^12.12.1",
+    "iconv-lite": "^0.6.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

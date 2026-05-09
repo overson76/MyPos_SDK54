@@ -23,7 +23,13 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const iconv = require('iconv-lite');
 const { buildReceiptText, buildReceiptBytes, buildTextBytes } = require('../../utils/escposBuilder');
+
+// 한국어 텍스트를 EUC-KR(CP949) 로 인코딩 — 한국 매장 영수증 프린터(SEWOO/Bixolon/Epson) default 코드페이지.
+// 1.0.19 fix: 1.0.18 이 UTF-8 raw bytes 그대로 송신해서 한국어가 깨지던 문제 해결.
+// escposBuilder 의 textEncoder 옵션으로 주입 → 명령 바이트(ASCII)는 그대로, 한국어만 EUC-KR.
+const eucKrEncode = (s) => iconv.encode(s, 'euc-kr');
 
 // 매장이 프린터 모델 결정 후 활성화. 그 전엔 simulate 가 default.
 function getDefaultOptions() {
@@ -52,7 +58,9 @@ async function printReceiptIpc(receipt, options = {}) {
     }
 
     if (opts.mode === 'network') {
-      const bytes = receipt.rawText ? buildTextBytes(receipt.rawText) : buildReceiptBytes(receipt);
+      const bytes = receipt.rawText
+        ? buildTextBytes(receipt.rawText, eucKrEncode)
+        : buildReceiptBytes(receipt, eucKrEncode);
       const info = await sendToNetworkPrinter(bytes, opts);
       return { ok: true, mode: 'network', info };
     }
@@ -119,8 +127,8 @@ async function sendToUsbPrinter(receipt, opts) {
   }
 
   const bytes = receipt.rawText
-    ? buildTextBytes(receipt.rawText)
-    : buildReceiptBytes(receipt);
+    ? buildTextBytes(receipt.rawText, eucKrEncode)
+    : buildReceiptBytes(receipt, eucKrEncode);
 
   const tmpFile = path.join(
     os.tmpdir(),
