@@ -78,36 +78,30 @@ function paymentMethodLabel(code) {
   return map[code] || '미분류';
 }
 
-// 영수증 본문 텍스트 빌드 — 1.0.31 A형 디자인.
-// 사장님 의도: 메모 / 옵션 / 가격 / 테이블명 / 총가격 / 배달지 / 주문테이블 포함.
+// 영수증 본문 텍스트 빌드 — 1.0.33 간결형.
+// 사장님 의도: 주문지 / 테이블명 / 배달지 / 주문메뉴 + 수량 + 가격 / 합계만. 매장 정보 / 부가세 분리 / 결제수단 / 푸터 모두 제거.
 //
 // receipt: {
-//   storeName, storePhone, storeAddress, businessNumber, receiptFooter,  // 매장 정보 (모두 optional)
-//   tableId, tableLabel,                                                   // 주문 테이블
-//   items: [{ name, qty, price, largeQty, sizeUpcharge, optionLabels, memo }], // 옵션 라벨은 호출부 resolve
-//   total, paymentMethod, paymentStatus,
-//   deliveryAddress, printedAt
+//   tableId, tableLabel,
+//   items: [{ name, qty, price, largeQty, sizeUpcharge, optionLabels, memo }],
+//   total, deliveryAddress, printedAt
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
   const r = receipt || {};
 
-  // ───── 헤더: 매장 정보 ─────
+  // ───── 헤더 ─────
   lines.push(divider('='));
-  if (r.storeName) lines.push(centerText(r.storeName));
-  if (r.storePhone) lines.push(centerText(`☎ ${r.storePhone}`));
-  if (r.storeAddress) lines.push(centerText(`📍 ${r.storeAddress}`));
-  if (r.businessNumber) lines.push(centerText(`사업자: ${r.businessNumber}`));
+  lines.push(centerText('주  문  지'));
   lines.push(centerText(formatDateTime(r.printedAt || Date.now())));
 
-  // ───── 주문 테이블 + 배달지 (선택) ─────
+  // ───── 테이블 / 배달지 ─────
   lines.push(divider('-'));
   const tableLabel = r.tableLabel || r.tableId;
   if (tableLabel) {
-    lines.push(`📋 주문 테이블: ${tableLabel}`);
+    lines.push(`📋 테이블: ${tableLabel}`);
   }
   if (r.deliveryAddress) {
-    // 배달지가 길면 자동 줄바꿈 — 헤더 1줄 + 주소 wrap
     lines.push(`🛵 ${r.deliveryAddress}`);
   }
 
@@ -121,25 +115,19 @@ export function buildReceiptText(receipt) {
     const price = Number(item.price) || 0;
     const sizeUp = Number(item.sizeUpcharge) || 0;
 
-    // 큰사이즈 + 보통사이즈 분리 표시 (buildOrderSlipText 와 일관)
     if (lq > 0 && nq > 0) {
-      // 둘 다 — 분리
       lines.push(pad2col(`${name} 보통 x${nq}`, formatWon(price * nq)));
       lines.push(pad2col(`${name} 대 x${lq}`, formatWon((price + sizeUp) * lq)));
     } else if (lq > 0) {
-      // 대만
       lines.push(pad2col(`${name} 대 x${lq}`, formatWon((price + sizeUp) * lq)));
     } else {
-      // 보통만 (기본)
       lines.push(pad2col(`${name} x${qty}`, formatWon(price * qty)));
     }
 
-    // 옵션 — 들여쓰기로
     const opts = item.optionLabels || [];
     if (opts.length > 0) {
       lines.push('  ▸ ' + opts.join(' · '));
     }
-    // 메모 — 들여쓰기로
     if (item.memo && String(item.memo).trim()) {
       lines.push('  📝 ' + String(item.memo).trim());
     }
@@ -147,31 +135,7 @@ export function buildReceiptText(receipt) {
 
   // ───── 합계 ─────
   lines.push(divider('-'));
-  const total = Number(r.total) || 0;
-  const supply = Math.round(total / 1.1);
-  const vat = total - supply;
-  lines.push(pad2col('공급가액', formatWon(supply)));
-  lines.push(pad2col('부가세 (10%)', formatWon(vat)));
-  lines.push(pad2col('합계', formatWon(total)));
-
-  // ───── 결제 ─────
-  lines.push('');
-  lines.push(pad2col('결제수단', paymentMethodLabel(r.paymentMethod)));
-  lines.push(pad2col('결제상태', r.paymentStatus === 'paid' ? '결제완료' : '미결제'));
-
-  // ───── 푸터 ─────
-  lines.push(divider('='));
-  lines.push(centerText('감사합니다'));
-  if (r.receiptFooter && String(r.receiptFooter).trim()) {
-    // 매장이 설정한 추가 문구 — 여러 줄 가능
-    for (const ln of String(r.receiptFooter).split('\n')) {
-      const trimmed = ln.trim();
-      if (trimmed) lines.push(centerText(trimmed));
-    }
-  } else {
-    // default
-    lines.push(centerText('교환·환불 7일 이내'));
-  }
+  lines.push(pad2col('합계', formatWon(Number(r.total) || 0)));
   lines.push(divider('='));
 
   return lines.join('\n');
