@@ -63,18 +63,23 @@ export function orderReducer(state, action) {
     }
 
     case 'orders/addItem': {
-      const { tableId, menuItem, preferredSlotId } = action;
+      const { tableId, menuItem, preferredSlotId, sourceTableId } = action;
       if (!tableId) return state;
       const existing = state[tableId];
       const current = cartFromExisting(existing);
-      // 옵션 없고 pending 인 동일 메뉴 슬롯이 있으면 거기에 누적
+      // 1.0.35: sourceTableId — 어느 테이블 손님이 시킨 메뉴인지 추적. 단체 묶음 후에도
+      // 어느 손님 거였는지 알 수 있게. action 에 명시 없으면 tableId 와 동일 (단체 묶기
+      // 전에는 자기 자신, 합쳐진 후엔 사장님이 모달에서 선택한 값).
+      const src = sourceTableId || tableId;
+      // 옵션 없고 pending 인 동일 메뉴 슬롯이 같은 sourceTable 에 있으면 거기에 누적
       const idx = current.findIndex(
         (i) =>
           i.id === menuItem.id &&
           (i.options || []).length === 0 &&
           (i.cookState || 'pending') === 'pending' &&
           !i.cookStateNormal &&
-          !i.cookStateLarge
+          !i.cookStateLarge &&
+          (i.sourceTableId || tableId) === src
       );
       let nextCart;
       if (idx >= 0) {
@@ -95,6 +100,7 @@ export function orderReducer(state, action) {
             sizeGroup: menuItem.sizeGroup || null,
             sizeUpcharge: menuItem.sizeUpcharge || 0,
             options: [],
+            sourceTableId: src,
           },
         ];
       }
@@ -587,9 +593,19 @@ export function orderReducer(state, action) {
       if (!pending || !(pending.cartItems || []).length) return state;
       const existing = state[toTableId];
       const destCart = cartFromExisting(existing);
+      // 1.0.35: pending 상태에서 addItem 한 슬롯은 sourceTableId 가 PENDING_TABLE_ID
+      // 로 박혀있다. 실 테이블로 옮겨갈 때 그 가상 ID 를 toTableId 로 치환해야 단체
+      // 묶기 후 normalizeSlots 매칭이 정상 작동.
       const mergedCart = normalizeSlots([
         ...destCart,
-        ...pending.cartItems.map((i) => ({ ...i, slotId: genSlotId() })),
+        ...pending.cartItems.map((i) => ({
+          ...i,
+          slotId: genSlotId(),
+          sourceTableId:
+            !i.sourceTableId || i.sourceTableId === PENDING_TABLE_ID
+              ? toTableId
+              : i.sourceTableId,
+        })),
       ]);
       const { [PENDING_TABLE_ID]: _removed, ...rest } = state;
       if (existing) {

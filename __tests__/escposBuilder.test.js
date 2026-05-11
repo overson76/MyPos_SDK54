@@ -52,60 +52,62 @@ describe('divider', () => {
 });
 
 describe('buildReceiptText', () => {
+  // 1.0.33 영수증 간결화: storeName/매장정보/부가세/결제수단/푸터 모두 제거.
+  // "주문지 / 테이블명/배달지 / 메뉴+수량+가격 / 합계" 만 남음.
   const sample = {
-    storeName: '마이포스 매장',
+    storeName: '마이포스 매장', // 빌더 무시 — 출력 안 됨
     tableId: '1',
     items: [
       { name: '치킨', qty: 2, price: 10000 },
       { name: '콜라', qty: 1, price: 2000 },
     ],
     total: 22000,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
+    paymentMethod: 'card', // 빌더 무시
+    paymentStatus: 'paid', // 빌더 무시
     printedAt: new Date('2026-04-29T14:30:00').getTime(),
   };
 
-  test('필수 섹션 모두 포함', () => {
+  test('필수 섹션 — 주문지 + 테이블 + 메뉴 + 합계', () => {
     const text = buildReceiptText(sample);
-    expect(text).toContain('마이포스 매장');
+    expect(text).toContain('주  문  지');
     expect(text).toContain('테이블: 1');
     expect(text).toContain('치킨 x2');
     expect(text).toContain('콜라 x1');
-    expect(text).toContain('20,000원'); // 치킨 line
-    expect(text).toContain('2,000원'); // 콜라 line
+    expect(text).toContain('20,000원');
+    expect(text).toContain('2,000원');
     expect(text).toContain('합계');
     expect(text).toContain('22,000원');
-    expect(text).toContain('카드');
-    expect(text).toContain('결제완료');
-    expect(text).toContain('감사합니다');
   });
 
-  test('VAT 분리 — 22000 → 공급 20000 + 부가세 2000', () => {
+  test('1.0.33 — 매장정보/부가세/결제수단/푸터 제거 확인', () => {
     const text = buildReceiptText(sample);
-    expect(text).toContain('공급가액');
-    expect(text).toContain('20,000원');
-    expect(text).toContain('부가세');
-    expect(text).toContain('2,000원');
+    expect(text).not.toContain('마이포스 매장');
+    expect(text).not.toContain('공급가액');
+    expect(text).not.toContain('부가세');
+    expect(text).not.toContain('카드');
+    expect(text).not.toContain('결제완료');
+    expect(text).not.toContain('감사합니다');
   });
 
-  test('배달 주소 있으면 표시', () => {
-    const text = buildReceiptText({ ...sample, deliveryAddress: '서울시 종로구 ...' });
-    expect(text).toContain('배달 주소');
+  test('배달 주소 있으면 🛵 와 함께 표시', () => {
+    const text = buildReceiptText({
+      ...sample,
+      deliveryAddress: '서울시 종로구 ...',
+    });
+    expect(text).toContain('🛵');
     expect(text).toContain('서울시 종로구');
   });
 
-  test('paymentMethod 없으면 미분류', () => {
-    const text = buildReceiptText({ ...sample, paymentMethod: null });
-    expect(text).toContain('미분류');
-  });
-
-  test('대 사이즈 표시', () => {
+  test('대 사이즈 — 보통/대 분리 한 줄씩', () => {
     const text = buildReceiptText({
       ...sample,
-      items: [{ name: '치킨', qty: 2, largeQty: 1, price: 10000, sizeUpcharge: 2000 }],
+      items: [
+        { name: '치킨', qty: 2, largeQty: 1, price: 10000, sizeUpcharge: 2000 },
+      ],
     });
-    expect(text).toContain('치킨 x2');
-    expect(text).toContain('대 1개');
+    // qty=2, largeQty=1 → 보통 1, 대 1 분리
+    expect(text).toContain('치킨 보통 x1');
+    expect(text).toContain('치킨 대 x1');
   });
 
   test('빈 receipt 안전', () => {

@@ -113,6 +113,47 @@ describe('normalizeSlots', () => {
     ]);
     expect(result).toHaveLength(2);
   });
+
+  test('sourceTableId 가 다르면 별도 슬롯 (단체 묶기 후 1인 결제 분리 지원)', () => {
+    const result = normalizeSlots([
+      { id: 'a', qty: 2, sourceTableId: 't01' },
+      { id: 'a', qty: 3, sourceTableId: 't02' },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result.find((r) => r.sourceTableId === 't01').qty).toBe(2);
+    expect(result.find((r) => r.sourceTableId === 't02').qty).toBe(3);
+  });
+
+  test('sourceTableId 같으면 합산', () => {
+    const result = normalizeSlots([
+      { id: 'a', qty: 2, sourceTableId: 't01' },
+      { id: 'a', qty: 3, sourceTableId: 't01' },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].qty).toBe(5);
+  });
+
+  test('sourceTableId 한쪽만 있으면 별도 슬롯', () => {
+    const result = normalizeSlots([
+      { id: 'a', qty: 1 },
+      { id: 'a', qty: 2, sourceTableId: 't01' },
+    ]);
+    expect(result).toHaveLength(2);
+  });
+
+  test('1.0.34 — largeQty 가 있어도 sizeUpcharge 가 손실되지 않게 합산', () => {
+    const a = [
+      { id: 'a', qty: 2, largeQty: 2, sizeUpcharge: 2000, price: 10000 },
+    ];
+    const b = [{ id: 'a', qty: 1, largeQty: 0, price: 10000 }];
+    const result = normalizeSlots([...a, ...b]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      qty: 3,
+      largeQty: 2,
+      sizeUpcharge: 2000,
+    });
+  });
 });
 
 describe('resolveTableForAlert', () => {
@@ -140,8 +181,12 @@ describe('mergeOrderParts', () => {
     const a = { items: [{ id: 'a', qty: 1 }], cartItems: [] };
     const b = { items: [{ id: 'a', qty: 2 }], cartItems: [{ id: 'b', qty: 1 }] };
     const merged = mergeOrderParts(a, b);
-    expect(merged.items).toEqual([{ id: 'a', qty: 3 }]);
-    expect(merged.cartItems).toEqual([{ id: 'b', qty: 1 }]);
+    // 1.0.34 fix 후 normalizeSlots 가 옵션 보존 위해 options:[] 박음 — toMatchObject 로
+    // 핵심 필드만 검증.
+    expect(merged.items).toHaveLength(1);
+    expect(merged.items[0]).toMatchObject({ id: 'a', qty: 3 });
+    expect(merged.cartItems).toHaveLength(1);
+    expect(merged.cartItems[0]).toMatchObject({ id: 'b', qty: 1 });
   });
 
   test('createdAt 은 둘 중 더 빠른 시각', () => {
@@ -180,6 +225,16 @@ describe('mergeOrderParts', () => {
       { items: [{ id: 'a', qty: 1 }], options: ['포장', '봉투'] }
     );
     expect(merged.options.sort()).toEqual(['봉투', '포장']);
+  });
+
+  test('1.0.35 — sourceTableId 가 박힌 슬롯은 합쳐도 별도 슬롯 유지 (1인 결제 토대)', () => {
+    const merged = mergeOrderParts(
+      { items: [{ id: 'a', qty: 1, sourceTableId: 't01' }] },
+      { items: [{ id: 'a', qty: 2, sourceTableId: 't02' }] }
+    );
+    expect(merged.items).toHaveLength(2);
+    expect(merged.items.find((i) => i.sourceTableId === 't01').qty).toBe(1);
+    expect(merged.items.find((i) => i.sourceTableId === 't02').qty).toBe(2);
   });
 });
 

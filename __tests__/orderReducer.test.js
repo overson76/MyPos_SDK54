@@ -98,6 +98,58 @@ describe('orderReducer · addItem', () => {
     });
     expect(s.t1.cartItems).toHaveLength(2);
   });
+
+  test('1.0.35 — addItem 에 sourceTableId 명시 안 하면 tableId 와 동일하게 자동 박힘', () => {
+    const next = orderReducer({}, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+    });
+    expect(next.t1.cartItems[0].sourceTableId).toBe('t1');
+  });
+
+  test('1.0.35 — sourceTableId 명시하면 그 값으로 박힘 (단체 결성 후 손님 테이블 추적)', () => {
+    const next = orderReducer({}, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+      sourceTableId: 't3',
+    });
+    expect(next.t1.cartItems[0].sourceTableId).toBe('t3');
+  });
+
+  test('1.0.35 — 같은 메뉴라도 sourceTableId 다르면 별도 슬롯', () => {
+    let s = orderReducer({}, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+      sourceTableId: 't1',
+    });
+    s = orderReducer(s, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+      sourceTableId: 't2',
+    });
+    expect(s.t1.cartItems).toHaveLength(2);
+  });
+
+  test('1.0.35 — 같은 sourceTableId 면 누적', () => {
+    let s = orderReducer({}, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+      sourceTableId: 't2',
+    });
+    s = orderReducer(s, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+      sourceTableId: 't2',
+    });
+    expect(s.t1.cartItems).toHaveLength(1);
+    expect(s.t1.cartItems[0].qty).toBe(2);
+  });
 });
 
 describe('orderReducer · removeItemFromCart / removeTable', () => {
@@ -680,6 +732,40 @@ describe('orderReducer · pending cart 이관', () => {
     });
     expect(next[PENDING_TABLE_ID]).toBeUndefined();
     expect(next.t1.cartItems).toHaveLength(1);
+  });
+
+  test('1.0.35 — migratePendingCart 시 sourceTableId 가 PENDING 이면 toTable 로 치환', () => {
+    const s = {
+      [PENDING_TABLE_ID]: makeOrder({
+        cartItems: [
+          {
+            slotId: 'p1',
+            id: 'm1',
+            qty: 1,
+            options: [],
+            sourceTableId: PENDING_TABLE_ID,
+          },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/migratePendingCart',
+      toTableId: 't1',
+    });
+    expect(next.t1.cartItems[0].sourceTableId).toBe('t1');
+  });
+
+  test('1.0.35 — migratePendingCart 시 sourceTableId 가 없으면 toTable 로 채움', () => {
+    const s = {
+      [PENDING_TABLE_ID]: makeOrder({
+        cartItems: [{ slotId: 'p1', id: 'm1', qty: 1, options: [] }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/migratePendingCart',
+      toTableId: 't1',
+    });
+    expect(next.t1.cartItems[0].sourceTableId).toBe('t1');
   });
 
   test('clearPendingCart 가 PENDING 키 제거', () => {

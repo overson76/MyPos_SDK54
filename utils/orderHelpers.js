@@ -143,7 +143,10 @@ export function compactSlotsByPrefix(orders, prefix) {
   return { orders: next, mapping };
 }
 
-// 동일한 (id, options, cookState/portion states)을 가진 슬롯들을 qty/largeQty 합산하여 병합
+// 동일한 (id, options, cookState/portion states, sourceTableId)를 가진 슬롯들을 qty/largeQty 합산하여 병합.
+// 1.0.35: sourceTableId 추가 — 단체(group, 묶음) 결성 후에도 각 손님 테이블별 슬롯이 살아남아야
+// 1인/테이블별 결제 분리가 가능. 동일 메뉴라도 sourceTable 이 다르면 별도 슬롯 유지.
+// 옛 데이터 (sourceTableId 없음) 끼리는 그대로 합쳐짐 (둘 다 undefined → '' === '').
 export function normalizeSlots(items) {
   const result = [];
   for (const item of items) {
@@ -153,6 +156,7 @@ export function normalizeSlots(items) {
     const cs = item.cookState || 'pending';
     const csn = item.cookStateNormal || cs;
     const csl = item.cookStateLarge || cs;
+    const src = item.sourceTableId || '';
     const idx = result.findIndex((r) => {
       const rcs = r.cookState || 'pending';
       return (
@@ -161,6 +165,7 @@ export function normalizeSlots(items) {
         (r.cookStateNormal || rcs) === csn &&
         (r.cookStateLarge || rcs) === csl &&
         (r.memo || '') === memo &&
+        (r.sourceTableId || '') === src &&
         JSON.stringify([...(r.options || [])].sort()) === JSON.stringify(opts)
       );
     });

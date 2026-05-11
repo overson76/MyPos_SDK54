@@ -113,7 +113,10 @@ describe('historyToCsv', () => {
       },
     ]);
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('시점,테이블,메뉴,결제수단,결제상태,배달주소,합계,공급가액,부가세');
+    // markHistoryReverted 도입으로 "되돌림" 컬럼 추가됨 (회계 사무소 송부 시 reverted 식별)
+    expect(lines[0]).toBe(
+      '시점,테이블,메뉴,결제수단,결제상태,배달주소,합계,공급가액,부가세,되돌림'
+    );
     // 메뉴는 "치킨×2,콜라×1" — 콤마 포함이라 큰따옴표로 감싸짐
     expect(lines[1]).toContain('"치킨×2,콜라×1"');
     expect(lines[1]).toContain('카드');

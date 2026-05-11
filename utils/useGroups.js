@@ -33,10 +33,28 @@ export function useGroups({ orders, dispatch }) {
       if (!memberIds || memberIds.length < 2) return;
       const sorted = [...memberIds];
       const leaderId = sorted[0];
+      // 1.0.35: 단체 결성 직전 — 각 멤버 테이블의 슬롯에 sourceTableId 를 stamp.
+      // 합쳐진 후에도 normalizeSlots 의 매칭이 sourceTable 별로 갈리도록.
+      // 옛 슬롯 (sourceTableId 미박힘) 은 자기 테이블 ID 로 채우고, 이미 박힌 건 보존.
+      // 1인/테이블별 결제 분리, 단체 해제 후 원위치 복원의 토대.
+      const stamp = (order, tid) => {
+        if (!order) return order;
+        const fn = (arr) =>
+          (arr || []).map((i) => ({
+            ...i,
+            sourceTableId: i.sourceTableId || tid,
+          }));
+        return {
+          ...order,
+          items: fn(order.items),
+          cartItems: fn(order.cartItems),
+          confirmedItems: fn(order.confirmedItems),
+        };
+      };
       // mergedLeader 계산 — reducer 는 cross-domain 모르므로 wrapper 가 결과만 전달.
-      let leaderOrder = orders[leaderId] || null;
+      let leaderOrder = stamp(orders[leaderId], leaderId);
       for (let i = 1; i < sorted.length; i++) {
-        const m = orders[sorted[i]];
+        const m = stamp(orders[sorted[i]], sorted[i]);
         if (!m) continue;
         leaderOrder = mergeOrderParts(leaderOrder, m) || leaderOrder;
       }
