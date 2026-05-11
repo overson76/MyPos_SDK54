@@ -199,6 +199,30 @@ export function resolveTableForAlert(tableId) {
   return resolveAnyTable(tableId);
 }
 
+// 1.0.37: sourceTableId 별로 슬롯 그룹화. 단체 묶음 후 분리 결제 시
+// 어느 손님 몫 매출인지 집계용. defaultTableId 는 옛 슬롯(sourceTable 미박힘) 의 fallback.
+// 반환: Map<sourceTableId, slots[]>.
+export function groupItemsBySource(items, defaultTableId) {
+  const map = new Map();
+  for (const i of items || []) {
+    const src = i.sourceTableId || defaultTableId;
+    if (!map.has(src)) map.set(src, []);
+    map.get(src).push(i);
+  }
+  return map;
+}
+
+// 1.0.37: sourceTable 별 소계. 분리 결제 모달의 손님별 금액 표시 + 회계 사무소
+// 송부 시 CSV 분리 컬럼. 반환: { [sourceTableId]: total }.
+export function computeSubtotalsBySource(items, defaultTableId) {
+  const map = groupItemsBySource(items, defaultTableId);
+  const result = {};
+  for (const [src, slots] of map.entries()) {
+    result[src] = computeItemsTotal(slots);
+  }
+  return result;
+}
+
 // 단체석 그룹 합치기 — 두 테이블의 주문/장바구니/매출 상태를 병합.
 export function mergeOrderParts(a, b) {
   const aItems = a?.items || [];

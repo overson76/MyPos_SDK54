@@ -872,3 +872,76 @@ describe('orderReducer · split / unsplit / createGroupMerge', () => {
     expect(next.t3).toBeUndefined();
   });
 });
+
+describe('orderReducer · clearTableBySource (1.0.37 분리 결제)', () => {
+  test('해당 sourceTable 의 슬롯만 제거, 다른 손님 슬롯은 보존', () => {
+    const s = {
+      t1: makeOrder({
+        items: [
+          { slotId: 'a1', qty: 1, sourceTableId: 't1' },
+          { slotId: 'a2', qty: 2, sourceTableId: 't2' },
+        ],
+        cartItems: [
+          { slotId: 'a1', qty: 1, sourceTableId: 't1' },
+          { slotId: 'a2', qty: 2, sourceTableId: 't2' },
+        ],
+        confirmedItems: [],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/clearTableBySource',
+      tableId: 't1',
+      sourceTableId: 't1',
+    });
+    expect(next.t1).toBeDefined();
+    expect(next.t1.items).toHaveLength(1);
+    expect(next.t1.items[0].sourceTableId).toBe('t2');
+    expect(next.t1.cartItems).toHaveLength(1);
+  });
+
+  test('모든 슬롯 비면 테이블 자체 제거', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 'a1', qty: 1, sourceTableId: 't1' }],
+        cartItems: [{ slotId: 'a1', qty: 1, sourceTableId: 't1' }],
+        confirmedItems: [{ slotId: 'a1', qty: 1, sourceTableId: 't1' }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/clearTableBySource',
+      tableId: 't1',
+      sourceTableId: 't1',
+    });
+    expect(next.t1).toBeUndefined();
+  });
+
+  test('없는 테이블이면 noop', () => {
+    const s = { t2: makeOrder() };
+    expect(
+      orderReducer(s, {
+        type: 'orders/clearTableBySource',
+        tableId: 't1',
+        sourceTableId: 't1',
+      })
+    ).toBe(s);
+  });
+
+  test('sourceTableId 없는 옛 슬롯은 tableId fallback', () => {
+    const s = {
+      t1: makeOrder({
+        items: [
+          { slotId: 'a1', qty: 1 }, // sourceTableId 없음 → t1 fallback
+          { slotId: 'a2', qty: 2, sourceTableId: 't2' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/clearTableBySource',
+      tableId: 't1',
+      sourceTableId: 't1',
+    });
+    // a1 (fallback=t1) 만 제거됨
+    expect(next.t1.items).toHaveLength(1);
+    expect(next.t1.items[0].slotId).toBe('a2');
+  });
+});

@@ -11,6 +11,8 @@ import {
   compactSlotsByPrefix,
   markHistoryReverted,
   findHistoryEntry,
+  groupItemsBySource,
+  computeSubtotalsBySource,
 } from '../utils/orderHelpers';
 
 describe('capHistory', () => {
@@ -359,6 +361,62 @@ describe('markHistoryReverted', () => {
       history: [{ id: 'a', total: 10000 }],
     };
     expect(markHistoryReverted(skewed, 'a').total).toBe(0);
+  });
+});
+
+describe('groupItemsBySource / computeSubtotalsBySource', () => {
+  test('sourceTableId 별로 그룹화', () => {
+    const items = [
+      { id: 'a', qty: 2, price: 1000, sourceTableId: 't01' },
+      { id: 'b', qty: 1, price: 2000, sourceTableId: 't01' },
+      { id: 'c', qty: 3, price: 500, sourceTableId: 't02' },
+    ];
+    const map = groupItemsBySource(items, 't01');
+    expect(map.get('t01')).toHaveLength(2);
+    expect(map.get('t02')).toHaveLength(1);
+  });
+
+  test('sourceTableId 없는 슬롯은 defaultTableId 로', () => {
+    const items = [
+      { id: 'a', qty: 1, price: 1000 },
+      { id: 'b', qty: 1, price: 2000, sourceTableId: 't02' },
+    ];
+    const map = groupItemsBySource(items, 't01');
+    expect(map.get('t01')).toHaveLength(1);
+    expect(map.get('t02')).toHaveLength(1);
+  });
+
+  test('computeSubtotalsBySource 가 sourceTable 별 합계 반환', () => {
+    const items = [
+      { id: 'a', qty: 2, price: 1000, sourceTableId: 't01' },
+      { id: 'b', qty: 1, price: 2000, sourceTableId: 't01' },
+      { id: 'c', qty: 3, price: 500, sourceTableId: 't02' },
+    ];
+    const sub = computeSubtotalsBySource(items, 't01');
+    expect(sub['t01']).toBe(2 * 1000 + 1 * 2000); // 4000
+    expect(sub['t02']).toBe(3 * 500); // 1500
+  });
+
+  test('largeQty/sizeUpcharge 도 정확히 합산', () => {
+    const items = [
+      {
+        id: 'a',
+        qty: 2,
+        largeQty: 1,
+        price: 10000,
+        sizeUpcharge: 2000,
+        sourceTableId: 't01',
+      },
+    ];
+    const sub = computeSubtotalsBySource(items, 't01');
+    // 보통 1개 (10000) + 대 1개 (10000 + 2000) = 22000
+    // computeItemsTotal: price * qty + sizeUpcharge * largeQty = 10000*2 + 2000*1 = 22000
+    expect(sub['t01']).toBe(22000);
+  });
+
+  test('빈 배열 → 빈 dict', () => {
+    expect(computeSubtotalsBySource([], 't01')).toEqual({});
+    expect(computeSubtotalsBySource(null, 't01')).toEqual({});
   });
 });
 

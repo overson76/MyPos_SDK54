@@ -21,6 +21,7 @@ import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -45,8 +46,14 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   // 메뉴 전체보기 모달 — 선택된 테이블의 id 저장 (null 이면 닫힘)
   const [expandedTableId, setExpandedTableId] = useState(null);
   // 결제하기 버튼이 띄우는 결제수단 선택 모달.
-  // { tableId, total } | null. 선택 시 markPaid + clearTable + 모달 닫기.
+  // { tableId, total, label, sourceTableId?, isSplit? } | null.
+  // 선택 시 markPaid + clearTable (합산) 또는 clearTableBySource (분리).
   const [paymentPicker, setPaymentPicker] = useState(null);
+  // 1.0.37: 단체 묶음 테이블 결제 시 합산/분리 선택 모달.
+  // { tableId, members, subtotalsBySource, label } | null.
+  const [groupSplitChoice, setGroupSplitChoice] = useState(null);
+  // 분리 결제 진행 큐 — { tableId, remaining: string[], subtotals }.
+  const [splitPayQueue, setSplitPayQueue] = useState(null);
   // 펼쳐보기 칩 클릭이 타일 onPress 와 같이 발화하는 RN 플랫폼 quirk 방어용 가드.
   // boolean flag 는 부모 onPress 가 안 불릴 때 sticky 가 되는 부작용이 있어 timestamp 로 자동 만료.
   const expandClickedAtRef = useRef(0);
@@ -91,6 +98,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     getOrderTotal,
     getOrderQty,
     clearTable,
+    clearTableBySource,
+    computeSubtotalsBySource,
     isSplit,
     toggleSplit,
     moveOrder,
@@ -144,6 +153,59 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     memberIds
       .map((id) => tables.find((tb) => tb.id === id)?.label || id)
       .join('+');
+
+  // 1.0.37: 결제하기 진입점 — 단체이면 합산/분리 선택 모달, 일반이면 즉시 결제수단.
+  const startPayment = (tableId, totalAmount, label) => {
+    payClickedAtRef.current = Date.now();
+    const group = getGroupFor?.(tableId);
+    if (group && group.memberIds && group.memberIds.length > 1) {
+      const order = getOrder(tableId);
+      const subtotals = computeSubtotalsBySource(
+        order?.items || [],
+        tableId
+      );
+      setGroupSplitChoice({
+        tableId,
+        members: group.memberIds,
+        subtotalsBySource: subtotals,
+        label,
+      });
+      return;
+    }
+    setPaymentPicker({ tableId, total: totalAmount, label });
+  };
+
+  // 분리 결제 시작 — 큐 만들고 첫 손님 PaymentMethodPicker 띄움.
+  const handleSplitStart = () => {
+    if (!groupSplitChoice) return;
+    const { tableId, members, subtotalsBySource } = groupSplitChoice;
+    // 소계 0 인 손님은 건너뜀 (시켜놓은 거 없음)
+    const queue = members.filter((m) => (subtotalsBySource[m] || 0) > 0);
+    setGroupSplitChoice(null);
+    if (queue.length === 0) return;
+    const first = queue[0];
+    setSplitPayQueue({ tableId, remaining: queue, subtotals: subtotalsBySource });
+    setPaymentPicker({
+      tableId,
+      sourceTableId: first,
+      total: subtotalsBySource[first] || 0,
+      label:
+        (tables.find((tb) => tb.id === first)?.label || first) + ' 분리 결제',
+      isSplit: true,
+    });
+  };
+
+  // 합산 결제 — 기존 PaymentMethodPicker 흐름으로 진입.
+  const handleSplitCombined = () => {
+    if (!groupSplitChoice) return;
+    const { tableId, label } = groupSplitChoice;
+    const total = Object.values(groupSplitChoice.subtotalsBySource).reduce(
+      (a, b) => a + (b || 0),
+      0
+    );
+    setGroupSplitChoice(null);
+    setPaymentPicker({ tableId, total, label });
+  };
 
   const handleTilePress = (tableObj) => {
     if (splitMode) {
@@ -409,12 +471,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                       style={styles.tilePayBtn}
                       activeOpacity={0.7}
                       onPress={() => {
-                        payClickedAtRef.current = Date.now();
-                        setPaymentPicker({
-                          tableId: readTableId,
-                          total: getOrderTotal(readTableId),
-                          label: displayLabel,
-                        });
+                        startPayment(
+                          readTableId,
+                          getOrderTotal(readTableId),
+                          displayLabel
+                        );
                       }}
                       accessibilityLabel={`${displayLabel} 결제하기`}
                     >
@@ -1118,22 +1179,33 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         <PaymentMethodPicker
           total={paymentPicker.total}
           title={`${paymentPicker.label || '테이블'} 결제`}
-          onClose={() => setPaymentPicker(null)}
+          onClose={() => {
+            // 분리 결제 진행 중에 취소 누르면 큐도 함께 해제
+            setPaymentPicker(null);
+            setSplitPayQueue(null);
+          }}
           onSelect={(code, opts) => {
             const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
-            // 결제 직전 receipt 데이터 캡처 — clearTable 후 order 사라지므로.
-            // 1.0.31: 옵션 라벨 resolve + 매장 정보 + tableLabel
+            const isSplit = paymentPicker.isSplit;
+            const srcId = paymentPicker.sourceTableId;
+            // 결제 직전 receipt 데이터 캡처 — 결제 후 order 변경 / 사라짐.
             const orderSnap = autoPrint ? getOrder(id) : null;
-            const itemsWithLabels = autoPrint
-              ? (orderSnap?.items || []).map((it) => ({
-                  ...it,
-                  optionLabels: (it.options || [])
-                    .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
-                    .filter(Boolean),
-                }))
+            // 1.0.37: 분리 결제면 해당 sourceTable 슬롯만, 합산이면 전체.
+            const itemsForReceipt = autoPrint
+              ? (orderSnap?.items || []).filter((it) =>
+                  isSplit && srcId
+                    ? (it.sourceTableId || id) === srcId
+                    : true
+                )
               : [];
+            const itemsWithLabels = itemsForReceipt.map((it) => ({
+              ...it,
+              optionLabels: (it.options || [])
+                .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+                .filter(Boolean),
+            }));
             const resolvedTbl = autoPrint ? resolveAnyTable(id) : null;
             const receiptData = autoPrint
               ? {
@@ -1151,19 +1223,56 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   deliveryAddress: orderSnap?.deliveryAddress || '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
+                  // 1.0.37: 분리 결제 정보 (영수증 빌더가 표시 가능 — Phase 1.0.38)
+                  isSplit: !!isSplit,
+                  sourceTableId: srcId || null,
                 }
               : null;
+
+            if (isSplit && srcId) {
+              // 1.0.37: 분리 결제 — 해당 손님 슬롯만 정리 + 다음 손님으로
+              setPaymentPicker(null);
+              clearTableBySource(id, srcId, picked);
+              if (receiptData) printReceipt(receiptData).catch(() => {});
+              // 다음 손님 진행
+              const queue = splitPayQueue;
+              const nextRemaining = (queue?.remaining || []).slice(1);
+              if (nextRemaining.length > 0) {
+                const nextSrc = nextRemaining[0];
+                setSplitPayQueue({ ...queue, remaining: nextRemaining });
+                const nextLabel =
+                  tables.find((tb) => tb.id === nextSrc)?.label || nextSrc;
+                setPaymentPicker({
+                  tableId: id,
+                  sourceTableId: nextSrc,
+                  total: queue.subtotals[nextSrc] || 0,
+                  label: nextLabel + ' 분리 결제',
+                  isSplit: true,
+                });
+              } else {
+                setSplitPayQueue(null);
+              }
+              return;
+            }
+
+            // 합산 결제 — 기존 흐름
             setPaymentPicker(null);
-            // 결제하기 = markPaid + clearTable 한 번에. 어제 추가된 흐름 그대로.
             markPaid(id, picked);
             clearTable(id, picked);
-            // 자동 출력 — 비동기, 실패해도 결제 흐름 영향 X.
-            if (receiptData) {
-              printReceipt(receiptData).catch(() => {});
-            }
+            if (receiptData) printReceipt(receiptData).catch(() => {});
           }}
         />
       ) : null}
+
+      {/* 1.0.37: 단체 묶음 테이블 결제 — 합산/분리 선택 모달 */}
+      <GroupPaymentSplitPicker
+        open={!!groupSplitChoice}
+        members={groupSplitChoice?.members || []}
+        subtotalsBySource={groupSplitChoice?.subtotalsBySource || {}}
+        onChooseCombined={handleSplitCombined}
+        onChooseSplit={handleSplitStart}
+        onClose={() => setGroupSplitChoice(null)}
+      />
 
       {/* 배달 지도 오버레이 — web 은 .js (iframe + Leaflet),
           폰은 .native.js (absolute overlay + WebView + Leaflet) 가 자동 선택됨.

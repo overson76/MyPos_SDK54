@@ -15,8 +15,10 @@ import {
   appendHistory,
   buildHistoryEntry,
   computeItemsTotal,
+  computeSubtotalsBySource,
   detectDynamicSlotPrefix,
   findHistoryEntry,
+  groupItemsBySource,
   markHistoryReverted,
   resolveTableForAlert,
 } from './orderHelpers';
@@ -232,6 +234,77 @@ export function OrderProvider({ children }) {
         setGroups((prev) => {
           if (!prev[groupLeaderToDissolve]) return prev;
           const { [groupLeaderToDissolve]: _removed, ...rest } = prev;
+          return rest;
+        });
+      }
+    };
+
+    // 1.0.37: 단체 묶음 후 테이블별 분리 결제 — 해당 sourceTable 의 슬롯만 history
+    // 기록 + 제거. 모든 슬롯 비면 테이블 자체 제거 + group dissolve.
+    // history entry 에 sourceTableId + isPartial 박힘 — 회계 사무소 송부 시 손님별
+    // 분리 매출 식별 가능.
+    const clearTableBySource = (tableId, sourceTableId, paymentMethod = null) => {
+      addBreadcrumb('order.clearTableBySource', {
+        tableId,
+        sourceTableId,
+        paymentMethod,
+      });
+      // 단체에 속해 있으면 리더 tableId 로 통일
+      let targetId = tableId;
+      let groupLeader = null;
+      for (const [lid, members] of Object.entries(groups)) {
+        if (members.includes(tableId) || lid === tableId) {
+          targetId = lid;
+          groupLeader = lid;
+          break;
+        }
+      }
+      const existing = orders[targetId];
+      if (!existing) return;
+      const matchedItems = (existing.items || []).filter(
+        (i) => (i.sourceTableId || targetId) === sourceTableId
+      );
+      if (matchedItems.length > 0) {
+        const total = computeItemsTotal(matchedItems);
+        setRevenue((prev) =>
+          appendHistory(
+            prev,
+            buildHistoryEntry({
+              tableId: targetId,
+              items: matchedItems,
+              options: existing.options,
+              deliveryAddress: existing.deliveryAddress,
+              deliveryTime: existing.deliveryTime,
+              paymentStatus: 'paid',
+              paymentMethod,
+              total,
+              extraFields: { sourceTableId, isPartial: true },
+            })
+          )
+        );
+      }
+      dispatch({
+        type: 'orders/clearTableBySource',
+        tableId: targetId,
+        sourceTableId,
+      });
+      // 모든 슬롯 비었으면 group dissolve (테이블 자체는 reducer 가 제거)
+      const remainingFilter = (i) =>
+        (i.sourceTableId || targetId) !== sourceTableId;
+      const remainingItems = (existing.items || []).filter(remainingFilter);
+      const remainingCart = (existing.cartItems || []).filter(remainingFilter);
+      const remainingConfirmed = (existing.confirmedItems || []).filter(
+        remainingFilter
+      );
+      if (
+        remainingItems.length === 0 &&
+        remainingCart.length === 0 &&
+        remainingConfirmed.length === 0 &&
+        groupLeader
+      ) {
+        setGroups((prev) => {
+          if (!prev[groupLeader]) return prev;
+          const { [groupLeader]: _removed, ...rest } = prev;
           return rest;
         });
       }
@@ -512,6 +585,12 @@ export function OrderProvider({ children }) {
       addItem,
       removeItem,
       clearTable,
+      clearTableBySource,
+      // 1.0.37: 분리 결제 / 영수증 빌더에서 sourceTable 별 소계 표시용.
+      computeSubtotalsBySource: (items, defaultTableId) =>
+        computeSubtotalsBySource(items, defaultTableId),
+      groupItemsBySource: (items, defaultTableId) =>
+        groupItemsBySource(items, defaultTableId),
       markReady,
       undoMarkReady,
       revertHistoryEntry,
@@ -560,7 +639,8 @@ const ORDERS_FALLBACK = {
   bumpAddress: noop, markAddressDeliveredToday: noop, pinAddress: noop,
   deleteAddress: noop, setAutoRemember: noop, setAlias: noop, setPhone: noop,
   addAddress: noop, isSplit: () => false,
-  addItem: noop, removeItem: noop, clearTable: noop,
+  addItem: noop, removeItem: noop, clearTable: noop, clearTableBySource: noop,
+  computeSubtotalsBySource: () => ({}), groupItemsBySource: () => new Map(),
   markReady: noop, undoMarkReady: () => false,
   revertHistoryEntry: () => ({ ok: false, reason: 'notFound' }),
   markPaid: noop, confirmOrder: noop, subscribeConfirmed: () => () => {},

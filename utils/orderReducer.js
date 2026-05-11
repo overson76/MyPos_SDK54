@@ -687,6 +687,32 @@ export function orderReducer(state, action) {
       return next;
     }
 
+    // 1.0.37: 단체 묶음 후 테이블별 분리 결제 — 특정 sourceTable 의 슬롯만 제거.
+    // history 기록은 wrapper 에서 처리 (cross-domain). 여기는 state 만 손댐.
+    // 모든 slots/cart/confirmed 가 비면 테이블 자체 제거.
+    case 'orders/clearTableBySource': {
+      const { tableId, sourceTableId } = action;
+      const existing = state[tableId];
+      if (!existing) return state;
+      const filterFn = (i) =>
+        (i.sourceTableId || tableId) !== sourceTableId;
+      const items = (existing.items || []).filter(filterFn);
+      const cartItems = (existing.cartItems || []).filter(filterFn);
+      const confirmedItems = (existing.confirmedItems || []).filter(filterFn);
+      if (
+        items.length === 0 &&
+        cartItems.length === 0 &&
+        confirmedItems.length === 0
+      ) {
+        const { [tableId]: _, ...rest } = state;
+        return rest;
+      }
+      return {
+        ...state,
+        [tableId]: { ...existing, items, cartItems, confirmedItems },
+      };
+    }
+
     default:
       return state;
   }

@@ -22,6 +22,7 @@ import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import TableSourcePicker from '../components/TableSourcePicker';
+import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
@@ -70,9 +71,16 @@ export default function OrderScreen({
   const [optionsEditOpen, setOptionsEditOpen] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
   const [addressFocused, setAddressFocused] = useState(false);
-  // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total } | null
+  // 결제수단 선택 모달 — { mode: 'prepaid' | 'postpaid', tableId, total,
+  //   sourceTableId?, isSplit? } | null
   // 선불/후불 버튼이 누르면 모달 띄움 → 사용자 결제수단 선택 → markPaid/clearTable 호출.
+  // 1.0.37: 단체 묶음 후불은 GroupPaymentSplitPicker 가 먼저 띄워짐 → 분리 선택 시
+  // 큐 방식으로 손님별 PaymentMethodPicker 가 순차 띄워짐.
   const [paymentPicker, setPaymentPicker] = useState(null);
+  // 1.0.37: 단체 묶음 후불 결제 — 합산/분리 선택 모달
+  const [groupSplitChoice, setGroupSplitChoice] = useState(null);
+  // 분리 결제 진행 큐 — { tableId, remaining: string[], subtotals }
+  const [splitPayQueue, setSplitPayQueue] = useState(null);
   // 퀵에디트 모달 — 메뉴 타일 꾹 누르면 { id, name, price } 세팅
   const [quickEditItem, setQuickEditItem] = useState(null);
   // 1.0.26: 메뉴 인라인 편집 모드 — ON 시 빈 [+] 슬롯 + 메뉴 카드 [⋮] 액션 노출.
@@ -160,6 +168,8 @@ export default function OrderScreen({
     addressBook,
     addAddress,
     getGroupFor,
+    clearTableBySource,
+    computeSubtotalsBySource,
   } = useOrders();
 
   const genSlotId = () =>
@@ -450,6 +460,36 @@ export default function OrderScreen({
   const handleGroupSourceCancel = () => {
     setGroupPickerOpen(false);
     setPendingMenuItem(null);
+  };
+
+  // 1.0.37: 분리 결제 시작 — 큐 만들고 첫 손님 PaymentMethodPicker 띄움.
+  const handleSplitStart = () => {
+    if (!groupSplitChoice) return;
+    const { tableId: tid, members, subtotalsBySource } = groupSplitChoice;
+    const queue = members.filter((m) => (subtotalsBySource[m] || 0) > 0);
+    setGroupSplitChoice(null);
+    if (queue.length === 0) return;
+    const first = queue[0];
+    setSplitPayQueue({ tableId: tid, remaining: queue, subtotals: subtotalsBySource });
+    setPaymentPicker({
+      mode: 'postpaid',
+      tableId: tid,
+      sourceTableId: first,
+      total: subtotalsBySource[first] || 0,
+      isSplit: true,
+    });
+  };
+
+  // 합산 결제 — 기존 후불 흐름으로 진입.
+  const handleSplitCombined = () => {
+    if (!groupSplitChoice) return;
+    const total = Object.values(groupSplitChoice.subtotalsBySource).reduce(
+      (a, b) => a + (b || 0),
+      0
+    );
+    const tid = groupSplitChoice.tableId;
+    setGroupSplitChoice(null);
+    setPaymentPicker({ mode: 'postpaid', tableId: tid, total });
   };
 
   const menuById = Object.fromEntries(menuItems.map((m) => [m.id, m]));
@@ -1920,13 +1960,28 @@ export default function OrderScreen({
                         styles.payBtnDisabled,
                     ]}
                     disabled={!hasCommittedOrder || isPending}
-                    onPress={() =>
+                    onPress={() => {
+                      // 1.0.37: 단체 묶음이면 합산/분리 선택 모달 먼저
+                      const group = getGroupFor?.(tableId);
+                      if (group && group.memberIds && group.memberIds.length > 1) {
+                        const ord = getOrder(tableId);
+                        const subs = computeSubtotalsBySource(
+                          ord?.items || [],
+                          tableId
+                        );
+                        setGroupSplitChoice({
+                          tableId,
+                          members: group.memberIds,
+                          subtotalsBySource: subs,
+                        });
+                        return;
+                      }
                       setPaymentPicker({
                         mode: 'postpaid',
                         tableId,
                         total: getOrderTotal(tableId),
-                      })
-                    }
+                      });
+                    }}
                   >
                     <Text
                       style={[
@@ -1958,24 +2013,40 @@ export default function OrderScreen({
       {paymentPicker ? (
         <PaymentMethodPicker
           total={paymentPicker.total}
-          title={paymentPicker.mode === 'prepaid' ? '선불 결제수단' : '후불 결제수단'}
-          onClose={() => setPaymentPicker(null)}
+          title={
+            paymentPicker.isSplit
+              ? '분리 결제 — 손님별'
+              : paymentPicker.mode === 'prepaid'
+              ? '선불 결제수단'
+              : '후불 결제수단'
+          }
+          onClose={() => {
+            setPaymentPicker(null);
+            setSplitPayQueue(null);
+          }}
           onSelect={(code, opts) => {
             const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
             const mode = paymentPicker.mode;
-            // 결제 직전 receipt 데이터 캡처 — markPaid/clearTable 후 order 가 변경되므로.
+            const isSplit = paymentPicker.isSplit;
+            const srcId = paymentPicker.sourceTableId;
+            // 결제 직전 receipt 데이터 캡처 — 결제 후 order 가 변경되므로.
             const orderSnap = autoPrint ? getOrder(id) : null;
-            // 1.0.31: 옵션 라벨 resolve + 매장 정보(주소/전화 등) + tableLabel
-            const itemsWithLabels = autoPrint
-              ? (orderSnap?.items || []).map((it) => ({
-                  ...it,
-                  optionLabels: (it.options || [])
-                    .map((oid) => options.find((opt) => opt.id === oid)?.label)
-                    .filter(Boolean),
-                }))
+            // 1.0.37: 분리 결제면 해당 sourceTable 슬롯만, 합산이면 전체.
+            const itemsForReceipt = autoPrint
+              ? (orderSnap?.items || []).filter((it) =>
+                  isSplit && srcId
+                    ? (it.sourceTableId || id) === srcId
+                    : true
+                )
               : [];
+            const itemsWithLabels = itemsForReceipt.map((it) => ({
+              ...it,
+              optionLabels: (it.options || [])
+                .map((oid) => options.find((opt) => opt.id === oid)?.label)
+                .filter(Boolean),
+            }));
             const tbl = autoPrint ? table : null;
             const receiptData = autoPrint
               ? {
@@ -1993,8 +2064,36 @@ export default function OrderScreen({
                   deliveryAddress: orderSnap?.deliveryAddress || '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
+                  isSplit: !!isSplit,
+                  sourceTableId: srcId || null,
                 }
               : null;
+
+            if (isSplit && srcId) {
+              // 1.0.37: 분리 결제 — 해당 손님 슬롯만 정리 + 다음 손님으로
+              setPaymentPicker(null);
+              clearTableBySource(id, srcId, picked);
+              if (receiptData) printReceipt(receiptData).catch(() => {});
+              const queue = splitPayQueue;
+              const nextRemaining = (queue?.remaining || []).slice(1);
+              if (nextRemaining.length > 0) {
+                const nextSrc = nextRemaining[0];
+                setSplitPayQueue({ ...queue, remaining: nextRemaining });
+                setPaymentPicker({
+                  mode: 'postpaid',
+                  tableId: id,
+                  sourceTableId: nextSrc,
+                  total: queue.subtotals[nextSrc] || 0,
+                  isSplit: true,
+                });
+              } else {
+                setSplitPayQueue(null);
+                // 모든 손님 결제 끝 — 마지막은 자동으로 테이블 비워졌음 (reducer 가)
+                onBack?.();
+              }
+              return;
+            }
+
             setPaymentPicker(null);
             // 선불 = 결제만 (테이블 유지). 후불 = 결제 + 테이블 비우기 + 뒤로.
             if (mode === 'prepaid') {
@@ -2010,6 +2109,16 @@ export default function OrderScreen({
           }}
         />
       ) : null}
+
+      {/* 1.0.37: 단체 묶음 후불 결제 — 합산/분리 선택 모달 */}
+      <GroupPaymentSplitPicker
+        open={!!groupSplitChoice}
+        members={groupSplitChoice?.members || []}
+        subtotalsBySource={groupSplitChoice?.subtotalsBySource || {}}
+        onChooseCombined={handleSplitCombined}
+        onChooseSplit={handleSplitStart}
+        onClose={() => setGroupSplitChoice(null)}
+      />
 
       {/* 메뉴 퀵에디트 모달 — 타일 꾹 누르면 이름/가격 바로 수정 */}
       {quickEditItem ? (
