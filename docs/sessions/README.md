@@ -21,6 +21,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-08 | [2026-05-08-영수증프린터-USB-매장맥북빌드.md](2026-05-08-영수증프린터-USB-매장맥북빌드.md) | SEWOO SLK-TS400 USB 통합 — 드라이버 4.70(180dpi) 설치 + 환경변수 setx + node-thermal-printer 의존성 등록 + 매장 맥북 macOS→Windows 크로스빌드(wine 자동) + GitHub Releases v1.0.16 publish. 카운터 PC 의 1.0.16 적용은 install-on-quit 미트리거 + NSIS "cannot be closed" 반복 → 다음 세션(집 윈도우 PC) 이어감 | ff60843, 41d4f3e |
 | 2026-05-09 | [2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md](2026-05-09-프린터-driver-fix-electron-printer호환X-winspool우회.md) | "No driver set!" 진단 → 1.0.17 fix(electron-printer 추가) → 매장 PC 검증 시 호환 X (electron-v0.36 prebuild 만 포함) → 다른 fork 모두 native compile 막힘(VS Build Tools 부재) → **1.0.18: PowerShell + Add-Type 인라인 winspool API 우회**로 native 모듈 의존성 통째 제거. 매장 PC SEWOO USB 출력 정상 ✅ | fd842df, f6c89b1 |
 | 2026-05-09 | [2026-05-09-올레의-대항해-1.0.20-to-1.0.28.md](2026-05-09-올레의-대항해-1.0.20-to-1.0.28.md) | 1.0.20→1.0.28 9단계 점프. "🚀 지금 적용" / 배달 자동 출력 / 알림 spam fix / 단체 dissolve / 설정 탭 / PIN 박스 / 5탭 컬러 / 분홍 반짝이 / 포장 픽업완료 / 폰 PanResponder / EUC-KR / quitAndInstall 8초 timeout / 메뉴 인라인 편집 (Phase A~D) → 1.0.26 빈 화면 사고 후 1.0.27 보수적 재작성 → 결국 자동업데이트 메커니즘 단순화 (1.0.28: 분홍 배너 제거, GitHub 직접 다운로드만). wrangler deploy 누락이 모든 fix 가 매장 PC 에 안 닿게 한 결정타 진단. | 3850368, ddb450e, 4e1e498, 202ee94, 17cc39e, bcd9542, 8c66430, 5326208, a7fa350 |
+| 2026-05-09 | [2026-05-09-2부-1.0.29-to-1.0.32-폰OTA-영수증통일.md](2026-05-09-2부-1.0.29-to-1.0.32-폰OTA-영수증통일.md) | 폰 OTA runtimeVersion 호환 fix (1부에서 sync 한 app.json 1.0.28 → 1.0.2 복구). 폰 PIN 박스 반응형 + 메뉴 드래그 crash 차단 (useRef + try/catch + Sentry). 자동 출력 신규 주문 메뉴 빠짐 fix (resolvePrintKinds isFresh 자동 added). 영수증 A형 디자인 (메모/옵션/가격/테이블명/총가격/배달지/매장정보). 모든 출력 영수증 빌더 통일 (정책 분리 X) — 4가지 시점(주문 확정 자동 / 주방 🖨️ / 결제 자동 / 재출력) 모두 같은 A형. | a2ee6b1, 93c41eb, 96eae3d, 5c6a24a, 5f4c39b |
 
 ---
 
@@ -48,6 +49,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 | 2026-05-07 | [undo-reverted-flag-pattern](../learning/2026-05-07-undo-reverted-flag-pattern.md) | append-only history 의 "되돌리기" — reverted 플래그 패턴 (delete vs flag, 모든 집계의 isCounted 가드, idempotent + occupied 가드) |
 | 2026-05-09 | [PowerShell-winspool-우회-electron-native회피](../learning/2026-05-09-PowerShell-winspool-우회-electron-native회피.md) | Electron 의 native module 의존성을 PowerShell + Add-Type 인라인 C# 으로 우회. winspool.Drv API 직접 호출 패턴 + 함정 5종 + 적용 가능 분야 |
 | 2026-05-09 | [electron-updater-한계-그리고-단순화](../learning/2026-05-09-electron-updater-한계-그리고-단순화.md) | JS 측(라이브 URL) vs native(.exe) 이원화 빌드 + electron-updater quitAndInstall silent 실패의 한계 + 1.0.28 GitHub 직접 다운로드 단순화 결정 + version sync (package.json + app.json) + 향후 재도입 옵션 4종 |
+| 2026-05-09 | [2부-OTA-runtimeVersion-호환과-통일-빌더-패턴](../learning/2026-05-09-2부-OTA-runtimeVersion-호환과-통일-빌더-패턴.md) | expo-updates 의 OTA runtimeVersion 정책 (app.json version 매번 bump 시 호환 깨짐) + 통일 빌더 패턴 (4가지 출력 시점을 한 빌더 buildReceiptText 로) + Sentry breadcrumb 6단계 silent 실패 진단 + RN native onLayout 의 e.target 한계 (useRef 패턴 필수) |
 
 ---
 
