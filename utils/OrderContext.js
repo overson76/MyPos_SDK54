@@ -382,12 +382,15 @@ export function OrderProvider({ children }) {
     const confirmOrder = (tableId) => {
       // 1.0.20: 자동 출력 hook 을 위해 호출 시점에 메타/diff 캡처. dispatch 후엔
       // confirmedItems 가 새 값으로 바뀌어 diff 가 모두 unchanged 가 되므로 의미 없음.
+      // 1.0.32: 모든 출력 영수증 빌더 통일 — items / total 도 emit 에 포함.
       const orderSnap = orders[tableId];
       const wasConfirmed = (orderSnap?.confirmedItems?.length ?? 0) > 0;
       const tblForListener = resolveTableForAlert(tableId);
       const diffRows = orderSnap
         ? computeDiffRows(orderSnap.items, orderSnap.confirmedItems || [])
         : [];
+      const itemsSnap = orderSnap?.items || [];
+      const totalSnap = computeItemsTotal(itemsSnap);
 
       addBreadcrumb('order.confirm', {
         tableId,
@@ -405,7 +408,7 @@ export function OrderProvider({ children }) {
       dispatch({ type: 'orders/confirmOrder', tableId });
 
       // 자동 출력 listeners 호출 — 다음 tick (영업 흐름 안 막게) + 캡처한 데이터 전달.
-      // listener 가 throw 해도 다른 listener / 영업 흐름 보호.
+      // 1.0.32: 영수증 빌더 통일 — items / total 도 함께 emit.
       if (confirmListenersRef.current.size > 0) {
         setTimeout(() => {
           for (const cb of confirmListenersRef.current) {
@@ -414,6 +417,8 @@ export function OrderProvider({ children }) {
                 tableId,
                 isFresh: !wasConfirmed,
                 rows: diffRows,
+                items: itemsSnap,
+                total: totalSnap,
                 isDelivery: tblForListener?.type === 'delivery',
                 deliveryAddress: orderSnap?.deliveryAddress || '',
                 tableLabel: tblForListener?.label || tableId,

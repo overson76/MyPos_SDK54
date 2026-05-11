@@ -12,6 +12,7 @@ import { useResponsive } from '../utils/useResponsive';
 import { tables, tableTypeColors, resolveAnyTable } from '../utils/tableData';
 import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
+import { useStore } from '../utils/StoreContext';
 import {
   playReadySound,
   speakFullReady,
@@ -20,9 +21,8 @@ import {
 } from '../utils/notify';
 import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
-import { buildOrderSlipText } from '../utils/escposBuilder';
+import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
-import { loadPolicy, resolvePrintKinds } from '../utils/printPolicy';
 
 const typeLabels = {
   regular: '매장',
@@ -42,40 +42,37 @@ export default function KitchenScreen() {
   const { orders, markReady, cycleItemCookState, cycleItemCookStatePortion } =
     useOrders();
   const { items: menuItems, optionsList: OPTIONS_CATALOG } = useMenu();
+  const { storeInfo } = useStore();
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
   const [highlightMenuId, setHighlightMenuId] = useState(null);
   const printerAvailable = isPrinterAvailable();
 
-  // 🖨️ 버튼 — 모달 없이 글로벌 정책(관리자 → 시스템 → 주문지 출력 정책) 대로 즉시 출력.
-  // 정책이 비어있으면 출력 안 함(가드). 출력 실패는 영업 흐름에 영향 X (silent catch).
+  // 🖨️ 버튼 — 1.0.32 부터 모든 출력 영수증 빌더(buildReceiptText) 통일.
+  // 사장님 의도: "모든 곳에서 같은 출력물" — 메뉴 / 수량 / 가격 / 옵션 / 메모 / 합계 모두.
   const handlePrintSlip = async (o) => {
     if (!o) return;
-    const policy = await loadPolicy();
-    const isDelivery = o.table?.type === 'delivery';
-    const isFresh = !(o.confirmedItems?.length > 0);
-    const kindsSet = resolvePrintKinds(policy, { isDelivery, isFresh });
-    const kinds = [...kindsSet];
-    if (kinds.length === 0) return;
-
-    const rows = computeDiffRows(o.items, o.confirmedItems || []);
-    const resolvedRows = rows.map((r) => ({
-      ...r,
-      item: {
-        ...r.item,
-        optionLabels: (r.item.options || [])
-          .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
-          .filter(Boolean),
-      },
+    const itemsWithLabels = (o.items || []).map((it) => ({
+      ...it,
+      optionLabels: (it.options || [])
+        .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+        .filter(Boolean),
     }));
-    const slipText = buildOrderSlipText({
+    const receiptText = buildReceiptText({
+      storeName: storeInfo?.name || 'MyPos',
+      storePhone: storeInfo?.phone || '',
+      storeAddress: storeInfo?.address || '',
+      businessNumber: storeInfo?.businessNumber || '',
+      receiptFooter: storeInfo?.receiptFooter || '',
+      tableId: o.tableId,
       tableLabel: o.table?.label || o.tableId,
-      isDelivery,
-      deliveryAddress: o.deliveryAddress,
-      rows: resolvedRows,
-      kinds,
-      slippedAt: Date.now(),
+      items: itemsWithLabels,
+      total: computeItemsTotal(o.items),
+      paymentMethod: o.paymentMethod || null,
+      paymentStatus: o.paymentStatus || 'pending',
+      deliveryAddress: o.table?.type === 'delivery' ? o.deliveryAddress : '',
+      printedAt: Date.now(),
     });
-    printReceipt({ rawText: slipText }).catch(() => {});
+    printReceipt({ rawText: receiptText }).catch(() => {});
   };
 
   // 주문 경과 분수 표시 — 15초마다 리렌더

@@ -21,32 +21,40 @@
 import { useEffect } from 'react';
 import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
-import { loadAutoOn, loadPolicy, resolvePrintKinds } from '../utils/printPolicy';
-import { buildOrderSlipText } from '../utils/escposBuilder';
+import { useStore } from '../utils/StoreContext';
+import { loadAutoOn } from '../utils/printPolicy';
+import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 import { addBreadcrumb, reportError } from '../utils/sentry';
 
 export default function AutoPrintBridge() {
   const { subscribeConfirmed } = useOrders();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
+  const { storeInfo } = useStore();
 
   useEffect(() => {
     if (typeof subscribeConfirmed !== 'function') return undefined;
 
     const unsubscribe = subscribeConfirmed(async (info) => {
-      // 1.0.30: 흐름 단계별 breadcrumb — 사장님 보고 "옵션 안 먹음" 진단용. 다음 출력 시
-      // Sentry 에 어디서 멈추는지 stack 으로 확인 가능.
+      // 1.0.32: 모든 출력 영수증 빌더(buildReceiptText) 통일 — 사장님 의도 "모든 곳에서
+      // 같은 출력물". 카테고리/정책 분리 없이 메뉴 / 수량 / 가격 / 옵션 / 메모 / 합계 모두.
       try {
-        const { tableId, isFresh, rows, isDelivery, deliveryAddress, tableLabel } = info;
+        const {
+          tableId,
+          items,
+          total,
+          isDelivery,
+          deliveryAddress,
+          tableLabel,
+        } = info;
         addBreadcrumb('autoprint.received', {
           tableId,
-          isFresh,
           isDelivery,
-          rowsCount: Array.isArray(rows) ? rows.length : 0,
+          itemsCount: Array.isArray(items) ? items.length : 0,
+          total,
           hasAddress: !!deliveryAddress,
         });
 
-        // 폰/iPad 등 비-Electron 환경은 즉시 skip.
         if (!isPrinterAvailable()) {
           addBreadcrumb('autoprint.skip.no-printer', { tableId });
           return;
@@ -58,50 +66,38 @@ export default function AutoPrintBridge() {
           return;
         }
 
-        const policy = await loadPolicy();
-        addBreadcrumb('autoprint.policy', {
-          kinds: policy?.kinds,
-          isFresh,
-          isDelivery,
-        });
-
-        const kindsSet = resolvePrintKinds(policy, { isDelivery, isFresh });
-        if (kindsSet.size === 0) {
-          addBreadcrumb('autoprint.skip.empty-kinds', { tableId, policy: policy?.kinds });
-          return;
-        }
-        const kinds = [...kindsSet];
-
         // 옵션 라벨 resolve
-        const resolvedRows = (rows || []).map((r) => ({
-          ...r,
-          item: {
-            ...r.item,
-            optionLabels: (r.item?.options || [])
-              .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
-              .filter(Boolean),
-          },
+        const itemsWithLabels = (items || []).map((it) => ({
+          ...it,
+          optionLabels: (it.options || [])
+            .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+            .filter(Boolean),
         }));
+
+        const receiptText = buildReceiptText({
+          storeName: storeInfo?.name || 'MyPos',
+          storePhone: storeInfo?.phone || '',
+          storeAddress: storeInfo?.address || '',
+          businessNumber: storeInfo?.businessNumber || '',
+          receiptFooter: storeInfo?.receiptFooter || '',
+          tableId,
+          tableLabel,
+          items: itemsWithLabels,
+          total,
+          // 주문 확정 시점 = 결제 전. paymentMethod 없음 / paymentStatus = 'pending'.
+          paymentMethod: null,
+          paymentStatus: 'pending',
+          deliveryAddress: isDelivery ? deliveryAddress : '',
+          printedAt: Date.now(),
+        });
 
         addBreadcrumb('autoprint.building', {
           tableId,
-          resolvedRowsCount: resolvedRows.length,
-          kinds,
+          itemsCount: itemsWithLabels.length,
+          receiptLen: receiptText?.length || 0,
         });
 
-        const slipText = buildOrderSlipText({
-          tableLabel,
-          isDelivery,
-          deliveryAddress,
-          rows: resolvedRows,
-          kinds,
-          slippedAt: Date.now(),
-        });
-
-        addBreadcrumb('autoprint.slipText.length', { len: slipText?.length || 0 });
-
-        // 비동기 출력 — 영업 흐름 안 막음. 실패는 silent (단 breadcrumb 으로 캡처).
-        const result = await printReceipt({ rawText: slipText });
+        const result = await printReceipt({ rawText: receiptText });
         addBreadcrumb('autoprint.printResult', {
           ok: result?.ok,
           reason: result?.reason,
