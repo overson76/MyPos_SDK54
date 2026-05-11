@@ -1223,9 +1223,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   deliveryAddress: orderSnap?.deliveryAddress || '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
-                  // 1.0.37: 분리 결제 정보 (영수증 빌더가 표시 가능 — Phase 1.0.38)
+                  // 1.0.38: 분리 결제 — 영수증 빌더가 "👤 손님" 줄 추가.
                   isSplit: !!isSplit,
                   sourceTableId: srcId || null,
+                  sourceTableLabel: srcId
+                    ? tables.find((tb) => tb.id === srcId)?.label || srcId
+                    : null,
                 }
               : null;
 

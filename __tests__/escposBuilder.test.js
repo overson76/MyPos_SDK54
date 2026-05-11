@@ -98,6 +98,32 @@ describe('buildReceiptText', () => {
     expect(text).toContain('서울시 종로구');
   });
 
+  test('1.0.38 — 분리 결제 영수증은 "👤 분리 결제 손님: <라벨>" 라인 포함', () => {
+    const text = buildReceiptText({
+      ...sample,
+      isSplit: true,
+      sourceTableId: 't02',
+      sourceTableLabel: '02',
+    });
+    expect(text).toContain('분리 결제 손님');
+    expect(text).toContain('02');
+  });
+
+  test('1.0.38 — sourceTableLabel 없으면 sourceTableId fallback', () => {
+    const text = buildReceiptText({
+      ...sample,
+      isSplit: true,
+      sourceTableId: 't03',
+    });
+    expect(text).toContain('분리 결제 손님');
+    expect(text).toContain('t03');
+  });
+
+  test('1.0.38 — isSplit 이 false 면 분리 결제 라인 없음', () => {
+    const text = buildReceiptText({ ...sample, isSplit: false });
+    expect(text).not.toContain('분리 결제 손님');
+  });
+
   test('대 사이즈 — 보통/대 분리 한 줄씩', () => {
     const text = buildReceiptText({
       ...sample,

@@ -81,10 +81,17 @@ function paymentMethodLabel(code) {
 // 영수증 본문 텍스트 빌드 — 1.0.33 간결형.
 // 사장님 의도: 주문지 / 테이블명 / 배달지 / 주문메뉴 + 수량 + 가격 / 합계만. 매장 정보 / 부가세 분리 / 결제수단 / 푸터 모두 제거.
 //
+// 1.0.38: 분리 결제 영수증은 헤더에 "(분리 결제 — 손님: <라벨>)" 한 줄 추가.
+// 단체로 묶인 테이블에서 한 손님만 결제 / 그 손님이 영수증을 받을 때 어느 자리
+// 손님인지 명시. tableLabel 은 leader 라벨 그대로 (영수증 합산 매장 통계).
+//
 // receipt: {
 //   tableId, tableLabel,
 //   items: [{ name, qty, price, largeQty, sizeUpcharge, optionLabels, memo }],
-//   total, deliveryAddress, printedAt
+//   total, deliveryAddress, printedAt,
+//   isSplit?: boolean,           // 분리 결제 영수증 여부
+//   sourceTableId?: string,      // 어느 손님 테이블 ID
+//   sourceTableLabel?: string    // 어느 손님 테이블 라벨 (호출부에서 미리 해석)
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
@@ -100,6 +107,11 @@ export function buildReceiptText(receipt) {
   const tableLabel = r.tableLabel || r.tableId;
   if (tableLabel) {
     lines.push(`📋 테이블: ${tableLabel}`);
+  }
+  // 1.0.38: 분리 결제 — 손님 자리 명시
+  if (r.isSplit && (r.sourceTableLabel || r.sourceTableId)) {
+    const src = r.sourceTableLabel || r.sourceTableId;
+    lines.push(`👤 분리 결제 손님: ${src}`);
   }
   if (r.deliveryAddress) {
     lines.push(`🛵 ${r.deliveryAddress}`);

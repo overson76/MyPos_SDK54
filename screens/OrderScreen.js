@@ -27,6 +27,7 @@ import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
+import { resolveAnyTable } from '../utils/tableData';
 import {
   playChangeSound,
   playOrderSound,
@@ -2066,6 +2067,9 @@ export default function OrderScreen({
                   printedAt: Date.now(),
                   isSplit: !!isSplit,
                   sourceTableId: srcId || null,
+                  sourceTableLabel: srcId
+                    ? resolveAnyTable(srcId)?.label || srcId
+                    : null,
                 }
               : null;
 
