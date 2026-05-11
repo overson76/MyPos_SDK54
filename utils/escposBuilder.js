@@ -205,11 +205,14 @@ export function buildOrderSlipText(slip) {
   if (toPrint.length === 0 && removed.length === 0) {
     lines.push(centerText('(출력 항목 없음)'));
   } else {
+    // 1.0.30: 모든 row 가 added 면 (= 신규 주문) [추가] 라벨 생략 — 깔끔.
+    // 변경/추가 섞인 경우만 라벨로 구분.
+    const isAllAdded = !showAll && toPrint.length > 0 && toPrint.every((r) => r.kind === 'added');
     for (const r of toPrint) {
       const item = r.item;
-      const kindLabel = !showAll
-        ? (r.kind === 'added' ? '[추가] ' : '[변경] ')
-        : '';
+      const kindLabel = (showAll || isAllAdded)
+        ? ''
+        : (r.kind === 'added' ? '[추가] ' : '[변경] ');
       const lq = item.largeQty || 0;
       const nq = item.qty - lq;
 

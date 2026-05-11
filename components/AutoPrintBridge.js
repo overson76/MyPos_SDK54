@@ -24,6 +24,7 @@ import { useMenu } from '../utils/MenuContext';
 import { loadAutoOn, loadPolicy, resolvePrintKinds } from '../utils/printPolicy';
 import { buildOrderSlipText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+import { addBreadcrumb, reportError } from '../utils/sentry';
 
 export default function AutoPrintBridge() {
   const { subscribeConfirmed } = useOrders();
@@ -33,21 +34,45 @@ export default function AutoPrintBridge() {
     if (typeof subscribeConfirmed !== 'function') return undefined;
 
     const unsubscribe = subscribeConfirmed(async (info) => {
+      // 1.0.30: 흐름 단계별 breadcrumb — 사장님 보고 "옵션 안 먹음" 진단용. 다음 출력 시
+      // Sentry 에 어디서 멈추는지 stack 으로 확인 가능.
       try {
-        // 폰/iPad 등 비-Electron 환경은 즉시 skip — printReceipt 도 자체 가드 있지만 비용 절약.
-        if (!isPrinterAvailable()) return;
+        const { tableId, isFresh, rows, isDelivery, deliveryAddress, tableLabel } = info;
+        addBreadcrumb('autoprint.received', {
+          tableId,
+          isFresh,
+          isDelivery,
+          rowsCount: Array.isArray(rows) ? rows.length : 0,
+          hasAddress: !!deliveryAddress,
+        });
+
+        // 폰/iPad 등 비-Electron 환경은 즉시 skip.
+        if (!isPrinterAvailable()) {
+          addBreadcrumb('autoprint.skip.no-printer', { tableId });
+          return;
+        }
 
         const autoOn = await loadAutoOn();
-        if (!autoOn) return;
+        if (!autoOn) {
+          addBreadcrumb('autoprint.skip.toggle-off', { tableId });
+          return;
+        }
 
         const policy = await loadPolicy();
-        const { tableId, isFresh, rows, isDelivery, deliveryAddress, tableLabel } = info;
+        addBreadcrumb('autoprint.policy', {
+          kinds: policy?.kinds,
+          isFresh,
+          isDelivery,
+        });
 
         const kindsSet = resolvePrintKinds(policy, { isDelivery, isFresh });
-        if (kindsSet.size === 0) return;
+        if (kindsSet.size === 0) {
+          addBreadcrumb('autoprint.skip.empty-kinds', { tableId, policy: policy?.kinds });
+          return;
+        }
         const kinds = [...kindsSet];
 
-        // 옵션 라벨 resolve — KitchenScreen.handlePrintSlip 와 동일 패턴.
+        // 옵션 라벨 resolve
         const resolvedRows = (rows || []).map((r) => ({
           ...r,
           item: {
@@ -58,6 +83,12 @@ export default function AutoPrintBridge() {
           },
         }));
 
+        addBreadcrumb('autoprint.building', {
+          tableId,
+          resolvedRowsCount: resolvedRows.length,
+          kinds,
+        });
+
         const slipText = buildOrderSlipText({
           tableLabel,
           isDelivery,
@@ -67,10 +98,18 @@ export default function AutoPrintBridge() {
           slippedAt: Date.now(),
         });
 
-        // 비동기 출력 — 영업 흐름 안 막음. 실패는 silent.
-        printReceipt({ rawText: slipText }).catch(() => {});
-      } catch {
-        // 자동 출력 실패는 영업 흐름에 영향 X
+        addBreadcrumb('autoprint.slipText.length', { len: slipText?.length || 0 });
+
+        // 비동기 출력 — 영업 흐름 안 막음. 실패는 silent (단 breadcrumb 으로 캡처).
+        const result = await printReceipt({ rawText: slipText });
+        addBreadcrumb('autoprint.printResult', {
+          ok: result?.ok,
+          reason: result?.reason,
+          error: result?.error,
+          mode: result?.mode,
+        });
+      } catch (err) {
+        try { reportError(err, { ctx: 'autoprint.bridge' }); } catch {}
       }
     });
 

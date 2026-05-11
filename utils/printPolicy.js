@@ -62,19 +62,30 @@ export async function savePolicy({ kinds }) {
 }
 
 // 정책에 따라 출력할 항목 종류를 결정.
-// 호출부 (출력 디스패처 / KitchenScreen 의 🖨️ 핸들러) 가 사용.
 //   policy:    { kinds: [...] }
 //   isDelivery: 배달 주문 여부 (배달 주소 섹션 포함 여부 결정)
-//   isFresh:    신규 주문 여부 (true 면 'all' 자동 부여)
+//   isFresh:    신규 주문 여부
 // 반환: 실제 출력에 쓸 kinds Set.
+//
+// 1.0.30 fix: 사장님 보고 — "배달 주문 자동 출력 옵션이 안 먹고 메뉴/배달주소 다 빠진
+// 헤더만 출력". 원인: 사장님 정책에 'delivery' 만 체크하고 'added' 미체크 → kindSet 에
+// 'added' 없음 → 신규 주문의 added row 모두 필터링 제거 → toPrint 비어 있음.
+//
+// 해결: 신규 주문(isFresh) 일 때 정책 무관하게 'added' 자동 추가. 신규 주문은 의미상
+// 모든 항목이 새 추가물이므로 메뉴 표시가 자연스러움. 또한 정책 전체가 비어있으면
+// 'added' + 'changed' 기본 추가 (안 보이는 사고 방지).
 export function resolvePrintKinds(policy, { isDelivery = false, isFresh = false } = {}) {
   const kinds = new Set(policy?.kinds || []);
-  // 신규 주문이고 정책에 'added' 만 있어도 사실상 전체 출력이 자연스러움.
-  // 단 사용자가 "all" 명시했거나 아무 정책 없으면 그대로 둠.
-  if (isFresh && !kinds.has('all') && (kinds.has('added') || kinds.has('changed'))) {
-    // 신규 주문이면 added/changed 자체가 = 전체. 따로 표기만.
-    // (디스패처가 added/changed 를 보고 신규 주문 전체를 출력하면 됨.)
+
+  // 신규 주문 = 무조건 added 표시 (메뉴 항목 빠짐 방지)
+  if (isFresh) kinds.add('added');
+
+  // 정책이 완전히 비어있으면 안전망 — added + changed 자동 추가
+  if (kinds.size === 0) {
+    kinds.add('added');
+    kinds.add('changed');
   }
+
   if (!isDelivery) kinds.delete('delivery');
   return kinds;
 }
