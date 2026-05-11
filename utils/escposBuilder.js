@@ -78,55 +78,101 @@ function paymentMethodLabel(code) {
   return map[code] || '미분류';
 }
 
-// 영수증 본문 텍스트 빌드. 출력 라이브러리에 그대로 넘기거나, 또는 buildEscposBytes 가
-// 명령 바이트와 합쳐 raw 출력.
+// 영수증 본문 텍스트 빌드 — 1.0.31 A형 디자인.
+// 사장님 의도: 메모 / 옵션 / 가격 / 테이블명 / 총가격 / 배달지 / 주문테이블 포함.
 //
 // receipt: {
-//   storeName, tableId, items: [{ name, qty, price, largeQty, sizeUpcharge }],
-//   total, paymentMethod, paymentStatus, deliveryAddress, printedAt
+//   storeName, storePhone, storeAddress, businessNumber, receiptFooter,  // 매장 정보 (모두 optional)
+//   tableId, tableLabel,                                                   // 주문 테이블
+//   items: [{ name, qty, price, largeQty, sizeUpcharge, optionLabels, memo }], // 옵션 라벨은 호출부 resolve
+//   total, paymentMethod, paymentStatus,
+//   deliveryAddress, printedAt
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
   const r = receipt || {};
 
+  // ───── 헤더: 매장 정보 ─────
   lines.push(divider('='));
   if (r.storeName) lines.push(centerText(r.storeName));
+  if (r.storePhone) lines.push(centerText(`☎ ${r.storePhone}`));
+  if (r.storeAddress) lines.push(centerText(`📍 ${r.storeAddress}`));
+  if (r.businessNumber) lines.push(centerText(`사업자: ${r.businessNumber}`));
   lines.push(centerText(formatDateTime(r.printedAt || Date.now())));
-  if (r.tableId) lines.push(centerText(`테이블: ${r.tableId}`));
-  lines.push(divider('-'));
 
+  // ───── 주문 테이블 + 배달지 (선택) ─────
+  lines.push(divider('-'));
+  const tableLabel = r.tableLabel || r.tableId;
+  if (tableLabel) {
+    lines.push(`📋 주문 테이블: ${tableLabel}`);
+  }
+  if (r.deliveryAddress) {
+    // 배달지가 길면 자동 줄바꿈 — 헤더 1줄 + 주소 wrap
+    lines.push(`🛵 ${r.deliveryAddress}`);
+  }
+
+  // ───── 메뉴 라인 — 옵션 / 메모 / 큰사이즈 분리 ─────
+  lines.push(divider('-'));
   for (const item of r.items || []) {
     const name = item.name || '?';
     const qty = item.qty || 0;
-    const lineTotal = (item.price || 0) * qty + (item.sizeUpcharge || 0) * (item.largeQty || 0);
-    lines.push(pad2col(`${name} x${qty}`, formatWon(lineTotal)));
-    if ((item.largeQty || 0) > 0) {
-      lines.push(`  └ 대 ${item.largeQty}개`);
+    const lq = item.largeQty || 0;
+    const nq = qty - lq;
+    const price = Number(item.price) || 0;
+    const sizeUp = Number(item.sizeUpcharge) || 0;
+
+    // 큰사이즈 + 보통사이즈 분리 표시 (buildOrderSlipText 와 일관)
+    if (lq > 0 && nq > 0) {
+      // 둘 다 — 분리
+      lines.push(pad2col(`${name} 보통 x${nq}`, formatWon(price * nq)));
+      lines.push(pad2col(`${name} 대 x${lq}`, formatWon((price + sizeUp) * lq)));
+    } else if (lq > 0) {
+      // 대만
+      lines.push(pad2col(`${name} 대 x${lq}`, formatWon((price + sizeUp) * lq)));
+    } else {
+      // 보통만 (기본)
+      lines.push(pad2col(`${name} x${qty}`, formatWon(price * qty)));
+    }
+
+    // 옵션 — 들여쓰기로
+    const opts = item.optionLabels || [];
+    if (opts.length > 0) {
+      lines.push('  ▸ ' + opts.join(' · '));
+    }
+    // 메모 — 들여쓰기로
+    if (item.memo && String(item.memo).trim()) {
+      lines.push('  📝 ' + String(item.memo).trim());
     }
   }
 
+  // ───── 합계 ─────
   lines.push(divider('-'));
-
-  // 부가세 분리 (10% 부가세 포함 가정 — utils/payment.js 와 동일 정책)
   const total = Number(r.total) || 0;
   const supply = Math.round(total / 1.1);
   const vat = total - supply;
-
   lines.push(pad2col('공급가액', formatWon(supply)));
   lines.push(pad2col('부가세 (10%)', formatWon(vat)));
   lines.push(pad2col('합계', formatWon(total)));
+
+  // ───── 결제 ─────
   lines.push('');
   lines.push(pad2col('결제수단', paymentMethodLabel(r.paymentMethod)));
   lines.push(pad2col('결제상태', r.paymentStatus === 'paid' ? '결제완료' : '미결제'));
 
-  if (r.deliveryAddress) {
-    lines.push('');
-    lines.push('배달 주소');
-    lines.push(r.deliveryAddress);
-  }
-
+  // ───── 푸터 ─────
   lines.push(divider('='));
   lines.push(centerText('감사합니다'));
+  if (r.receiptFooter && String(r.receiptFooter).trim()) {
+    // 매장이 설정한 추가 문구 — 여러 줄 가능
+    for (const ln of String(r.receiptFooter).split('\n')) {
+      const trimmed = ln.trim();
+      if (trimmed) lines.push(centerText(trimmed));
+    }
+  } else {
+    // default
+    lines.push(centerText('교환·환불 7일 이내'));
+  }
+  lines.push(divider('='));
 
   return lines.join('\n');
 }

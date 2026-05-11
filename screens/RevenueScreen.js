@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
+import { useMenu } from '../utils/MenuContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
+import { resolveAnyTable } from '../utils/tableData';
 import {
   PAYMENT_METHOD_LIST,
   PAYMENT_METHODS,
@@ -40,6 +42,7 @@ export default function RevenueScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { revenue } = useOrders();
+  const { optionsList: OPTIONS_CATALOG } = useMenu();
   const { storeInfo } = useStore();
   const history = revenue?.history || [];
 
@@ -50,14 +53,27 @@ export default function RevenueScreen() {
   const [printingId, setPrintingId] = useState(null);
 
   // history row 의 "🖨️ 재출력" 버튼 핸들러.
+  // 1.0.31: 옵션 라벨 resolve + tableLabel + 매장 정보 추가
   const handleReprint = async (entry) => {
     if (!printerAvailable || printingId) return;
     setPrintingId(entry.id);
     try {
+      const itemsWithLabels = (entry.items || []).map((it) => ({
+        ...it,
+        optionLabels: (it.options || [])
+          .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+          .filter(Boolean),
+      }));
+      const tbl = resolveAnyTable(entry.tableId);
       const result = await printReceipt({
         storeName: storeInfo?.name || 'MyPos',
+        storePhone: storeInfo?.phone || '',
+        storeAddress: storeInfo?.address || '',
+        businessNumber: storeInfo?.businessNumber || '',
+        receiptFooter: storeInfo?.receiptFooter || '',
         tableId: entry.tableId,
-        items: entry.items,
+        tableLabel: tbl?.label || entry.tableId,
+        items: itemsWithLabels,
         total: entry.total,
         paymentMethod: entry.paymentMethod,
         paymentStatus: entry.paymentStatus,

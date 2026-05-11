@@ -1917,16 +1917,30 @@ export default function OrderScreen({
             const mode = paymentPicker.mode;
             // 결제 직전 receipt 데이터 캡처 — markPaid/clearTable 후 order 가 변경되므로.
             const orderSnap = autoPrint ? getOrder(id) : null;
+            // 1.0.31: 옵션 라벨 resolve + 매장 정보(주소/전화 등) + tableLabel
+            const itemsWithLabels = autoPrint
+              ? (orderSnap?.items || []).map((it) => ({
+                  ...it,
+                  optionLabels: (it.options || [])
+                    .map((oid) => options.find((opt) => opt.id === oid)?.label)
+                    .filter(Boolean),
+                }))
+              : [];
+            const tbl = autoPrint ? table : null;
             const receiptData = autoPrint
               ? {
                   storeName: storeInfo?.name || 'MyPos',
+                  storePhone: storeInfo?.phone || '',
+                  storeAddress: storeInfo?.address || '',
+                  businessNumber: storeInfo?.businessNumber || '',
+                  receiptFooter: storeInfo?.receiptFooter || '',
                   tableId: id,
-                  items: orderSnap?.items || [],
+                  tableLabel: tbl?.label || id,
+                  items: itemsWithLabels,
                   total: paymentPicker.total,
                   paymentMethod: picked,
                   paymentStatus: 'paid',
                   deliveryAddress: orderSnap?.deliveryAddress || '',
-                  // KIS 단말기 승인 정보 — 영수증 빌더가 있을 때 카드사/승인번호 표시.
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
                 }

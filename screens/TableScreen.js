@@ -9,6 +9,7 @@ import {
 import makeStyles from './TableScreen.styles';
 import {
   DYNAMIC_SLOT_PREFIX,
+  resolveAnyTable,
   tableActions,
   tables,
   tableSubTabs,
@@ -1123,17 +1124,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
             // 결제 직전 receipt 데이터 캡처 — clearTable 후 order 사라지므로.
+            // 1.0.31: 옵션 라벨 resolve + 매장 정보 + tableLabel
             const orderSnap = autoPrint ? getOrder(id) : null;
+            const itemsWithLabels = autoPrint
+              ? (orderSnap?.items || []).map((it) => ({
+                  ...it,
+                  optionLabels: (it.options || [])
+                    .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
+                    .filter(Boolean),
+                }))
+              : [];
+            const resolvedTbl = autoPrint ? resolveAnyTable(id) : null;
             const receiptData = autoPrint
               ? {
                   storeName: storeInfo?.name || 'MyPos',
+                  storePhone: storeInfo?.phone || '',
+                  storeAddress: storeInfo?.address || '',
+                  businessNumber: storeInfo?.businessNumber || '',
+                  receiptFooter: storeInfo?.receiptFooter || '',
                   tableId: id,
-                  items: orderSnap?.items || [],
+                  tableLabel: resolvedTbl?.label || id,
+                  items: itemsWithLabels,
                   total: paymentPicker.total,
                   paymentMethod: picked,
                   paymentStatus: 'paid',
                   deliveryAddress: orderSnap?.deliveryAddress || '',
-                  // KIS 단말기 승인 정보 — 영수증 빌더가 있을 때 카드사/승인번호 표시.
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
                 }
