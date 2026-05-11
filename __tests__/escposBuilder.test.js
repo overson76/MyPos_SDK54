@@ -89,12 +89,40 @@ describe('buildReceiptText', () => {
     expect(text).not.toContain('감사합니다');
   });
 
-  test('배달 주소 있으면 🛵 와 함께 표시', () => {
+  test('1.0.39 — 이모지 제거 (EUC-KR 프린터 호환). ■/● 안전 문자만', () => {
+    const text = buildReceiptText({
+      ...sample,
+      deliveryAddress: '서울시 종로구 ...',
+      isSplit: true,
+      sourceTableLabel: '02',
+      items: [
+        {
+          name: '치킨',
+          qty: 1,
+          price: 10000,
+          optionLabels: ['매운맛'],
+          memo: '소스 따로',
+        },
+      ],
+    });
+    expect(text).not.toContain('📋');
+    expect(text).not.toContain('👤');
+    expect(text).not.toContain('🛵');
+    expect(text).not.toContain('📝');
+    expect(text).not.toContain('▸');
+    expect(text).toContain('■ 테이블');
+    expect(text).toContain('● 분리 결제 손님');
+    expect(text).toContain('■ 배달');
+    expect(text).toContain('- 매운맛');
+    expect(text).toContain('메모: 소스 따로');
+  });
+
+  test('배달 주소 있으면 "■ 배달:" 라벨로 표시', () => {
     const text = buildReceiptText({
       ...sample,
       deliveryAddress: '서울시 종로구 ...',
     });
-    expect(text).toContain('🛵');
+    expect(text).toContain('■ 배달');
     expect(text).toContain('서울시 종로구');
   });
 

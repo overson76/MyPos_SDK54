@@ -104,17 +104,20 @@ export function buildReceiptText(receipt) {
 
   // ───── 테이블 / 배달지 ─────
   lines.push(divider('-'));
+  // 1.0.39: 매장 서멀 프린터(EUC-KR 코드 페이지) 호환 — 이모지(📋👤🛵📝)와
+  // ▸·▶ 같은 unicode 보충문자가 프린터에서 ? 로 깨져 나옴 →
+  // KS X 1001 에 있는 ■ / ● + 텍스트 라벨로 통일. dash 와 콜론은 ASCII.
   const tableLabel = r.tableLabel || r.tableId;
   if (tableLabel) {
-    lines.push(`📋 테이블: ${tableLabel}`);
+    lines.push(`■ 테이블: ${tableLabel}`);
   }
-  // 1.0.38: 분리 결제 — 손님 자리 명시
+  // 1.0.38: 분리 결제 — 손님 자리 명시 (1.0.39 이모지 제거)
   if (r.isSplit && (r.sourceTableLabel || r.sourceTableId)) {
     const src = r.sourceTableLabel || r.sourceTableId;
-    lines.push(`👤 분리 결제 손님: ${src}`);
+    lines.push(`● 분리 결제 손님: ${src}`);
   }
   if (r.deliveryAddress) {
-    lines.push(`🛵 ${r.deliveryAddress}`);
+    lines.push(`■ 배달: ${r.deliveryAddress}`);
   }
 
   // ───── 메뉴 라인 — 옵션 / 메모 / 큰사이즈 분리 ─────
@@ -136,12 +139,13 @@ export function buildReceiptText(receipt) {
       lines.push(pad2col(`${name} x${qty}`, formatWon(price * qty)));
     }
 
+    // 1.0.39: 옵션 bullet ▸ → '-' (ASCII), 가운데점 · → ',' . 메모 📝 → '메모:'
     const opts = item.optionLabels || [];
     if (opts.length > 0) {
-      lines.push('  ▸ ' + opts.join(' · '));
+      lines.push('  - ' + opts.join(', '));
     }
     if (item.memo && String(item.memo).trim()) {
-      lines.push('  📝 ' + String(item.memo).trim());
+      lines.push('  메모: ' + String(item.memo).trim());
     }
   }
 
@@ -244,9 +248,10 @@ export function buildOrderSlipText(slip) {
         if (nq > 0) lines.push(pad2col(kindLabel + item.name + ' 보통', `×${nq}`));
         if (lq > 0) lines.push(pad2col(`  ${item.name} 대`, `×${lq}`));
       }
+      // 1.0.39: 이모지/유니코드 보충문자 제거 (EUC-KR 프린터 호환)
       const optLabels = item.optionLabels || [];
-      if (optLabels.length > 0) lines.push('  ▸ ' + optLabels.join(' · '));
-      if (item.memo) lines.push('  📝 ' + item.memo);
+      if (optLabels.length > 0) lines.push('  - ' + optLabels.join(', '));
+      if (item.memo) lines.push('  메모: ' + item.memo);
       if (!showAll && r.kind === 'changed' && r.previousQty != null) {
         lines.push(`  (이전 ×${r.previousQty})`);
       }
