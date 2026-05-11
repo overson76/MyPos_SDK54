@@ -207,18 +207,11 @@ export function mergeOrderParts(a, b) {
     bCart.length === 0
   )
     return null;
-  const mergeLists = (la, lb) => {
-    const map = new Map();
-    [...la, ...lb].forEach((i) => {
-      const existing = map.get(i.id);
-      if (existing) {
-        map.set(i.id, { ...existing, qty: existing.qty + i.qty });
-      } else {
-        map.set(i.id, { ...i });
-      }
-    });
-    return Array.from(map.values());
-  };
+  // 1.0.34 fix: 기존 mergeLists 가 qty 만 합치고 largeQty/options/memo/cookState 무시.
+  // 칼제비(대) 2개 + 칼제비(보통) 1개 가 모두 "보통 3개" 로 합쳐져 sizeUpcharge 손실 →
+  // 가격 작아짐 (사장님 실제 사고: 47,000 기대 → 44,000 잘못). normalizeSlots 가 이미
+  // 정확히 (id+options+memo+cookState 매칭, qty+largeQty 합산) 처리하므로 그것 사용.
+  const mergeLists = (la, lb) => normalizeSlots([...la, ...lb]);
   const createdAts = [a?.createdAt, b?.createdAt].filter(Boolean);
   return {
     items: mergeLists(aItems, bItems),
