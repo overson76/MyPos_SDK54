@@ -129,13 +129,17 @@ export function OrderProvider({ children }) {
       }
     };
 
-    const addItem = (tableId, menuItem, preferredSlotId) => {
+    // 1.0.35: sourceTableId 옵션 — 단체(group) 묶음 후 어느 손님 테이블이 시킨 건지
+    // 명시. 없으면 tableId 자체. UI 측은 단체 leader 에 메뉴 추가 시 sourceTable
+    // 선택 모달을 띄워 받음 (Phase 1.0.36).
+    const addItem = (tableId, menuItem, preferredSlotId, sourceTableId) => {
       if (!tableId) return;
       dispatch({
         type: 'orders/addItem',
         tableId,
         menuItem,
         preferredSlotId,
+        sourceTableId,
       });
     };
 

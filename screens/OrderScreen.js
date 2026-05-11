@@ -21,6 +21,7 @@ import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
+import TableSourcePicker from '../components/TableSourcePicker';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
@@ -158,6 +159,7 @@ export default function OrderScreen({
     clearPendingCart,
     addressBook,
     addAddress,
+    getGroupFor,
   } = useOrders();
 
   const genSlotId = () =>
@@ -169,6 +171,16 @@ export default function OrderScreen({
   const selectedSlotId = selectedRowKey
     ? selectedRowKey.split('#')[0]
     : null;
+
+  // 1.0.36: 단체(group, 묶음) 손님 선택 모달. leader 테이블에 메뉴 추가 시
+  // 어느 손님 거인지 받아서 sourceTableId 박음. lastSourceByGroup 으로 마지막
+  // 선택 기억 — 같은 손님 연속 추가가 보통이라 자동 적용 + 변경 가능.
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [groupPickerMembers, setGroupPickerMembers] = useState([]);
+  const [pendingMenuItem, setPendingMenuItem] = useState(null);
+  const [pendingMenuSlotId, setPendingMenuSlotId] = useState(null);
+  const [pendingMenuHasLarge, setPendingMenuHasLarge] = useState(false);
+  const [lastSourceByGroup, setLastSourceByGroup] = useState({}); // { leaderId: sourceTableId }
   const {
     items: menuItems,
     rows: categoryRows,
@@ -384,6 +396,61 @@ export default function OrderScreen({
   const total = getCartTotal(tableId);
   const totalQty = getCartQty(tableId);
   const hasCommittedOrder = committedItems.length > 0;
+
+  // 1.0.36: 단체(group) 묶음 후 메뉴 추가 시 sourceTable 선택 흐름.
+  // group leader 면 모달 띄움, 일반이면 즉시 적용.
+  // sourceTableId 가 있어야 동일 메뉴라도 손님별 슬롯이 분리됨 (normalizeSlots).
+  const applyMenuAdd = (item, sourceTableId) => {
+    if (!tableId) return;
+    const src = sourceTableId || tableId;
+    const def = cart.find(
+      (x) =>
+        x.id === item.id &&
+        (x.options || []).length === 0 &&
+        !x.memo &&
+        (x.cookState || 'pending') === 'pending' &&
+        !x.cookStateNormal &&
+        !x.cookStateLarge &&
+        (x.sourceTableId || tableId) === src
+    );
+    const targetId = def ? def.slotId : genSlotId();
+    const hasLarge = def && (def.largeQty || 0) > 0;
+    addItem(tableId, item, targetId, sourceTableId);
+    setSelectedRowKey(`${targetId}#${hasLarge ? 'normal' : 'only'}`);
+  };
+
+  const handleMenuPress = (item) => {
+    if (!tableId) return;
+    const group = getGroupFor?.(tableId);
+    if (group && group.memberIds && group.memberIds.length > 1) {
+      // 단체 — sourceTable 선택 모달. 마지막 선택은 ★ 강조.
+      setPendingMenuItem(item);
+      setGroupPickerMembers(group.memberIds);
+      setGroupPickerOpen(true);
+      return;
+    }
+    applyMenuAdd(item, null);
+  };
+
+  const handleGroupSourceSelect = (sourceTableId) => {
+    if (pendingMenuItem) {
+      const group = getGroupFor?.(tableId);
+      if (group?.leaderId) {
+        setLastSourceByGroup((prev) => ({
+          ...prev,
+          [group.leaderId]: sourceTableId,
+        }));
+      }
+      applyMenuAdd(pendingMenuItem, sourceTableId);
+    }
+    setGroupPickerOpen(false);
+    setPendingMenuItem(null);
+  };
+
+  const handleGroupSourceCancel = () => {
+    setGroupPickerOpen(false);
+    setPendingMenuItem(null);
+  };
 
   const menuById = Object.fromEntries(menuItems.map((m) => [m.id, m]));
   const currentRows = categoryRows[activeCategory] || [];
@@ -1240,24 +1307,7 @@ export default function OrderScreen({
                               }
                               return;
                             }
-                            if (!tableId) return;
-                            const def = cart.find(
-                              (x) =>
-                                x.id === item.id &&
-                                (x.options || []).length === 0 &&
-                                !x.memo &&
-                                (x.cookState || 'pending') === 'pending' &&
-                                !x.cookStateNormal &&
-                                !x.cookStateLarge
-                            );
-                            const targetId = def
-                              ? def.slotId
-                              : genSlotId();
-                            const hasLarge = def && (def.largeQty || 0) > 0;
-                            addItem(tableId, item, targetId);
-                            setSelectedRowKey(
-                              `${targetId}#${hasLarge ? 'normal' : 'only'}`
-                            );
+                            handleMenuPress(item);
                           }}
                         >
                           <ImageBackground
@@ -1976,6 +2026,20 @@ export default function OrderScreen({
           onClose={() => setMenuAddTarget(null)}
         />
       ) : null}
+
+      {/* 1.0.36: 단체 묶음 후 메뉴 추가 시 어느 손님인지 묻는 모달 */}
+      <TableSourcePicker
+        open={groupPickerOpen}
+        members={groupPickerMembers}
+        lastSourceId={
+          (() => {
+            const group = getGroupFor?.(tableId);
+            return group?.leaderId ? lastSourceByGroup[group.leaderId] : null;
+          })()
+        }
+        onSelect={handleGroupSourceSelect}
+        onClose={handleGroupSourceCancel}
+      />
     </View>
   );
 }
