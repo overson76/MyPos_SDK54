@@ -460,13 +460,19 @@ export function OrderProvider({ children }) {
       // 1.0.20: 자동 출력 hook 을 위해 호출 시점에 메타/diff 캡처. dispatch 후엔
       // confirmedItems 가 새 값으로 바뀌어 diff 가 모두 unchanged 가 되므로 의미 없음.
       // 1.0.32: 모든 출력 영수증 빌더 통일 — items / total 도 emit 에 포함.
+      // 1.0.40: 첫 주문(특히 배달 d1/d2 슬롯) 시 items 는 아직 [] 이고 사용자가 담은
+      // 메뉴는 cartItems 에만 있음. dispatch 후 cartItems → items 로 커밋되지만 emit
+      // 시점엔 옛 스냅샷이라 itemsSnap 이 [] 로 잡혀 메뉴 없는 영수증이 출력되던 버그
+      // (사장님 신고: "배달 주문 영수증에 메뉴 빠지고 배달지만 나옴"). cartItems 우선,
+      // fallback 으로 items — 양쪽 매장(t01) / 배달(d1) 모두 정확.
       const orderSnap = orders[tableId];
       const wasConfirmed = (orderSnap?.confirmedItems?.length ?? 0) > 0;
       const tblForListener = resolveTableForAlert(tableId);
       const diffRows = orderSnap
         ? computeDiffRows(orderSnap.items, orderSnap.confirmedItems || [])
         : [];
-      const itemsSnap = orderSnap?.items || [];
+      const itemsSnap =
+        orderSnap?.cartItems ?? orderSnap?.items ?? [];
       const totalSnap = computeItemsTotal(itemsSnap);
 
       addBreadcrumb('order.confirm', {
