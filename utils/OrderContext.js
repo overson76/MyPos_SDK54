@@ -75,6 +75,8 @@ export function OrderProvider({ children }) {
     setAlias,
     setPhone,
     addAddress,
+    addPhoneOnly,
+    editLabel,
   } = useAddressBook();
 
   useOrderPersistence({
@@ -587,6 +589,8 @@ export function OrderProvider({ children }) {
       setAlias,
       setPhone,
       addAddress,
+      addPhoneOnly,
+      editLabel,
       isSplit,
       addItem,
       removeItem,
@@ -644,7 +648,7 @@ const ORDERS_FALLBACK = {
   addressBook: { entries: {} }, groups: {},
   bumpAddress: noop, markAddressDeliveredToday: noop, pinAddress: noop,
   deleteAddress: noop, setAutoRemember: noop, setAlias: noop, setPhone: noop,
-  addAddress: noop, isSplit: () => false,
+  addAddress: noop, addPhoneOnly: noop, editLabel: noop, isSplit: () => false,
   addItem: noop, removeItem: noop, clearTable: noop, clearTableBySource: noop,
   computeSubtotalsBySource: () => ({}), groupItemsBySource: () => new Map(),
   markReady: noop, undoMarkReady: () => false,

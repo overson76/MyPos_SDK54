@@ -185,6 +185,84 @@ export function useAddressBook() {
     return true;
   }, []);
 
+  // 전화번호만 있는 미완성 entry — CID 신규 번호 / "나중에 주소 채움" 용.
+  // 같은 phone digits 가 어디에 등록돼 있으면 noop. key 는 __phone:digits 패턴으로
+  // normalizeAddressKey 충돌 방지. pendingAddress=true 플래그로 UI 가 강조 표시.
+  const addPhoneOnly = useCallback((phone, alias) => {
+    const digits = (phone || '').replace(/\D/g, '');
+    if (!digits) return false;
+    const key = `__phone:${digits}`;
+    const formatted = formatPhoneDigits(digits);
+    const placeholder = `(주소 미입력) ${formatted}`;
+    setAddressBook((prev) => {
+      const exists = Object.values(prev.entries).some(
+        (e) => e.phone && e.phone.replace(/\D/g, '') === digits
+      );
+      if (exists) return prev;
+      const entry = {
+        key,
+        label: placeholder,
+        phone: digits,
+        pendingAddress: true,
+        count: 0,
+        pinned: false,
+        firstSeenAt: Date.now(),
+        lastUsedAt: Date.now(),
+      };
+      if (alias?.trim()) entry.alias = alias.trim();
+      return { ...prev, entries: { ...prev.entries, [key]: entry } };
+    });
+    return true;
+  }, []);
+
+  // 주소(label) 편집 — 같은 key 면 라벨만, 다른 key 면 entry 이주 + 좌표 무효화.
+  // pendingAddress entry 가 실제 주소를 받으면 정식 entry 로 승격되는 핵심 경로.
+  const editLabel = useCallback((oldKey, newLabel) => {
+    const safe = sanitizeDeliveryAddress(newLabel);
+    if (!safe) return false;
+    const newKey = normalizeAddressKey(safe);
+    if (!newKey) return false;
+    setAddressBook((prev) => {
+      const ex = prev.entries[oldKey];
+      if (!ex) return prev;
+      if (oldKey === newKey) {
+        return {
+          ...prev,
+          entries: {
+            ...prev.entries,
+            [oldKey]: { ...ex, label: safe, pendingAddress: false },
+          },
+        };
+      }
+      const target = prev.entries[newKey];
+      const merged = target
+        ? {
+            ...target,
+            phone: target.phone || ex.phone,
+            alias: target.alias || ex.alias,
+            count: (target.count || 0) + (ex.count || 0),
+            lastUsedAt: Math.max(target.lastUsedAt || 0, ex.lastUsedAt || 0),
+          }
+        : {
+            ...ex,
+            key: newKey,
+            label: safe,
+            lat: undefined,
+            lng: undefined,
+            pendingAddress: false,
+          };
+      const { [oldKey]: _removed, ...rest } = prev.entries;
+      return {
+        ...prev,
+        entries: { ...rest, [newKey]: merged },
+        todayDeliveredKeys: prev.todayDeliveredKeys.map((k) =>
+          k === oldKey ? newKey : k
+        ),
+      };
+    });
+    return true;
+  }, []);
+
   const setAutoRemember = useCallback((on) => {
     setAddressBook((prev) =>
       prev.autoRemember === !!on ? prev : { ...prev, autoRemember: !!on }
@@ -228,5 +306,18 @@ export function useAddressBook() {
     setAlias,
     setPhone,
     addAddress,
+    addPhoneOnly,
+    editLabel,
   };
+}
+
+// 저장된 digits → 표시용 (01012341234 → 010-1234-1234). placeholder label 에 사용.
+function formatPhoneDigits(digits) {
+  const d = (digits || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('010')) {
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  return d;
 }

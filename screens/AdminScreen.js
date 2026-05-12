@@ -18,6 +18,7 @@ import LockGate from '../components/LockGate';
 import RevenueLockGate from '../components/RevenueLockGate';
 import StoreManagementSection from '../components/StoreManagementSection';
 import AdminSettingsView from '../components/AdminSettingsView';
+import AddressBookPanel from '../components/AddressBookPanel';
 import PinManageModal, { PIN_LENGTH } from '../components/PinManageModal';
 import {
   getSpeakAddress,
@@ -60,6 +61,7 @@ function quitElectron() {
 // 시스템 탭은 운영·진단 도구 (자동 업데이트, CID/KIS 진단, OTA, Sentry, 초기화) 만 남음.
 const SECTIONS = [
   { key: 'menu', label: '메뉴 관리' },
+  { key: 'addressBook', label: '주소록' },
   { key: 'revenue', label: '수익 현황' },
   { key: 'settings', label: '설정' },
   { key: 'system', label: '시스템' },
@@ -630,6 +632,8 @@ export default function AdminScreen() {
       <View style={{ flex: 1 }}>
         {section === 'menu' ? (
           <SettingScreen />
+        ) : section === 'addressBook' ? (
+          <AddressBookPanel />
         ) : section === 'revenue' ? (
           <RevenueLockGate length={PIN_LENGTH}>
             <RevenueScreen />
