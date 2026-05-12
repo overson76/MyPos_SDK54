@@ -14,7 +14,7 @@
 //   - CID 자동 등록된 phone-only entry 가 여기 노출 → 직원이 주소 채워서 정식 entry 로
 //   - 카카오 로컬 API geocode 는 useAddressBook 의 effect 가 백그라운드로 처리
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -30,7 +30,13 @@ import {
 import { useOrders } from '../utils/OrderContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
-import { distanceKm, formatDistance, isGeocodingAvailable } from '../utils/geocode';
+import {
+  formatDrivingDistance,
+  formatDuration,
+  getDrivingDistance,
+  isGeocodingAvailable,
+  isNaviAvailable,
+} from '../utils/geocode';
 import { importAddresses, SEED_BUSINESS_ADDRESSES } from '../utils/seedAddresses';
 
 const SORT_MODES = [
@@ -76,25 +82,76 @@ export default function AddressBookPanel() {
     return null;
   }, [storeInfo]);
 
+  // 카카오 모빌리티 길찾기 API lazy fetch — entry 당 한 번만 호출, 영구 캐시.
+  // entry.drivingFromLat/Lng 가 현재 매장좌표와 다르면 재계산 (매장 이전 대응).
+  // 동시 호출 폭주 방지 — inFlightRef. 일시 실패는 failedRef (앱 재시작 시 재시도).
+  const inFlightRef = useRef(new Set());
+  const failedRef = useRef(new Set());
+  useEffect(() => {
+    if (!storeCoord || !isNaviAvailable()) return;
+    const fromLat = storeCoord.lat;
+    const fromLng = storeCoord.lng;
+    for (const entry of Object.values(addressBook.entries || {})) {
+      if (typeof entry.lat !== 'number' || typeof entry.lng !== 'number') continue;
+      // 이미 캐시돼있고 매장좌표 동일 — 스킵
+      if (
+        typeof entry.drivingM === 'number' &&
+        entry.drivingFromLat === fromLat &&
+        entry.drivingFromLng === fromLng
+      ) {
+        continue;
+      }
+      if (inFlightRef.current.has(entry.key)) continue;
+      if (failedRef.current.has(entry.key)) continue;
+      inFlightRef.current.add(entry.key);
+      getDrivingDistance(
+        { lat: fromLat, lng: fromLng },
+        { lat: entry.lat, lng: entry.lng }
+      ).then((result) => {
+        inFlightRef.current.delete(entry.key);
+        if (!result) {
+          failedRef.current.add(entry.key);
+          return;
+        }
+        setAddressBook((prev) => {
+          const ex = prev.entries[entry.key];
+          if (!ex) return prev;
+          return {
+            ...prev,
+            entries: {
+              ...prev.entries,
+              [entry.key]: {
+                ...ex,
+                drivingM: result.distanceM,
+                drivingDurationSec: result.durationSec,
+                drivingFromLat: fromLat,
+                drivingFromLng: fromLng,
+              },
+            },
+          };
+        });
+      });
+    }
+  }, [addressBook.entries, storeCoord, setAddressBook]);
+
+  // 매장 좌표가 바뀌면 inFlightRef / failedRef 도 리셋 — 옛 결과의 in-flight 무효화.
+  useEffect(() => {
+    inFlightRef.current.clear();
+    failedRef.current.clear();
+  }, [storeCoord?.lat, storeCoord?.lng]);
+
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     const arr = Object.values(addressBook.entries || {});
-    const withDist = arr.map((e) => {
-      let km = null;
-      if (storeCoord && typeof e.lat === 'number' && typeof e.lng === 'number') {
-        km = distanceKm(storeCoord, { lat: e.lat, lng: e.lng });
-      }
-      return { ...e, _distanceKm: km };
-    });
 
     const filtered = q
-      ? withDist.filter(
+      ? arr.filter(
           (e) =>
             (e.label || '').toLowerCase().includes(q) ||
             (e.alias || '').toLowerCase().includes(q) ||
             (e.phone || '').includes(q)
         )
-      : withDist;
+      : arr;
 
     return filtered.sort((a, b) => {
       // 핀 우선 (정렬 모드 무관)
@@ -104,8 +161,8 @@ export default function AddressBookPanel() {
         case 'count':
           return (b.count || 0) - (a.count || 0);
         case 'distance': {
-          const ad = a._distanceKm;
-          const bd = b._distanceKm;
+          const ad = typeof a.drivingM === 'number' ? a.drivingM : null;
+          const bd = typeof b.drivingM === 'number' ? b.drivingM : null;
           if (ad == null && bd == null) return 0;
           if (ad == null) return 1;
           if (bd == null) return -1;
@@ -124,7 +181,7 @@ export default function AddressBookPanel() {
           return (b.lastUsedAt || 0) - (a.lastUsedAt || 0);
       }
     });
-  }, [addressBook.entries, query, sortMode, storeCoord]);
+  }, [addressBook.entries, query, sortMode]);
 
   const pendingCount = useMemo(
     () => Object.values(addressBook.entries || {}).filter((e) => e.pendingAddress).length,
@@ -296,6 +353,12 @@ export default function AddressBookPanel() {
               <Text style={styles.statusWarn}>카카오 KEY 미설정 → 좌표 변환 OFF</Text>
             </>
           )}
+          {geoOk && storeCoord && (
+            <>
+              {'  ·  '}
+              <Text style={styles.statusHint}>🚗 카카오 모빌리티 도로 실거리</Text>
+            </>
+          )}
         </Text>
 
         <View style={styles.autoRow}>
@@ -393,7 +456,17 @@ export default function AddressBookPanel() {
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
           {items.map((it) => {
             const isEditing = editingKey === it.key;
-            const distText = it._distanceKm != null ? formatDistance(it._distanceKm) : null;
+            const distText =
+              typeof it.drivingM === 'number' ? formatDrivingDistance(it.drivingM) : null;
+            const durText =
+              typeof it.drivingDurationSec === 'number'
+                ? formatDuration(it.drivingDurationSec)
+                : null;
+            const distLoading =
+              !distText &&
+              storeCoord &&
+              typeof it.lat === 'number' &&
+              typeof it.lng === 'number';
 
             if (isEditing) {
               return (
@@ -488,9 +561,14 @@ export default function AddressBookPanel() {
                     {it.count > 0 && (
                       <Text style={styles.rowCount}>×{it.count}회</Text>
                     )}
-                    {distText && (
-                      <Text style={styles.rowDist}>📍 {distText}</Text>
-                    )}
+                    {distText ? (
+                      <Text style={styles.rowDist}>
+                        🚗 {distText}
+                        {durText ? ` · ${durText}` : ''}
+                      </Text>
+                    ) : distLoading ? (
+                      <Text style={styles.rowDistLoading}>🚗 계산 중…</Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -654,6 +732,7 @@ function makeStyles(scale = 1) {
     statusNum: { color: '#111827', fontWeight: '800' },
     statusPending: { color: '#d97706', fontWeight: '800' },
     statusWarn: { color: '#dc2626', fontWeight: '700' },
+    statusHint: { color: '#0891b2', fontWeight: '700' },
     autoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     autoLabel: { fontSize: fp(12), color: '#374151', fontWeight: '700' },
 
@@ -773,6 +852,7 @@ function makeStyles(scale = 1) {
     rowPhone: { fontSize: fp(11), color: '#059669', fontWeight: '600' },
     rowCount: { fontSize: fp(11), color: '#dc2626', fontWeight: '700' },
     rowDist: { fontSize: fp(11), color: '#2563eb', fontWeight: '700' },
+    rowDistLoading: { fontSize: fp(11), color: '#9ca3af', fontWeight: '600', fontStyle: 'italic' },
     rowActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     iconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
     iconText: { fontSize: fp(16), opacity: 0.5 },

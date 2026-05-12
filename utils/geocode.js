@@ -91,6 +91,72 @@ export function formatDistance(km) {
   return `${Math.round(km)} km`;
 }
 
+// 카카오 모빌리티 길찾기 API (자동차 도로 기준 실거리).
+// 같은 KAKAO_REST_KEY 사용 — developers.kakao.com 콘솔에서 "카카오내비" 활성화 필요.
+// 무료 쿼터: 일 5,000 요청 (매장 규모 충분).
+//
+// 매장에서 배달지로 가는 도로 실거리(m) + 예상 소요 시간(초) 반환.
+// 실패 / 권한 없음 / 길없음 시 null — 호출부가 graceful fallback.
+const NAVI_BASE = 'https://apis-navi.kakaomobility.com';
+
+export function isNaviAvailable() {
+  return KAKAO_KEY.length > 0;
+}
+
+// origin, destination: { lat, lng }
+// 반환: { distanceM, durationSec } | null
+export async function getDrivingDistance(origin, destination) {
+  if (!KAKAO_KEY) return null;
+  if (!isCoord(origin) || !isCoord(destination)) return null;
+
+  const params = new URLSearchParams({
+    origin: `${origin.lng},${origin.lat}`,
+    destination: `${destination.lng},${destination.lat}`,
+    priority: 'RECOMMEND',
+    alternatives: 'false',
+    road_details: 'false',
+  });
+
+  try {
+    const res = await fetch(`${NAVI_BASE}/v1/directions?${params.toString()}`, {
+      headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const route = json?.routes?.[0];
+    // result_code: 0=성공, 그 외(101 출발지 부근에 길없음, 102 도착지 부근에 길없음 등)
+    if (!route || route.result_code !== 0) return null;
+    const distanceM = route?.summary?.distance;
+    const durationSec = route?.summary?.duration;
+    if (typeof distanceM !== 'number' || distanceM < 0) return null;
+    return {
+      distanceM,
+      durationSec: typeof durationSec === 'number' ? durationSec : null,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+// 거리 m → "도로 1.2 km" / "도로 850 m" 식. distanceKm 와 형식 통일.
+export function formatDrivingDistance(m) {
+  if (typeof m !== 'number' || !isFinite(m) || m < 0) return null;
+  if (m < 1000) return `${Math.round(m)} m`;
+  const km = m / 1000;
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
+}
+
+// 소요 시간 초 → "12분" / "1시간 5분"
+export function formatDuration(sec) {
+  if (typeof sec !== 'number' || !isFinite(sec) || sec < 0) return null;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+}
+
 // 카카오 Static Map 이미지 URL — 매장(빨간) + 배달지(파란) 마커.
 // imgW/imgH: 요청 이미지 픽셀 크기 (카카오 최대 640×640).
 // 실제 화면 표시는 <Image resizeMode="cover"> 로 더 크게 확대 가능.

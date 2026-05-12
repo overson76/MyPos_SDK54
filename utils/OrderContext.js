@@ -581,6 +581,7 @@ export function OrderProvider({ children }) {
       splits,
       revenue,
       addressBook,
+      setAddressBook,
       bumpAddress,
       markAddressDeliveredToday,
       pinAddress,
@@ -646,6 +647,7 @@ const noop = () => {};
 const ORDERS_FALLBACK = {
   orders: {}, splits: {}, revenue: { total: 0, history: [] },
   addressBook: { entries: {} }, groups: {},
+  setAddressBook: noop,
   bumpAddress: noop, markAddressDeliveredToday: noop, pinAddress: noop,
   deleteAddress: noop, setAutoRemember: noop, setAlias: noop, setPhone: noop,
   addAddress: noop, addPhoneOnly: noop, editLabel: noop, isSplit: () => false,
