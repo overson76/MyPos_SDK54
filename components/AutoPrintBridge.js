@@ -22,9 +22,10 @@ import { useEffect } from 'react';
 import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
 import { useStore } from '../utils/StoreContext';
-import { loadAutoOn } from '../utils/printPolicy';
+import { loadAutoOn, loadAutoTypes } from '../utils/printPolicy';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+import { resolveAnyTable } from '../utils/tableData';
 import { addBreadcrumb, reportError } from '../utils/sentry';
 
 export default function AutoPrintBridge() {
@@ -63,6 +64,22 @@ export default function AutoPrintBridge() {
         const autoOn = await loadAutoOn();
         if (!autoOn) {
           addBreadcrumb('autoprint.skip.toggle-off', { tableId });
+          return;
+        }
+
+        // 1.0.41: 주문 종류별 자동 출력 분기 — 사장님 신고 "배달만 체크했는데
+        // 테이블 주문도 인쇄됨" fix. tableId 의 type 으로 판단. 분할/단체(#) 는
+        // parent ID 로 분해 후 type 추출.
+        const baseId = String(tableId || '').split('#')[0];
+        const tbl = resolveAnyTable(baseId);
+        const orderType = tbl?.type || 'regular';
+        const autoTypes = await loadAutoTypes();
+        if (!autoTypes.includes(orderType)) {
+          addBreadcrumb('autoprint.skip.type-off', {
+            tableId,
+            orderType,
+            autoTypes: autoTypes.join(','),
+          });
           return;
         }
 

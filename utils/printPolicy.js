@@ -12,6 +12,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY_POLICY = 'mypos:v1:print:policy';
 const KEY_AUTO_ON = 'mypos:v1:print:autoOn';
+// 1.0.41: 주문 종류별(매장/배달/포장/예약) 자동 출력 토글 — 사장님 신고:
+// "배달만 체크했는데 테이블 주문도 인쇄됨" — 옛 'delivery' 옵션은 배달 주소
+// 섹션 포함 의미였지 자동 출력 발화 여부와는 무관했음. 이 키로 종류별 분기.
+const KEY_AUTO_TYPES = 'mypos:v1:print:autoTypes';
 
 // 정책 종류 — OrderSlipPicker 의 4종과 키 일치.
 export const POLICY_KINDS = ['all', 'added', 'changed', 'delivery'];
@@ -21,6 +25,20 @@ export const POLICY_KINDS = ['all', 'added', 'changed', 'delivery'];
 export const DEFAULT_POLICY = Object.freeze({
   kinds: ['added', 'changed', 'delivery'],
 });
+
+// 1.0.41: 자동 출력할 주문 종류 (4종, utils/tableData.js 의 type 필드와 키 일치)
+//   regular     — 매장 테이블 (t01, r10 등)
+//   delivery    — 배달 (d1, d2 등)
+//   takeout     — 포장 (p1, p2 등)
+//   reservation — 예약 (y1, y2 등)
+export const ORDER_TYPES = ['regular', 'delivery', 'takeout', 'reservation'];
+// 기본값: 4종 모두 ON — 옛 매장의 옛 동작(모든 주문 자동 출력) 유지.
+export const DEFAULT_AUTO_TYPES = Object.freeze([
+  'regular',
+  'delivery',
+  'takeout',
+  'reservation',
+]);
 
 export function isValidKind(k) {
   return POLICY_KINDS.includes(k);
@@ -106,4 +124,34 @@ export async function saveAutoOn(enabled) {
   } catch {
     // 토글 저장 실패해도 침묵.
   }
+}
+
+// 1.0.41: 자동 출력할 주문 종류 — AsyncStorage 영속. PC .exe 기기별.
+// 옛 매장(저장값 없음) 은 기본값 4종 모두 ON — 옛 동작 그대로 유지.
+export async function loadAutoTypes() {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_AUTO_TYPES);
+    if (!raw) return [...DEFAULT_AUTO_TYPES];
+    const parsed = JSON.parse(raw);
+    const types = Array.isArray(parsed)
+      ? parsed.filter((t) => ORDER_TYPES.includes(t))
+      : [];
+    // 빈 배열은 "모두 OFF" 의미 — 사용자가 명시적으로 끈 거니 그대로 존중.
+    // 단 파싱 실패 / 형식 깨짐은 기본값으로 fallback (loadAutoTypes 호출부 안전).
+    return types;
+  } catch {
+    return [...DEFAULT_AUTO_TYPES];
+  }
+}
+
+export async function saveAutoTypes(types) {
+  const filtered = (Array.isArray(types) ? types : []).filter((t) =>
+    ORDER_TYPES.includes(t)
+  );
+  try {
+    await AsyncStorage.setItem(KEY_AUTO_TYPES, JSON.stringify(filtered));
+  } catch {
+    // 침묵 — 영업 흐름 영향 X.
+  }
+  return filtered;
 }

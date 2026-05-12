@@ -8,11 +8,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useResponsive } from '../utils/useResponsive';
 import {
+  DEFAULT_AUTO_TYPES,
   DEFAULT_POLICY,
   loadAutoOn,
+  loadAutoTypes,
   loadPolicy,
+  ORDER_TYPES,
   POLICY_KINDS,
   saveAutoOn,
+  saveAutoTypes,
   savePolicy,
 } from '../utils/printPolicy';
 
@@ -20,7 +24,15 @@ const KIND_META = {
   all:      { label: '모두',   desc: '전체 항목 출력' },
   added:    { label: '추가',   desc: '새로 추가된 항목만' },
   changed:  { label: '변경',   desc: '수량·옵션 변경 항목 + 취소' },
-  delivery: { label: '배달',   desc: '배달 주소 섹션 포함' },
+  delivery: { label: '배달지', desc: '영수증에 배달 주소 줄 포함' },
+};
+
+// 1.0.41: 자동 출력할 주문 종류 — 사장님 신고 "배달만 체크했는데 테이블 주문도 인쇄됨" fix
+const TYPE_META = {
+  regular:     { label: '매장 테이블', desc: 't01, r10 같은 매장 자리' },
+  delivery:    { label: '배달',         desc: 'd1, d2 같은 배달 슬롯' },
+  takeout:     { label: '포장',         desc: 'p1, p2 같은 포장 슬롯' },
+  reservation: { label: '예약',         desc: 'y1, y2 같은 예약 슬롯' },
 };
 
 function isElectronEnv() {
@@ -33,18 +45,23 @@ export default function PrintPolicySection() {
 
   const [kinds, setKinds] = useState(() => new Set(DEFAULT_POLICY.kinds));
   const [autoOn, setAutoOn] = useState(false);
+  // 1.0.41: 자동 출력할 주문 종류 (매장/배달/포장/예약 4종)
+  const [autoTypes, setAutoTypes] = useState(() => new Set(DEFAULT_AUTO_TYPES));
   const [hydrated, setHydrated] = useState(false);
 
   const electron = isElectronEnv();
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadPolicy(), loadAutoOn()]).then(([p, a]) => {
-      if (cancelled) return;
-      setKinds(new Set(p.kinds || DEFAULT_POLICY.kinds));
-      setAutoOn(!!a);
-      setHydrated(true);
-    });
+    Promise.all([loadPolicy(), loadAutoOn(), loadAutoTypes()]).then(
+      ([p, a, t]) => {
+        if (cancelled) return;
+        setKinds(new Set(p.kinds || DEFAULT_POLICY.kinds));
+        setAutoOn(!!a);
+        setAutoTypes(new Set(t));
+        setHydrated(true);
+      }
+    );
     return () => {
       cancelled = true;
     };
@@ -78,6 +95,15 @@ export default function PrintPolicySection() {
   const toggleAuto = (next) => {
     setAutoOn(next);
     saveAutoOn(next);
+  };
+
+  // 1.0.41: 주문 종류별 자동 출력 토글
+  const toggleType = (type) => {
+    const next = new Set(autoTypes);
+    if (next.has(type)) next.delete(type);
+    else next.add(type);
+    setAutoTypes(next);
+    saveAutoTypes([...next]);
   };
 
   if (!hydrated) return null;
@@ -119,20 +145,55 @@ export default function PrintPolicySection() {
       </View>
 
       {electron ? (
-        <View style={styles.autoRow}>
-          <View style={styles.autoText}>
-            <Text style={styles.autoLabel}>자동 출력 (이 기기)</Text>
-            <Text style={styles.autoHelper}>
-              ON: 주문 확정 / 추가·변경 발생 시 위 정책대로 자동 출력. OFF: 🖨️ 버튼으로 수동 출력만.
-              {'\n'}매장 약속에 따라 카운터 PC 만 ON, 주방 PC 는 OFF 권장 — 두 PC 다 ON 하면 영수증 두 장 출력.
-            </Text>
+        <>
+          <View style={styles.autoRow}>
+            <View style={styles.autoText}>
+              <Text style={styles.autoLabel}>자동 출력 (이 기기)</Text>
+              <Text style={styles.autoHelper}>
+                ON: 주문 확정 시 자동 출력. OFF: 🖨️ 버튼으로 수동 출력만.
+                {'\n'}매장 약속에 따라 카운터 PC 만 ON, 주방 PC 는 OFF 권장 — 두 PC 다 ON 하면 영수증 두 장 출력.
+              </Text>
+            </View>
+            <Switch
+              value={autoOn}
+              onValueChange={toggleAuto}
+              accessibilityLabel="자동 출력 토글"
+            />
           </View>
-          <Switch
-            value={autoOn}
-            onValueChange={toggleAuto}
-            accessibilityLabel="자동 출력 토글"
-          />
-        </View>
+
+          {/* 1.0.41: 자동 출력할 주문 종류 — 사장님 신고 fix */}
+          <Text style={styles.sectionTitle}>어떤 주문 종류를 자동 출력?</Text>
+          <Text style={styles.helper}>
+            체크된 종류의 주문만 자동 출력됩니다. 자동 출력 토글이 ON 일 때만 적용 — 토글 OFF 면 이 설정은 무시.
+          </Text>
+          <View style={styles.kindList}>
+            {ORDER_TYPES.map((type) => {
+              const meta = TYPE_META[type];
+              const checked = autoTypes.has(type);
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={styles.kindRow}
+                  onPress={() => toggleType(type)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      checked && styles.checkboxChecked,
+                    ]}
+                  >
+                    {checked ? <Text style={styles.checkmark}>✓</Text> : null}
+                  </View>
+                  <View style={styles.kindTextWrap}>
+                    <Text style={styles.kindLabel}>{meta.label}</Text>
+                    <Text style={styles.kindDesc}>{meta.desc}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
       ) : null}
     </>
   );
