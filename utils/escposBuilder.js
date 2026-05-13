@@ -198,9 +198,11 @@ export function buildReceiptText(receipt) {
   const r = receipt || {};
   const orderType = r.orderType || (r.deliveryAddress ? 'delivery' : 'regular');
 
-  // ───── 헤더 (상황별 라벨 + 큰 글씨 가운데 정렬) ─────
+  // ───── 헤더 (상황별 라벨 + 가로 두 배 가운데 정렬) ─────
+  // 1.0.45: sizeBig(2x×2x) → sizeWide(2x×1x) 통일. 사장님 피드백 "2배 너무 큼".
+  // ESC/POS 표준상 1.5배 직접 옵션 없음 — 가로만 두 배 (세로 기본) 가 가장 가까움.
   lines.push(divider('='));
-  lines.push(bigCenter(headerTitle(orderType), 'big'));
+  lines.push(bigCenter(headerTitle(orderType), 'wide'));
   lines.push(centerText(formatDateTime(r.printedAt || Date.now())));
 
   // ───── 테이블 / 배달지 ─────
@@ -217,12 +219,13 @@ export function buildReceiptText(receipt) {
   }
 
   // 1.0.44: orderType 별 본문 메타.
+  // 1.0.45: 배달지/별칭도 sizeWide 로 통일 — 본문 모두 가로 두 배 한 크기로 정렬.
   if (orderType === 'delivery') {
     if (r.deliveryAddress) {
-      lines.push(bigLeft(`배달지 ${r.deliveryAddress}`, 'big'));
+      lines.push(bigLeft(`배달지 ${r.deliveryAddress}`, 'wide'));
     }
     if (r.customerAlias) {
-      lines.push(bigLeft(`별칭   ${r.customerAlias}`, 'big'));
+      lines.push(bigLeft(`별칭   ${r.customerAlias}`, 'wide'));
     }
     if (r.customerPhone) {
       lines.push(bigLeft(`손님   ${formatPhone(r.customerPhone)}`, 'wide'));
