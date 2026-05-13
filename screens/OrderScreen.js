@@ -912,109 +912,123 @@ export default function OrderScreen({
         <Text style={styles.tableLabel} numberOfLines={1}>
           {table?.label || '주문 즐겨찾기'}
         </Text>
-        {table?.type === 'delivery' ? (
-          <View style={styles.headerAddressWrap}>
-            <Text style={styles.deliveryLabel}>📍</Text>
-            <TextInput
-              style={[styles.deliveryInput, styles.deliveryInputCompact]}
-              value={order.deliveryAddress || ''}
-              onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
-              placeholder="주소"
-              placeholderTextColor="#9ca3af"
-              returnKeyType="done"
-              onSubmitEditing={() => Keyboard.dismiss()}
-              blurOnSubmit
-              onFocus={() => setAddressFocused(true)}
-              onBlur={() => setAddressFocused(false)}
-            />
-            {addressFocused && (
-              <TouchableOpacity
-                style={styles.kbDoneBtn}
-                onPress={() => Keyboard.dismiss()}
-              >
-                <Text style={styles.kbDoneBtnText}>✓</Text>
-              </TouchableOpacity>
-            )}
-            {liveDistanceLabel ? (
-              <Text
-                style={{
-                  marginHorizontal: 6,
-                  fontSize: 13,
-                  color: '#059669',
-                  fontWeight: '700',
-                }}
-              >
-                📏 {liveDistanceLabel}
+        {(() => {
+          // 1.0.44: 시간 입력 UI 를 배달뿐 아니라 예약/포장에도 노출.
+          // 같은 deliveryTime/deliveryTimeIsPM 필드 재사용 — 마이그레이션 0.
+          // 알림은 useScheduledAlerts 가 type 별 음성(배달 출발/예약/픽업) 분기.
+          const tType = table?.type;
+          const needsTime = tType === 'delivery' || tType === 'reservation' || tType === 'takeout';
+          if (!needsTime) {
+            return (
+              <Text style={styles.tableHeaderHint}>
+                {table ? '' : '메뉴를 담은 뒤 [주문] 을 누르세요'}
               </Text>
-            ) : null}
-            <TouchableOpacity
-              style={styles.addressBookBtn}
-              onPress={() => setAddressBookOpen(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.addressBookBtnText}>▼</Text>
-            </TouchableOpacity>
-            <AddressChips
-              compact={isPhone}
-              inline
-              max={12}
-              onSelect={(label) => tableId && setDeliveryAddress(tableId, label)}
-            />
-            <Text style={styles.deliveryLabelTight}>🕐</Text>
-            <View style={styles.ampmGroup}>
-              <TouchableOpacity
-                style={[
-                  styles.ampmBtn,
-                  !order.deliveryTimeIsPM && styles.ampmBtnActive,
-                ]}
-                onPress={() => tableId && setDeliveryTimeIsPM(tableId, false)}
-              >
-                <Text
+            );
+          }
+          const timePlaceholder =
+            tType === 'reservation' ? '6:30' : tType === 'takeout' ? '5:15' : '4:20';
+          return (
+            <View style={styles.headerAddressWrap}>
+              {tType === 'delivery' && (
+                <>
+                  <Text style={styles.deliveryLabel}>📍</Text>
+                  <TextInput
+                    style={[styles.deliveryInput, styles.deliveryInputCompact]}
+                    value={order.deliveryAddress || ''}
+                    onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
+                    placeholder="주소"
+                    placeholderTextColor="#9ca3af"
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                    blurOnSubmit
+                    onFocus={() => setAddressFocused(true)}
+                    onBlur={() => setAddressFocused(false)}
+                  />
+                  {addressFocused && (
+                    <TouchableOpacity
+                      style={styles.kbDoneBtn}
+                      onPress={() => Keyboard.dismiss()}
+                    >
+                      <Text style={styles.kbDoneBtnText}>✓</Text>
+                    </TouchableOpacity>
+                  )}
+                  {liveDistanceLabel ? (
+                    <Text
+                      style={{
+                        marginHorizontal: 6,
+                        fontSize: 13,
+                        color: '#059669',
+                        fontWeight: '700',
+                      }}
+                    >
+                      📏 {liveDistanceLabel}
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.addressBookBtn}
+                    onPress={() => setAddressBookOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.addressBookBtnText}>▼</Text>
+                  </TouchableOpacity>
+                  <AddressChips
+                    compact={isPhone}
+                    inline
+                    max={12}
+                    onSelect={(label) => tableId && setDeliveryAddress(tableId, label)}
+                  />
+                </>
+              )}
+              <Text style={styles.deliveryLabelTight}>🕐</Text>
+              <View style={styles.ampmGroup}>
+                <TouchableOpacity
                   style={[
-                    styles.ampmText,
-                    !order.deliveryTimeIsPM && styles.ampmTextActive,
+                    styles.ampmBtn,
+                    !order.deliveryTimeIsPM && styles.ampmBtnActive,
                   ]}
+                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, false)}
                 >
-                  오전
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.ampmBtn,
-                  (order.deliveryTimeIsPM ?? true) && styles.ampmBtnActive,
-                ]}
-                onPress={() => tableId && setDeliveryTimeIsPM(tableId, true)}
-              >
-                <Text
+                  <Text
+                    style={[
+                      styles.ampmText,
+                      !order.deliveryTimeIsPM && styles.ampmTextActive,
+                    ]}
+                  >
+                    오전
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[
-                    styles.ampmText,
-                    (order.deliveryTimeIsPM ?? true) && styles.ampmTextActive,
+                    styles.ampmBtn,
+                    (order.deliveryTimeIsPM ?? true) && styles.ampmBtnActive,
                   ]}
+                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, true)}
                 >
-                  오후
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.ampmText,
+                      (order.deliveryTimeIsPM ?? true) && styles.ampmTextActive,
+                    ]}
+                  >
+                    오후
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[styles.deliveryTimeInput, styles.deliveryTimeInputCompact]}
+                value={order.deliveryTime || ''}
+                onChangeText={(v) => tableId && setDeliveryTime(tableId, v)}
+                placeholder={timePlaceholder}
+                placeholderTextColor="#9ca3af"
+                maxLength={5}
+                keyboardType="numeric"
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+                blurOnSubmit
+              />
             </View>
-            <TextInput
-              style={[styles.deliveryTimeInput, styles.deliveryTimeInputCompact]}
-              value={order.deliveryTime || ''}
-              onChangeText={(v) => tableId && setDeliveryTime(tableId, v)}
-              placeholder="4:20"
-              placeholderTextColor="#9ca3af"
-              maxLength={5}
-              keyboardType="numeric"
-              returnKeyType="done"
-              onSubmitEditing={() => Keyboard.dismiss()}
-              blurOnSubmit
-            />
-          </View>
-        ) : (
-          <Text style={styles.tableHeaderHint}>
-            {table
-              ? ''
-              : '메뉴를 담은 뒤 [주문] 을 누르세요'}
-          </Text>
-        )}
+          );
+        })()}
       </View>
 
       {table?.type === 'delivery' && (

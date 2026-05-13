@@ -78,45 +78,177 @@ function paymentMethodLabel(code) {
   return map[code] || '미분류';
 }
 
+// ─── 1.0.44: ESC/POS 명령 인라인 헬퍼 ───
+// buildTextBytes(text, eucKrEncode) 가 텍스트를 EUC-KR 변환할 때 ASCII 범위(0x00-0x7F)는
+// 그대로 보존. 명령 바이트(ESC=0x1B, !=0x21 등)도 ASCII 라 안전. 한글만 EUC-KR 로 변환.
+// 줄별로 ESC ! n / ESC a n 명령을 prefix 로 붙이고, 줄 끝에 reset 으로 복귀.
+//
+// size: 'normal' | 'wide' (가로 두 배) | 'big' (가로+세로 두 배)
+const ESC_S = '\x1B';
+const SIZE_NORMAL = ESC_S + '\x21\x00';
+const SIZE_WIDE = ESC_S + '\x21\x20';
+const SIZE_BIG = ESC_S + '\x21\x30';
+const ALIGN_LEFT = ESC_S + '\x61\x00';
+const ALIGN_CENTER = ESC_S + '\x61\x01';
+
+function sizeCmd(size) {
+  if (size === 'big') return SIZE_BIG;
+  if (size === 'wide') return SIZE_WIDE;
+  return SIZE_NORMAL;
+}
+
+// 큰 글씨 + 가운데 정렬 — 프린터가 자동 정렬 (32 vs 16 폭 계산 안 해도 됨).
+function bigCenter(text, size = 'big') {
+  return ALIGN_CENTER + sizeCmd(size) + text + SIZE_NORMAL + ALIGN_LEFT;
+}
+
+// 큰 글씨 + 왼쪽 정렬 (배달 본문 줄).
+function bigLeft(text, size = 'wide') {
+  return sizeCmd(size) + text + SIZE_NORMAL;
+}
+
+// 1.0.44: 주문지 헤더 라벨 — 상황별. EUC-KR 호환 (이모지 X, 한글 + ASCII).
+function headerTitle(orderType) {
+  if (orderType === 'delivery') return '[ 배 달 주 문 지 ]';
+  if (orderType === 'reservation') return '[ 예 약 주 문 지 ]';
+  if (orderType === 'takeout') return '[ 포 장 주 문 지 ]';
+  return '[ 매 장 주 문 지 ]';
+}
+
+// 거리 m → "도로 1.2km" / "도로 850m"
+function formatDrivingShort(m) {
+  if (typeof m !== 'number' || !isFinite(m) || m < 0) return '';
+  if (m < 1000) return `${Math.round(m)}m`;
+  const km = m / 1000;
+  if (km < 10) return `${km.toFixed(1)}km`;
+  return `${Math.round(km)}km`;
+}
+
+function formatDurationShort(sec) {
+  if (typeof sec !== 'number' || !isFinite(sec) || sec < 0) return '';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+}
+
+// "01012345678" → "010-1234-5678". 7~11자리만 처리, 외엔 그대로.
+function formatPhone(digits) {
+  const d = String(digits || '').replace(/\D/g, '');
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) {
+    if (d.startsWith('02')) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  }
+  if (d.length === 9 && d.startsWith('02')) {
+    return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  }
+  if (d.length === 8) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return digits || '';
+}
+
+// "1220" + isPM=true → "오후 12시 20분". null 처리.
+function formatScheduledTime(rawTime, isPM) {
+  if (!rawTime) return '';
+  const digits = String(rawTime).replace(/\D/g, '');
+  if (digits.length < 3 || digits.length > 4) return '';
+  let h, m;
+  if (digits.length === 3) {
+    h = parseInt(digits.slice(0, 1), 10);
+    m = parseInt(digits.slice(1), 10);
+  } else {
+    h = parseInt(digits.slice(0, 2), 10);
+    m = parseInt(digits.slice(2), 10);
+  }
+  if (isNaN(h) || isNaN(m) || h < 1 || h > 12 || m > 59) return '';
+  const period = isPM ? '오후' : '오전';
+  return `${period} ${h}시 ${String(m).padStart(2, '0')}분`;
+}
+
 // 영수증 본문 텍스트 빌드 — 1.0.33 간결형.
 // 사장님 의도: 주문지 / 테이블명 / 배달지 / 주문메뉴 + 수량 + 가격 / 합계만. 매장 정보 / 부가세 분리 / 결제수단 / 푸터 모두 제거.
 //
 // 1.0.38: 분리 결제 영수증은 헤더에 "(분리 결제 — 손님: <라벨>)" 한 줄 추가.
-// 단체로 묶인 테이블에서 한 손님만 결제 / 그 손님이 영수증을 받을 때 어느 자리
-// 손님인지 명시. tableLabel 은 leader 라벨 그대로 (영수증 합산 매장 통계).
+// 1.0.44: 상황별 헤더 + 배달 본문 큰 글씨 + 예약/포장 시각 출력.
+//   - delivery: 주소(가로+세로 큰글씨) / 별칭 / 손님번호 / 도로거리 / 배달요청 시각 모두 큰글씨
+//   - reservation: 예약시각 큰글씨
+//   - takeout: 픽업시각 큰글씨
+//   - regular: 기존 그대로
+// ESC/POS 명령(ESC ! n, ESC a n) 을 텍스트 string 안에 inline. EUC-KR 인코더가
+// ASCII 범위 그대로 보존 → 한글만 변환되고 명령은 그대로 프린터로 전달.
 //
 // receipt: {
 //   tableId, tableLabel,
 //   items: [{ name, qty, price, largeQty, sizeUpcharge, optionLabels, memo }],
 //   total, deliveryAddress, printedAt,
 //   isSplit?: boolean,           // 분리 결제 영수증 여부
-//   sourceTableId?: string,      // 어느 손님 테이블 ID
-//   sourceTableLabel?: string    // 어느 손님 테이블 라벨 (호출부에서 미리 해석)
+//   sourceTableId?: string,
+//   sourceTableLabel?: string,
+//   orderType?: 'regular'|'delivery'|'reservation'|'takeout',  // 1.0.44
+//   customerPhone?: string,        // 1.0.44 — 배달용
+//   customerAlias?: string,        // 1.0.44 — 배달용
+//   drivingDistanceM?: number,     // 1.0.44 — 배달용 (m)
+//   drivingDurationSec?: number,   // 1.0.44 — 배달용 (sec)
+//   scheduledTime?: string,        // 1.0.44 — "420" / "1220"
+//   scheduledTimeIsPM?: boolean,   // 1.0.44
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
   const r = receipt || {};
+  const orderType = r.orderType || (r.deliveryAddress ? 'delivery' : 'regular');
 
-  // ───── 헤더 ─────
+  // ───── 헤더 (상황별 라벨 + 큰 글씨 가운데 정렬) ─────
   lines.push(divider('='));
-  lines.push(centerText('주  문  지'));
+  lines.push(bigCenter(headerTitle(orderType), 'big'));
   lines.push(centerText(formatDateTime(r.printedAt || Date.now())));
 
   // ───── 테이블 / 배달지 ─────
   lines.push(divider('-'));
-  // 1.0.39: 매장 서멀 프린터(EUC-KR 코드 페이지) 호환 — 이모지(📋👤🛵📝)와
-  // ▸·▶ 같은 unicode 보충문자가 프린터에서 ? 로 깨져 나옴 →
-  // KS X 1001 에 있는 ■ / ● + 텍스트 라벨로 통일. dash 와 콜론은 ASCII.
+  // 1.0.39: 매장 서멀 프린터(EUC-KR 코드 페이지) 호환 — 이모지/유니코드 보충문자 제거.
   const tableLabel = r.tableLabel || r.tableId;
   if (tableLabel) {
     lines.push(`■ 테이블: ${tableLabel}`);
   }
-  // 1.0.38: 분리 결제 — 손님 자리 명시 (1.0.39 이모지 제거)
+  // 1.0.38: 분리 결제 — 손님 자리 명시.
   if (r.isSplit && (r.sourceTableLabel || r.sourceTableId)) {
     const src = r.sourceTableLabel || r.sourceTableId;
     lines.push(`● 분리 결제 손님: ${src}`);
   }
-  if (r.deliveryAddress) {
+
+  // 1.0.44: orderType 별 본문 메타.
+  if (orderType === 'delivery') {
+    if (r.deliveryAddress) {
+      lines.push(bigLeft(`배달지 ${r.deliveryAddress}`, 'big'));
+    }
+    if (r.customerAlias) {
+      lines.push(bigLeft(`별칭   ${r.customerAlias}`, 'big'));
+    }
+    if (r.customerPhone) {
+      lines.push(bigLeft(`손님   ${formatPhone(r.customerPhone)}`, 'wide'));
+    }
+    if (typeof r.drivingDistanceM === 'number') {
+      const km = formatDrivingShort(r.drivingDistanceM);
+      const dur = formatDurationShort(r.drivingDurationSec);
+      const txt = dur ? `도로   ${km} (${dur})` : `도로   ${km}`;
+      lines.push(bigLeft(txt, 'wide'));
+    }
+    const schedDelivery = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
+    if (schedDelivery) {
+      lines.push(bigLeft(`출발   ${schedDelivery}`, 'wide'));
+    }
+  } else if (orderType === 'reservation') {
+    const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
+    if (sched) {
+      lines.push(bigLeft(`예약시각 ${sched}`, 'wide'));
+    }
+  } else if (orderType === 'takeout') {
+    const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
+    if (sched) {
+      lines.push(bigLeft(`픽업시각 ${sched}`, 'wide'));
+    }
+  } else if (r.deliveryAddress) {
+    // regular 인데 deliveryAddress 가 있으면 (호환 — orderType 미지정 옛 호출부)
     lines.push(`■ 배달: ${r.deliveryAddress}`);
   }
 

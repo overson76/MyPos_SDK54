@@ -20,6 +20,7 @@ import {
   findHistoryEntry,
   groupItemsBySource,
   markHistoryReverted,
+  normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
@@ -492,8 +493,33 @@ export function OrderProvider({ children }) {
       }
       dispatch({ type: 'orders/confirmOrder', tableId });
 
+      // 1.0.44: 자동 출력 — 상황별 영수증을 위해 주소록 entry 조회로 손님번호/별칭/
+      // 도로 실거리/예약시각 까지 함께 emit. 주소록은 useAddressBook 이 lat/lng/
+      // drivingM 백그라운드 채움 — 처음 입력 직후 confirm 시엔 null 일 수 있음 (정상).
+      const orderType = tblForListener?.type || 'regular';
+      let customerPhone = null;
+      let customerAlias = null;
+      let drivingDistanceM = null;
+      let drivingDurationSec = null;
+      const addrForLookup = orderSnap?.deliveryAddress || '';
+      if (orderType === 'delivery' && addrForLookup) {
+        const akey = normalizeAddressKey(addrForLookup);
+        const entry = akey ? addressBook?.entries?.[akey] : null;
+        if (entry) {
+          customerPhone = entry.phone || null;
+          customerAlias = entry.alias || null;
+          drivingDistanceM =
+            typeof entry.drivingM === 'number' ? entry.drivingM : null;
+          drivingDurationSec =
+            typeof entry.drivingDurationSec === 'number'
+              ? entry.drivingDurationSec
+              : null;
+        }
+      }
+
       // 자동 출력 listeners 호출 — 다음 tick (영업 흐름 안 막게) + 캡처한 데이터 전달.
       // 1.0.32: 영수증 빌더 통일 — items / total 도 함께 emit.
+      // 1.0.44: orderType + scheduledTime + customer/driving 필드 추가.
       if (confirmListenersRef.current.size > 0) {
         setTimeout(() => {
           for (const cb of confirmListenersRef.current) {
@@ -504,9 +530,16 @@ export function OrderProvider({ children }) {
                 rows: diffRows,
                 items: itemsSnap,
                 total: totalSnap,
-                isDelivery: tblForListener?.type === 'delivery',
+                isDelivery: orderType === 'delivery',
+                orderType,
                 deliveryAddress: orderSnap?.deliveryAddress || '',
                 tableLabel: tblForListener?.label || tableId,
+                scheduledTime: orderSnap?.deliveryTime || '',
+                scheduledTimeIsPM: orderSnap?.deliveryTimeIsPM ?? true,
+                customerPhone,
+                customerAlias,
+                drivingDistanceM,
+                drivingDurationSec,
               });
             } catch {}
           }

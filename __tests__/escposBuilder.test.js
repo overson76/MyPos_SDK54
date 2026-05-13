@@ -67,9 +67,10 @@ describe('buildReceiptText', () => {
     printedAt: new Date('2026-04-29T14:30:00').getTime(),
   };
 
-  test('필수 섹션 — 주문지 + 테이블 + 메뉴 + 합계', () => {
+  test('필수 섹션 — 매장 헤더 + 테이블 + 메뉴 + 합계 (1.0.44)', () => {
     const text = buildReceiptText(sample);
-    expect(text).toContain('주  문  지');
+    // 1.0.44: 상황별 헤더 — orderType 미지정 + deliveryAddress 없음 → 매장
+    expect(text).toContain('매 장 주 문 지');
     expect(text).toContain('테이블: 1');
     expect(text).toContain('치킨 x2');
     expect(text).toContain('콜라 x1');
@@ -112,18 +113,100 @@ describe('buildReceiptText', () => {
     expect(text).not.toContain('▸');
     expect(text).toContain('■ 테이블');
     expect(text).toContain('● 분리 결제 손님');
-    expect(text).toContain('■ 배달');
+    // 1.0.44: orderType 미지정 + deliveryAddress 있음 → 'delivery' 추정 → 새 형식
+    expect(text).toContain('배달지');
     expect(text).toContain('- 매운맛');
     expect(text).toContain('메모: 소스 따로');
   });
 
-  test('배달 주소 있으면 "■ 배달:" 라벨로 표시', () => {
+  test('배달 주소만 있고 orderType 미지정 — 옛 호환 "■ 배달:" fallback', () => {
     const text = buildReceiptText({
       ...sample,
       deliveryAddress: '서울시 종로구 ...',
     });
-    expect(text).toContain('■ 배달');
+    // 1.0.44: orderType 미지정 + deliveryAddress 만 있으면 'delivery' 로 추정
+    expect(text).toContain('배 달 주 문 지');
+    expect(text).toContain('배달지');
     expect(text).toContain('서울시 종로구');
+  });
+
+  // 1.0.44 신규 ───────────────────────────────────────────────
+  test('1.0.44 — orderType=delivery + 손님 정보 + 도로거리 + 배달요청 시각', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 하신번영로 199',
+      customerPhone: '01012345678',
+      customerAlias: '김씨네 아파트',
+      drivingDistanceM: 2300,
+      drivingDurationSec: 720,
+      scheduledTime: '420',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('배 달 주 문 지');
+    expect(text).toContain('배달지 부산 사하구 하신번영로 199');
+    expect(text).toContain('별칭   김씨네 아파트');
+    expect(text).toContain('손님   010-1234-5678');
+    expect(text).toContain('도로   2.3km');
+    expect(text).toContain('12분');
+    expect(text).toContain('출발   오후 4시 20분');
+  });
+
+  test('1.0.44 — orderType=reservation 헤더 + 예약시각', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'reservation',
+      scheduledTime: '630',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('예 약 주 문 지');
+    expect(text).toContain('예약시각 오후 6시 30분');
+    expect(text).not.toContain('배달지');
+  });
+
+  test('1.0.44 — orderType=takeout 헤더 + 픽업시각', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'takeout',
+      scheduledTime: '515',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('포 장 주 문 지');
+    expect(text).toContain('픽업시각 오후 5시 15분');
+  });
+
+  test('1.0.44 — 배달인데 손님 전화/거리 모두 null 이어도 안전', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 ...',
+      customerPhone: null,
+      customerAlias: null,
+      drivingDistanceM: null,
+    });
+    expect(text).toContain('배 달 주 문 지');
+    expect(text).toContain('배달지');
+    expect(text).not.toContain('별칭');
+    expect(text).not.toContain('손님');
+    expect(text).not.toContain('도로');
+  });
+
+  test('1.0.44 — 매장 전화번호 포맷 (02 지역번호 + 휴대전화)', () => {
+    const t1 = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '서울 종로구 ...',
+      customerPhone: '0212345678',
+    });
+    expect(t1).toContain('02-1234-5678');
+
+    const t2 = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '서울 종로구 ...',
+      customerPhone: '01098765432',
+    });
+    expect(t2).toContain('010-9876-5432');
   });
 
   test('1.0.38 — 분리 결제 영수증은 "👤 분리 결제 손님: <라벨>" 라인 포함', () => {

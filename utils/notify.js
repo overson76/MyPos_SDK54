@@ -612,6 +612,24 @@ export function speakDeliveryAlert({ table, minutesLeft, address }) {
   if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
+// 1.0.44: 예약 시각 10/5분 전 알림. 매장 손님 자리 점유 안내 — 주소 미사용.
+export function speakReservationAlert({ table, minutesLeft }) {
+  cancelSpeech();
+  const name = tableSpokenLabel(table.label);
+  const mins = Math.max(0, Math.round(minutesLeft || 0));
+  const text = `${name}, 예약 시각 ${mins > 0 ? mins + '분 전' : '시간'}입니다.`;
+  triggerSharedAudio({ type: 'speak', text });
+}
+
+// 1.0.44: 포장 픽업 시각 10/5분 전 알림. 주방 준비/픽업 안내 — 주소 미사용.
+export function speakTakeoutAlert({ table, minutesLeft }) {
+  cancelSpeech();
+  const name = tableSpokenLabel(table.label);
+  const mins = Math.max(0, Math.round(minutesLeft || 0));
+  const text = `${name}, 포장 픽업 ${mins > 0 ? mins + '분 전' : '시간'}입니다.`;
+  triggerSharedAudio({ type: 'speak', text });
+}
+
 export function speakPartialReady({ table, itemName }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);

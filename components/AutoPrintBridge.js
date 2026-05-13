@@ -47,10 +47,20 @@ export default function AutoPrintBridge() {
           isDelivery,
           deliveryAddress,
           tableLabel,
+          // 1.0.44: OrderContext 가 미리 계산한 orderType (resolveTableForAlert 기반).
+          // 아래 1.0.41 분기에서 자체 계산하므로 alias 로 받음 — 두 값이 같지만 fallback 안전.
+          orderType: emittedOrderType,
+          scheduledTime,
+          scheduledTimeIsPM,
+          customerPhone,
+          customerAlias,
+          drivingDistanceM,
+          drivingDurationSec,
         } = info;
         addBreadcrumb('autoprint.received', {
           tableId,
           isDelivery,
+          orderType: emittedOrderType,
           itemsCount: Array.isArray(items) ? items.length : 0,
           total,
           hasAddress: !!deliveryAddress,
@@ -70,9 +80,10 @@ export default function AutoPrintBridge() {
         // 1.0.41: 주문 종류별 자동 출력 분기 — 사장님 신고 "배달만 체크했는데
         // 테이블 주문도 인쇄됨" fix. tableId 의 type 으로 판단. 분할/단체(#) 는
         // parent ID 로 분해 후 type 추출.
+        // 1.0.44: OrderContext 가 emit 시 이미 계산해 보내주지만, fallback 으로 자체 계산.
         const baseId = String(tableId || '').split('#')[0];
         const tbl = resolveAnyTable(baseId);
-        const orderType = tbl?.type || 'regular';
+        const orderType = emittedOrderType || tbl?.type || 'regular';
         const autoTypes = await loadAutoTypes();
         if (!autoTypes.includes(orderType)) {
           addBreadcrumb('autoprint.skip.type-off', {
@@ -106,6 +117,14 @@ export default function AutoPrintBridge() {
           paymentStatus: 'pending',
           deliveryAddress: isDelivery ? deliveryAddress : '',
           printedAt: Date.now(),
+          // 1.0.44: 상황별 영수증 — orderType + 예약/포장 시각 + 배달 손님 정보.
+          orderType,
+          scheduledTime,
+          scheduledTimeIsPM,
+          customerPhone,
+          customerAlias,
+          drivingDistanceM,
+          drivingDurationSec,
         });
 
         addBreadcrumb('autoprint.building', {
