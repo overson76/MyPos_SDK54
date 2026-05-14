@@ -163,6 +163,13 @@ function startCidListener(onIncomingCall) {
   _diag.listenerStartedAt = new Date().toISOString();
   _diag.configSnapshot = snapshotConfig();
 
+  // 1.0.44: SIP 직접 등록 비활성화 — LG U+ Centrex Rest API Webhook(cidServer.js)으로 대체.
+  // 함수 시그니처는 유지 (main.js 호환). 환경변수 MYPOS_CID_MODE=sip 일 때만 옛 흐름 fallback.
+  if ((process.env.MYPOS_CID_MODE || 'webhook') !== 'sip') {
+    _diag.lastError = 'SIP 비활성화 (1.0.44 부터 Webhook 모드 — cidServer.js 참고)';
+    return false;
+  }
+
   if (!sip) {
     _diag.lastError = 'sip 패키지 로드 안 됨';
     console.warn('[cid] sip 패키지 없음 — CID 비활성화');

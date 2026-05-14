@@ -88,8 +88,9 @@ function SystemSettingsView() {
   const [otaStatus, setOtaStatus] = useState(null); // null | 'checking' | 'downloading' | 'downloaded' | 'upToDate' | 'error'
   const [otaBusy, setOtaBusy] = useState(false);
 
-  // CID 진단 — Electron(.exe) 환경에서만. SIP 가 어디서 막히는지 사장님이 화면으로 확인.
-  const [cidDiag, setCidDiag] = useState(null); // null | { ... 진단 스냅샷 }
+  // CID 진단 — 1.0.44 부터 LG U+ Centrex Webhook 모드.
+  //   webhook 서버 상태 + IP 워치독 + LG U+ API 등록 결과를 한 화면에.
+  const [cidDiag, setCidDiag] = useState(null);
   const [cidBusy, setCidBusy] = useState(false);
   const handleCidDiagnose = async () => {
     if (cidBusy) return;
@@ -97,6 +98,21 @@ function SystemSettingsView() {
     try {
       const r = await window?.mypos?.cidDiagnose?.();
       setCidDiag(r || { error: '진단 실패 — IPC 응답 없음' });
+    } catch (e) {
+      setCidDiag({ error: String(e?.message || e) });
+    } finally {
+      setCidBusy(false);
+    }
+  };
+  // 1.0.44: 강제 즉시 setringcallback 호출 — 광 공유기 WAN IP 가 바뀐 직후 영업 복구용.
+  const handleCidRegisterNow = async () => {
+    if (cidBusy) return;
+    setCidBusy(true);
+    try {
+      const r = await window?.mypos?.cidRegisterNow?.();
+      // 등록 직후 재진단으로 화면 갱신.
+      const diag = await window?.mypos?.cidDiagnose?.();
+      setCidDiag(diag || { error: r?.error || '등록 결과 확인 실패' });
     } catch (e) {
       setCidDiag({ error: String(e?.message || e) });
     } finally {
@@ -261,74 +277,89 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === CID 진단 — Electron(.exe) 환경에서만. SIP 5060 / REGISTER 결과 확인. === */}
+      {/* === CID 진단 — 1.0.44 LG U+ Centrex Webhook 모드. Electron(.exe) 환경에서만. === */}
       {isElectron() ? (
         <>
           <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>📞 CID 진단 (PC 카운터)</Text>
           <View style={sysStyles.row}>
             <View style={sysStyles.rowText}>
-              <Text style={sysStyles.label}>전화 자동 감지(SIP) 상태</Text>
+              <Text style={sysStyles.label}>전화 자동 감지 (Webhook 모드)</Text>
               <Text style={sysStyles.helper}>
-                매장 PC 의 SIP 리스너가 5060 을 잡았는지, REGISTER 가 가는지, 응답이 어떤지 확인합니다.{'\n'}
+                LG U+ Centrex Rest API 의 전화 수신 알림(Webhook) 으로 발신번호 받습니다.{'\n'}
+                흐름: LG U+ SIP 서버 → 광 공유기 NAT (외부 8080 → 매장 PC 8090) → 주소록 매칭 → 모든 기기 알림.{'\n'}
                 {storeInfo?.storeId
-                  ? `현재 매장 ID(끝 12자): ${String(storeInfo.storeId).slice(-12)}`
-                  : '⚠ 매장 ID 가 비어있음 — start-cid 가 호출되지 않을 수 있습니다.'}
+                  ? `현재 매장 ID: ${String(storeInfo.storeId).slice(-12)}`
+                  : '⚠ 매장 ID 비어있음 — start-cid 호출 안 됨'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[sysStyles.btnSecondary, cidBusy && { opacity: 0.5 }]}
-              disabled={cidBusy}
-              onPress={handleCidDiagnose}
-            >
-              <Text style={sysStyles.btnSecondaryText}>
-                {cidBusy ? '진단 중…' : '🔍 진단'}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ gap: 6 }}>
+              <TouchableOpacity
+                style={[sysStyles.btnSecondary, cidBusy && { opacity: 0.5 }]}
+                disabled={cidBusy}
+                onPress={handleCidDiagnose}
+              >
+                <Text style={sysStyles.btnSecondaryText}>{cidBusy ? '진단 중…' : '🔍 진단'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[sysStyles.btnSecondary, cidBusy && { opacity: 0.5 }]}
+                disabled={cidBusy}
+                onPress={handleCidRegisterNow}
+              >
+                <Text style={sysStyles.btnSecondaryText}>{cidBusy ? '…' : '🔄 지금 등록'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           {cidDiag ? (
             <View style={sysStyles.diagBox}>
+              {/* Webhook 서버 상태 */}
               <Text style={sysStyles.diagLine}>
-                sip 패키지: {cidDiag.sipPackageLoaded ? '✅ 로드됨' : `❌ 로드 실패${cidDiag.sipPackageError ? ` (${cidDiag.sipPackageError})` : ''}`}
+                Webhook 서버: {cidDiag.webhook?.running
+                  ? `✅ 0.0.0.0:${cidDiag.webhook.port} 실행 중`
+                  : '❌ 미실행'}
               </Text>
               <Text style={sysStyles.diagLine}>
-                리스너 시작 호출: {cidDiag.listenerStartCalled ? `✅ ${cidDiag.listenerStartedAt || ''}` : '❌ 아직 호출 안 됨 (storeId 비어있거나 start-cid 누락)'}
+                마지막 수신: {cidDiag.webhook?.lastRing
+                  ? `📞 ${cidDiag.webhook.lastRing.formatted || cidDiag.webhook.lastRing.sender} · ${cidDiag.webhook.lastRing.at}`
+                  : '없음'}
               </Text>
               <Text style={sysStyles.diagLine}>
-                running: {cidDiag.running ? '✅ true' : '❌ false'}
-                {cidDiag.sipStartError ? `   ⚠ start 실패: ${cidDiag.sipStartError}` : ''}
+                총 요청: {cidDiag.webhook?.totalRequests ?? 0} 회{cidDiag.webhook?.lastRequestAt ? ` · 마지막 ${cidDiag.webhook.lastRequestAt}` : ''}
               </Text>
-              <Text style={sysStyles.diagLine}>
-                UDP {cidDiag.portProbe?.port ?? '?'} 바인딩: {cidDiag.portProbe?.bound ? '✅ 잡혀있음 (SIP 가 잡고 있을 가능성)' : `❌ 비어있음${cidDiag.portProbe?.errorCode ? ` (${cidDiag.portProbe.errorCode})` : ''}`}
-              </Text>
-              <Text style={sysStyles.diagLine}>
-                REGISTER 송신: {cidDiag.registerSentCount ?? 0} 회{cidDiag.registerLastAt ? ` · 마지막 ${cidDiag.registerLastAt}` : ''}
-              </Text>
-              <Text style={sysStyles.diagLine}>
-                마지막 SIP 응답: {cidDiag.lastResponseStatus ?? '없음'}{cidDiag.lastResponseAt ? ` · ${cidDiag.lastResponseAt}` : ''}
-              </Text>
-              <Text style={sysStyles.diagLine}>
-                마지막 INVITE: {cidDiag.lastInviteFrom ? `${cidDiag.lastInviteFrom} (${cidDiag.lastInviteAt})` : '없음'}
-              </Text>
-              {cidDiag.lastError ? (
+
+              {/* IP 워치독 + LG U+ 등록 상태 */}
+              <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#374151', paddingTop: 6 }}>
+                <Text style={sysStyles.diagLine}>
+                  매장 외부 IP: {cidDiag.ipWatcher?.lastKnownIp || '미감지'}{cidDiag.ipWatcher?.lastCheckedAt ? ` (${cidDiag.ipWatcher.lastCheckedAt})` : ''}
+                </Text>
+                <Text style={sysStyles.diagLine}>
+                  LG U+ 등록: {cidDiag.ipWatcher?.lastRegistrationResult?.ok
+                    ? `✅ ${cidDiag.ipWatcher.registeredCallbackHost}:${cidDiag.ipWatcher.registeredCallbackPort}${cidDiag.ipWatcher.registeredCallbackUrl}`
+                    : `❌ ${cidDiag.ipWatcher?.lastRegistrationResult?.code || '미시도'} ${cidDiag.ipWatcher?.lastRegistrationResult?.message || ''}`}
+                </Text>
+                <Text style={sysStyles.diagLine}>
+                  마지막 등록: {cidDiag.ipWatcher?.lastRegistrationAt || '없음'} · 누적 {cidDiag.ipWatcher?.totalRegistrations ?? 0} 회 · 체크 {cidDiag.ipWatcher?.totalChecks ?? 0} 회
+                </Text>
+              </View>
+
+              {/* LG U+ API 자격 */}
+              <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#374151', paddingTop: 6 }}>
+                <Text style={sysStyles.diagLine}>
+                  LG U+ API ID: {cidDiag.lguApi?.ok
+                    ? `✅ ${cidDiag.lguApi.id}`
+                    : `❌ ${cidDiag.lguApi?.error || '환경변수(MYPOS_LGU_API_ID/PASS) 미설정'}`}
+                </Text>
+              </View>
+
+              {/* 에러 */}
+              {cidDiag.webhook?.lastError ? (
                 <Text style={[sysStyles.diagLine, { color: '#dc2626' }]}>
-                  ⚠ 마지막 에러: {cidDiag.lastError}
+                  ⚠ Webhook 에러: {cidDiag.webhook.lastError}
                 </Text>
               ) : null}
-              {cidDiag.configSnapshot ? (
-                <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#374151', paddingTop: 6 }}>
-                  <Text style={sysStyles.diagLine}>
-                    설정: {cidDiag.configSnapshot.user}@{cidDiag.configSnapshot.domain}:{cidDiag.configSnapshot.port}
-                  </Text>
-                  <Text style={sysStyles.diagLine}>
-                    host: {cidDiag.configSnapshot.host}{cidDiag.configSnapshot.envHostSet ? '' : ' (env 미설정 → default)'}
-                  </Text>
-                  <Text style={sysStyles.diagLine}>
-                    user: {cidDiag.configSnapshot.envUserSet ? '✅ env' : '❌ default'} · pass: {cidDiag.configSnapshot.passSet ? `✅ ${cidDiag.configSnapshot.passLength}자` : '❌ 빈값'}{cidDiag.configSnapshot.envPassSet ? ' (env)' : ' (default)'}
-                  </Text>
-                  <Text style={sysStyles.diagLine}>
-                    domain: {cidDiag.configSnapshot.envDomainSet ? '✅ env' : '❌ default → lgdacom.net'}
-                  </Text>
-                </View>
+              {cidDiag.ipWatcher?.lastError ? (
+                <Text style={[sysStyles.diagLine, { color: '#dc2626' }]}>
+                  ⚠ IP 등록 에러: {cidDiag.ipWatcher.lastError}
+                </Text>
               ) : null}
               {cidDiag.error ? (
                 <Text style={[sysStyles.diagLine, { color: '#dc2626' }]}>

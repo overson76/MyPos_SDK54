@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "main": "index.js",
   "scripts": {
     "start": "expo start",

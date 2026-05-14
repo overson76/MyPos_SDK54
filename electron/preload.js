@@ -96,10 +96,16 @@ contextBridge.exposeInMainWorld('mypos', {
     ipcRenderer.on('mypos/incoming-call', handler);
     return () => ipcRenderer.removeListener('mypos/incoming-call', handler);
   },
-  // CID 진단 — sip 패키지 로드 / 5060 바인딩 / REGISTER 결과 등 스냅샷.
+  // CID 진단 — 1.0.44 부터 Webhook + IP 워치독 통합 진단.
+  //   { mode: 'webhook', webhook: {...}, ipWatcher: {...}, lguApi: {...}, sip: {...}, storeId }
   // 관리자 → 시스템 → "📞 CID 진단" 카드가 호출.
   async cidDiagnose() {
     return await ipcRenderer.invoke('mypos/cid-status');
+  },
+  // CID 강제 재등록 — AdminScreen 의 "지금 등록" 버튼이 호출.
+  //   현재 매장 광 공유기 WAN IP 로 setringcallback 즉시 호출 (rate limit 5초 가드 있음).
+  async cidRegisterNow() {
+    return await ipcRenderer.invoke('mypos/cid-register-now');
   },
 
   async checkUpdate() {

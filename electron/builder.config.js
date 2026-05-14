@@ -36,6 +36,8 @@ module.exports = {
     'electron/**/*',
     'dist/**/*',
     'utils/escposBuilder.js',   // electron/printer/print.js 가 require 함
+    'utils/lguApi.js',          // 1.0.44: electron/main.js, electron/cidServer.js 가 require
+    'utils/ipWatcher.js',       // 1.0.44: electron/main.js 가 require (LG U+ Webhook 흐름)
     'package.json',
     'node_modules/sip/**/*',    // CID SIP 리스너 — 명시 포함 (1.0.9 진단)
     '!electron/payment/bridge/**',  // 소스/.csproj/bin/obj 제외 — extraResources 로 .exe 만 별도 포함

@@ -21,6 +21,11 @@ const fs = require('node:fs');
 const { printReceiptIpc } = require('./printer/print');
 const { kisPayIpc, kisDiagnoseIpc } = require('./payment/kis');
 const { startCidListener, getCidDiagnosis } = require('./cid');
+// 1.0.44: LG U+ Centrex Rest API Webhook 흐름 — SIP 직접 등록 우회.
+//   매장 광 공유기의 NAT 포트 포워딩 (외부 8080 → 매장 PC 8090) 으로 전화 수신 알림.
+//   기존 SIP 코드 (electron/cid.js) 는 함수 시그니처만 유지하고 내부 no-op.
+const cidServer = require('./cidServer');
+const ipWatcher = require('../utils/ipWatcher');
 const { saveMembership, loadMembership, clearMembership } = require('./store-persist');
 const { setupAutoUpdater, checkNow, applyNow, getLastStatus } = require('./updater');
 const {
@@ -212,28 +217,65 @@ app.whenReady().then(() => {
     setupAutoUpdater(() => BrowserWindow.getAllWindows());
   }
 
-  // CID 착신 감지 — Electron 에서만 실행. 전화 오면 모든 기기에 Firebase 이벤트 push.
-  // IPC 로 렌더러가 storeId 를 전달하면 CID 활성화.
-  ipcMain.handle('mypos/start-cid', (_event, storeId) => {
-    if (!storeId) return { ok: false };
-    startCidListener((phoneNumber, formattedNumber) => {
-      // Firebase 에 기록 — 렌더러(웹) 에서 처리
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('mypos/incoming-call', { phoneNumber, formattedNumber, storeId });
-        }
-      }
+  // CID 착신 감지 — 1.0.44 부터 LG U+ Centrex Webhook 흐름.
+  //   1) cidServer (HTTP :8090) 시작 — LG U+ 가 전화 수신시 callbackhost:callbackport 로
+  //      HTTP GET 호출. 매장 광 공유기 NAT 가 외부 :8080 → 내부 :8090 으로 forwarding.
+  //   2) ipWatcher 시작 — 1시간마다 매장 광 공유기 WAN IP 체크 + 변경 시 setringcallback
+  //      자동 재호출. IP 가 바뀌어도 무중단.
+  //   3) 매장 storeId 저장 — cidServer 가 IPC 푸시할 때 storeId 포함.
+  //   기존 SIP startCidListener 는 1.0.44 부터 내부 no-op (electron/cid.js 참고).
+  let _cidStoreId = null;
+  ipcMain.handle('mypos/start-cid', async (_event, storeId) => {
+    if (!storeId) return { ok: false, error: 'storeId 누락' };
+    _cidStoreId = String(storeId);
+
+    // (a) Webhook 수신 서버 시작 — 같은 IPC ('mypos/incoming-call') 로 푸시해서
+    //     useCidHandler.web.js 가 기존 흐름 그대로 받음.
+    const internalPort = Number(process.env.MYPOS_CID_INTERNAL_PORT) || 8090;
+    cidServer.start({
+      port: internalPort,
+      getWindows: () => BrowserWindow.getAllWindows(),
+      getStoreId: () => _cidStoreId,
     });
+
+    // (b) WAN IP 워치독 시작 + 즉시 1회 setringcallback.
+    //     callbackUrl / callbackPort 는 광 공유기에서 외부에 노출한 값과 일치해야 함.
+    const callbackUrl = process.env.MYPOS_LGU_CALLBACK_URL || '/cid/ring';
+    const callbackPort = Number(process.env.MYPOS_LGU_CALLBACK_PORT) || 8080;
+    ipWatcher.start({ callbackUrl, callbackPort }).catch((e) => {
+      console.error('[main] ipWatcher 시작 실패:', e && e.message || e);
+    });
+
     return { ok: true };
   });
 
-  // CID 진단 — production .exe 에선 console.log 가 안 보임.
-  // 관리자 → 시스템 → CID 진단 카드가 호출.
+  // CID 진단 — 1.0.44 통합 진단 (Webhook 서버 + IP 워치독 + LG U+ API 헬스).
+  //   기존 SIP 진단(getCidDiagnosis) 는 sip 미사용이라 대부분 비어있음. 호환 위해 sip 영역도 같이 반환.
   ipcMain.handle('mypos/cid-status', async () => {
     try {
-      return await getCidDiagnosis();
+      const lguApi = require('../utils/lguApi');
+      return {
+        mode: 'webhook', // 1.0.44 부터 Webhook 모드. 옛값 'sip' 비교용.
+        webhook: cidServer.getDiagnosis(),
+        ipWatcher: ipWatcher.getDiagnosis(),
+        lguApi: lguApi.healthCheck(),
+        sip: (function() { try { return getCidDiagnosis(); } catch { return null; } })(),
+        storeId: _cidStoreId,
+      };
     } catch (e) {
       return { error: (e && e.message) || String(e) };
+    }
+  });
+
+  // CID 강제 재등록 — AdminScreen 의 "지금 등록" 버튼이 호출.
+  ipcMain.handle('mypos/cid-register-now', async () => {
+    try {
+      const callbackUrl = process.env.MYPOS_LGU_CALLBACK_URL || '/cid/ring';
+      const callbackPort = Number(process.env.MYPOS_LGU_CALLBACK_PORT) || 8080;
+      const diag = await ipWatcher.forceRegisterNow({ callbackUrl, callbackPort });
+      return { ok: true, diag };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || String(e) };
     }
   });
 
