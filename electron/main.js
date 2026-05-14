@@ -249,17 +249,18 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
-  // CID 진단 — 1.0.44 통합 진단 (Webhook 서버 + IP 워치독 + LG U+ API 헬스).
-  //   기존 SIP 진단(getCidDiagnosis) 는 sip 미사용이라 대부분 비어있음. 호환 위해 sip 영역도 같이 반환.
+  // CID 진단 — 1.0.45 통합 진단 (Webhook 서버 + IP 워치독 + LG U+ API 헬스).
+  //   1.0.44 의 sip 필드 제거 — getCidDiagnosis 가 async 인데 await 안 해서 Promise 가
+  //   응답에 들어감 → Electron structured clone 실패("An object could not be cloned")로
+  //   진단 IPC 가 영원히 reject. Webhook 모드에선 sip 진단 무관이라 제거.
   ipcMain.handle('mypos/cid-status', async () => {
     try {
       const lguApi = require('../utils/lguApi');
       return {
-        mode: 'webhook', // 1.0.44 부터 Webhook 모드. 옛값 'sip' 비교용.
+        mode: 'webhook',
         webhook: cidServer.getDiagnosis(),
         ipWatcher: ipWatcher.getDiagnosis(),
         lguApi: lguApi.healthCheck(),
-        sip: (function() { try { return getCidDiagnosis(); } catch { return null; } })(),
         storeId: _cidStoreId,
       };
     } catch (e) {
