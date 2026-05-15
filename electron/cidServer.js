@@ -8,7 +8,10 @@
 //     → useCidHandler.web.js 가 그대로 받아서 매장 주소록 매칭 + Firestore + TTS
 //
 // 보안:
-//   - receiver(070번호) 가 우리 매장 번호와 일치해야만 처리
+//   - receiver 가 우리 매장 번호와 일치해야만 처리
+//     · 기본: MYPOS_LGU_API_ID (070 번호 — Centrex 단말 등록 ID)
+//     · 추가: MYPOS_LGU_RECEIVERS (콤마 분리) — 실제 영업 번호가 070 이 아닌 경우 (예: 051 지역번호)
+//       LG U+ 가 webhook 호출 시 receiver 파라미터로 실제 받은 번호를 보냄 — 단말 등록 ID 와 다를 수 있음
 //   - sender 는 숫자만 (max 20), message 는 max 500 으로 길이 제한
 //   - /cid/ring 외 다른 path 는 404
 //
@@ -64,17 +67,31 @@ function _broadcast(phoneNumber, formattedNumber) {
   }
 }
 
+// receiver 허용 목록 — MYPOS_LGU_API_ID + MYPOS_LGU_RECEIVERS (콤마 분리) 의 합집합.
+// 빈 set 이면 검증 skip (개발/디버깅용).
+function _allowedReceivers() {
+  const allowed = new Set();
+  const apiId = (process.env.MYPOS_LGU_API_ID || '').replace(/[^0-9]/g, '');
+  if (apiId) allowed.add(apiId);
+  const extra = String(process.env.MYPOS_LGU_RECEIVERS || '')
+    .split(',')
+    .map((s) => s.replace(/[^0-9]/g, ''))
+    .filter(Boolean);
+  for (const r of extra) allowed.add(r);
+  return allowed;
+}
+
 function _handleRing(req, res, parsed) {
-  const expectedReceiver = (process.env.MYPOS_LGU_API_ID || '').replace(/[^0-9]/g, '');
+  const allowed = _allowedReceivers();
   const q = parsed.query || {};
   const sender = String(q.sender || '').replace(/[^0-9+]/g, '').slice(0, 20);
   const receiver = String(q.receiver || '').replace(/[^0-9]/g, '').slice(0, 20);
   const kind = String(q.kind || '');
   const innerNum = String(q.inner_num || '').slice(0, 20);
 
-  // 보안: receiver 검증 — 우리 매장 번호 일치 여부 (set 안 됐으면 skip).
-  if (expectedReceiver && receiver !== expectedReceiver) {
-    _diag.lastError = `receiver 불일치: ${receiver} ≠ ${expectedReceiver}`;
+  // 보안: receiver 검증 — 허용 목록 중 하나와 일치 (목록이 비어있으면 skip).
+  if (allowed.size > 0 && !allowed.has(receiver)) {
+    _diag.lastError = `receiver 불일치: ${receiver} ∉ {${Array.from(allowed).join(', ')}}`;
     res.writeHead(403, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ SVC_RT: '4030', SVC_MSG: 'receiver mismatch' }));
     return;
