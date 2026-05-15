@@ -41,7 +41,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const rowRefs = useRef({});
   // 인덱스 바 드래그 — 현재 호버 글자 큰 미리보기 표시 (iPhone 연락처 패턴).
   const [activeHover, setActiveHover] = useState(null);
-  const barHeightRef = useRef(0);
+  const barWidthRef = useRef(0);
   const lastIdxRef = useRef(-1);
   // 인덱스 항목 — ⭐ (자주 정렬) + 14자음 + A + # = 17개. memo 로 안정성.
   const indexItems = useMemo(() => ['⭐', ...HANGUL_INDEX_BAR], []);
@@ -121,14 +121,16 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     fnsRef.current = { jumpToInitial, resetSort };
   });
 
-  const handleBarTouch = (locationY) => {
-    const h = barHeightRef.current;
-    if (!h) return;
+  // 인덱스 바는 list 하단의 가로 한 줄 — locationX 로 항목 결정.
+  // 폰 가로 모드(932×430)에서 세로 17개가 잘리는 문제 해결 + 매장 POS 가로 화면에 자연스러움.
+  const handleBarTouch = (locationX) => {
+    const w = barWidthRef.current;
+    if (!w) return;
     const idx = Math.max(
       0,
       Math.min(
         indexItems.length - 1,
-        Math.floor((locationY / h) * indexItems.length)
+        Math.floor((locationX / w) * indexItems.length)
       )
     );
     if (idx === lastIdxRef.current) return;
@@ -146,10 +148,10 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (e) => {
           lastIdxRef.current = -1; // 새 드래그 시작 → 같은 위치도 재호출
-          handleBarTouch(e.nativeEvent.locationY);
+          handleBarTouch(e.nativeEvent.locationX);
         },
         onPanResponderMove: (e) => {
-          handleBarTouch(e.nativeEvent.locationY);
+          handleBarTouch(e.nativeEvent.locationX);
         },
         onPanResponderRelease: () => {
           // 손가락 떼면 0.8초 후 hover preview 사라짐 — 사용자가 결과 인지할 시간.
@@ -444,9 +446,9 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             <View
               style={styles.indexBar}
               onLayout={(e) => {
-                barHeightRef.current = e.nativeEvent.layout.height;
+                barWidthRef.current = e.nativeEvent.layout.width;
               }}
-              accessibilityLabel="가나다 빠른찾기 — 탭 또는 드래그"
+              accessibilityLabel="가나다 빠른찾기 — 탭 또는 좌우 드래그"
               {...barPanResponder.panHandlers}
             >
               {indexItems.map((ch, idx) => {
@@ -579,22 +581,26 @@ function makeStyles(scale = 1) {
   emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
   list: { flex: 1, maxHeight: 420 },
-  listWithIndex: { flexDirection: 'row', maxHeight: 420 },
+  // 인덱스 바를 list 하단 가로 한 줄로 배치 — 폰 가로(932×430) 잘림 해소.
+  listWithIndex: { flexDirection: 'column', maxHeight: 420 },
   indexBar: {
-    width: 38,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    borderLeftWidth: 1,
-    borderLeftColor: '#e5e7eb',
+    flexDirection: 'row',
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
     alignItems: 'center',
+    justifyContent: 'space-between',
     // 드래그 시 텍스트 선택 방지 (RN-web).
     userSelect: 'none',
     cursor: 'pointer',
   },
   indexBtn: {
-    paddingHorizontal: 4,
-    paddingVertical: 3,
+    flex: 1,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -602,12 +608,10 @@ function makeStyles(scale = 1) {
     fontSize: fp(14),
     fontWeight: '900',
     color: '#6b7280',
-    minWidth: 22,
     textAlign: 'center',
   },
   indexStar: {
     fontSize: fp(15),
-    minWidth: 22,
     textAlign: 'center',
     opacity: 0.55,
   },
