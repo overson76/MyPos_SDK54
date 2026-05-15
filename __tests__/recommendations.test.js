@@ -1,6 +1,7 @@
 import {
   computeRecommendations,
   recommendationsToGrid,
+  buildRegularKeySet,
   RECOMMENDATION_CATEGORY,
 } from '../utils/recommendations';
 
@@ -328,5 +329,179 @@ describe('상수 export', () => {
   test('카테고리 이름 상수', () => {
     expect(typeof RECOMMENDATION_CATEGORY).toBe('string');
     expect(RECOMMENDATION_CATEGORY).toContain('추천');
+  });
+});
+
+describe('buildRegularKeySet — phone 매칭 set 빌드', () => {
+  const BOOK_OBJECT = {
+    entries: {
+      '서울 강남 123': {
+        key: '서울 강남 123',
+        label: '서울 강남 123',
+        phone: '01012345678',
+      },
+      '서울 종로 456': {
+        key: '서울 종로 456',
+        label: '서울 종로 456',
+        phone: '01099999999',
+      },
+      '경기 분당 99': {
+        key: '경기 분당 99',
+        label: '경기 분당 99',
+        // 같은 손님이 분당 사무실로 시킨 경우 — 같은 phone
+        phone: '010-1234-5678',
+      },
+    },
+  };
+
+  test('customerAddressKey 만 — 단일 키 set', () => {
+    const set = buildRegularKeySet('서울 강남 123', null, null);
+    expect(set).not.toBeNull();
+    expect(set.has('서울 강남 123')).toBe(true);
+    expect(set.size).toBe(1);
+  });
+
+  test('customerPhone + addressBook — 같은 phone 의 모든 주소 union', () => {
+    const set = buildRegularKeySet(null, '01012345678', BOOK_OBJECT);
+    expect(set).not.toBeNull();
+    expect(set.has('서울 강남 123')).toBe(true);
+    expect(set.has('경기 분당 99')).toBe(true);
+    expect(set.has('서울 종로 456')).toBe(false); // 다른 phone
+    expect(set.size).toBe(2);
+  });
+
+  test('phone 정규화 — 하이픈 들어가도 동일성', () => {
+    const set = buildRegularKeySet(null, '010-1234-5678', BOOK_OBJECT);
+    expect(set.has('서울 강남 123')).toBe(true);
+    expect(set.has('경기 분당 99')).toBe(true);
+  });
+
+  test('주소 + phone 둘 다 — union', () => {
+    const set = buildRegularKeySet('서울 종로 456', '01012345678', BOOK_OBJECT);
+    expect(set.has('서울 종로 456')).toBe(true); // 주소
+    expect(set.has('서울 강남 123')).toBe(true); // phone 매칭
+    expect(set.has('경기 분당 99')).toBe(true); // phone 매칭
+  });
+
+  test('너무 짧은 phone (4자리 미만) — phone 매칭 무시', () => {
+    const set = buildRegularKeySet(null, '123', BOOK_OBJECT);
+    expect(set).toBeNull();
+  });
+
+  test('둘 다 비면 null', () => {
+    expect(buildRegularKeySet(null, null, BOOK_OBJECT)).toBeNull();
+    expect(buildRegularKeySet('', '', BOOK_OBJECT)).toBeNull();
+  });
+
+  test('addressBook 배열 형태도 흡수', () => {
+    const arr = [
+      { key: 'A', label: 'A', phone: '01012345678' },
+      { key: 'B', label: 'B', phone: '01099999999' },
+    ];
+    const set = buildRegularKeySet(null, '01012345678', arr);
+    expect(set.has('a')).toBe(true); // key 가 정규화됨 (소문자/공백)
+    expect(set.has('b')).toBe(false);
+  });
+});
+
+describe('computeRecommendations — phone 단골 매칭 (확장)', () => {
+  const NOW2 = new Date(2026, 4, 15, 12, 0, 0).getTime();
+  const LUNCH = new Date(2026, 4, 14, 12, 30).getTime();
+
+  const BOOK = {
+    entries: {
+      '서울 강남 123': {
+        key: '서울 강남 123',
+        label: '서울 강남 123',
+        phone: '01012345678',
+      },
+      '경기 분당 99': {
+        key: '경기 분당 99',
+        label: '경기 분당 99',
+        phone: '01012345678', // 같은 손님 — 다른 주소
+      },
+    },
+  };
+
+  test('phone 으로 묶인 다른 주소도 단골로 인식 — 시간대 매칭 메뉴 역전', () => {
+    const history = [
+      // 강남 본점 — 비빔밥. 시간대 + 단골 = 1 + 3 + 5 = 9
+      entry({
+        ts: LUNCH,
+        items: [{ name: '비빔밥', qty: 1 }],
+        deliveryAddress: '서울 강남 123',
+      }),
+      // 분당 지점 — 같은 phone 의 다른 주소 — 비빔밥. 시간대 + 단골 = 9
+      entry({
+        ts: LUNCH,
+        items: [{ name: '비빔밥', qty: 1 }],
+        deliveryAddress: '경기 분당 99',
+      }),
+      // 다른 손님 — 칼국수 2개. 시간대만 = 2 + 6 = 8
+      entry({
+        ts: LUNCH,
+        items: [{ name: '칼국수', qty: 2 }],
+        deliveryAddress: '서울 마포 100',
+      }),
+    ];
+    // 손님이 지금 강남으로 시키려는 중. phone 으로 분당도 단골 인정 → 비빔밥 합산.
+    const result = computeRecommendations({
+      history,
+      menus: MENUS,
+      now: NOW2,
+      customerAddressKey: '서울 강남 123',
+      customerPhone: '01012345678',
+      addressBook: BOOK,
+    });
+    expect(result[0].name).toBe('비빔밥');
+    expect(result[0].score).toBe(18); // 9 + 9 — 두 주소 모두 단골 인식
+    expect(result[1].name).toBe('칼국수');
+    expect(result[1].score).toBe(8);
+  });
+
+  test('phone 없으면 옛 동작 — 주소만 매칭 (역호환)', () => {
+    const history = [
+      entry({
+        ts: LUNCH,
+        items: [{ name: '비빔밥', qty: 1 }],
+        deliveryAddress: '서울 강남 123',
+      }),
+      entry({
+        ts: LUNCH,
+        items: [{ name: '비빔밥', qty: 1 }],
+        deliveryAddress: '경기 분당 99', // 같은 phone 이지만 인자에 안 들어감
+      }),
+    ];
+    const result = computeRecommendations({
+      history,
+      menus: MENUS,
+      now: NOW2,
+      customerAddressKey: '서울 강남 123',
+      // customerPhone / addressBook 없음
+    });
+    const bibim = result.find((r) => r.name === '비빔밥');
+    // 강남(단골)=9 + 분당(시간대만)=4 = 13
+    expect(bibim.score).toBe(13);
+  });
+
+  test('phone 만 있고 customerAddressKey 없는 경우 — 신규 손님(전화로 첫 주문)', () => {
+    const history = [
+      entry({
+        ts: LUNCH,
+        items: [{ name: '비빔밥', qty: 1 }],
+        deliveryAddress: '서울 강남 123',
+      }),
+    ];
+    const result = computeRecommendations({
+      history,
+      menus: MENUS,
+      now: NOW2,
+      customerAddressKey: null,
+      customerPhone: '01012345678',
+      addressBook: BOOK,
+    });
+    // 강남이 phone 으로 단골 매칭 → 9
+    expect(result[0].name).toBe('비빔밥');
+    expect(result[0].score).toBe(9);
   });
 });

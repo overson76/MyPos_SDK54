@@ -6,7 +6,13 @@
 //
 // 가중치 의도:
 //   - 시간대 매칭(±2시간) > 일반 인기도: "점심엔 칼국수, 저녁엔 부대찌개"
-//   - 단골 매칭(같은 배달주소) > 시간대: 자주 오는 손님 메뉴 우대
+//   - 단골 매칭 > 시간대: 자주 오는 손님 메뉴 우대
+//
+// 단골 매칭 정책:
+//   - customerAddressKey: 같은 주소만 매칭 (옛 동작)
+//   - customerPhone + addressBook: 같은 phone 으로 묶인 모든 주소가 단골 set
+//     → 본점/지점/회사/집 등 한 손님이 여러 주소로 시켜도 동일 손님 인식
+//   - 둘 다 주면 union (주소 단일 + phone 그룹 합쳐서 매칭)
 //
 // 매칭 정책:
 //   - history.items 는 name 만 보존됨 (id 가 아닌 name 기준 매칭)
@@ -14,6 +20,7 @@
 //   - reverted entry / 30일 초과 entry 자동 제외
 
 import { normalizeAddressKey } from './orderHelpers';
+import { listAddressBookEntries } from './addressBookLookup';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RECENT_DAYS = 30;
@@ -42,11 +49,40 @@ function isWithinTimeWindow(itemHour, nowHour, windowHours) {
   return circular <= windowHours;
 }
 
+function digitsOnly(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+// 단골 매칭 후보 키 set 빌드.
+//   - customerAddressKey 있으면 그 정규화 키 포함
+//   - customerPhone + addressBook 있으면 같은 phone 의 모든 entry 의
+//     정규화 key 도 포함 → 한 손님이 여러 주소로 시켜도 단골 인식
+//   - 둘 다 비면 null (단골 매칭 비활성)
+export function buildRegularKeySet(customerAddressKey, customerPhone, addressBook) {
+  const set = new Set();
+  if (customerAddressKey) {
+    const k = normalizeAddressKey(customerAddressKey);
+    if (k) set.add(k);
+  }
+  const target = digitsOnly(customerPhone);
+  if (target && target.length >= 4) {
+    for (const e of listAddressBookEntries(addressBook)) {
+      if (digitsOnly(e?.phone) === target) {
+        const k = normalizeAddressKey(e?.key || e?.label || '');
+        if (k) set.add(k);
+      }
+    }
+  }
+  return set.size > 0 ? set : null;
+}
+
 export function computeRecommendations({
   history,
   menus,
   now = Date.now(),
   customerAddressKey = null,
+  customerPhone = null,
+  addressBook = null,
   topN = DEFAULT_TOP_N,
   recentDays = DEFAULT_RECENT_DAYS,
   timeWindowHours = DEFAULT_TIME_WINDOW_HOURS,
@@ -57,9 +93,11 @@ export function computeRecommendations({
 
   const recentMs = recentDays * DAY_MS;
   const nowHour = hourOf(now);
-  const normalizedRegularKey = customerAddressKey
-    ? normalizeAddressKey(customerAddressKey)
-    : null;
+  const regularKeys = buildRegularKeySet(
+    customerAddressKey,
+    customerPhone,
+    addressBook
+  );
 
   const scoresByName = new Map();
 
@@ -78,9 +116,8 @@ export function computeRecommendations({
       nowHour,
       timeWindowHours
     );
-    const isRegularMatch =
-      !!normalizedRegularKey &&
-      normalizeAddressKey(entry.deliveryAddress || '') === normalizedRegularKey;
+    const entryKey = normalizeAddressKey(entry.deliveryAddress || '');
+    const isRegularMatch = !!(regularKeys && entryKey && regularKeys.has(entryKey));
 
     for (const item of items) {
       const name = item?.name;

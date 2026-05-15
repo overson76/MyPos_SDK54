@@ -513,10 +513,19 @@ export default function OrderScreen({
   const recommendations = useMemo(() => {
     if (!isRecommendation) return [];
     const orderForAddr = hasRealTable ? getOrder(table.id) : null;
+    const addr = orderForAddr?.deliveryAddress || null;
+    // 같은 phone 의 다른 주소도 단골로 묶기 — 손님이 본점/지점/회사/집 등
+    // 여러 주소로 시켜도 동일 손님 인식.
+    const addrKey = addr ? normalizeAddressKey(addr) : null;
+    const entry =
+      addrKey && addressBook?.entries ? addressBook.entries[addrKey] : null;
+    const customerPhone = entry?.phone || null;
     return computeRecommendations({
       history: revenue?.history || [],
       menus: menuItems,
-      customerAddressKey: orderForAddr?.deliveryAddress || null,
+      customerAddressKey: addr,
+      customerPhone,
+      addressBook,
       topN: GRID_COLS * GRID_ROWS,
     });
   }, [
@@ -526,6 +535,7 @@ export default function OrderScreen({
     hasRealTable,
     table,
     getOrder,
+    addressBook,
   ]);
   const recommendedRows = useMemo(
     () => recommendationsToGrid(recommendations, GRID_COLS, GRID_ROWS),
