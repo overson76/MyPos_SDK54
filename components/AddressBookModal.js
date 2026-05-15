@@ -502,10 +502,14 @@ function formatPhoneDisplay(digits) {
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
 function makeStyles(scale = 1, viewportH = 800) {
-  // sheet maxHeight 90% 의 viewport 안에서 ScrollView 가 차지할 최대 영역.
-  // header + search + indexBar + 여유 162px 제외.
-  const sheetMaxH = viewportH * 0.9;
-  const scrollMaxH = Math.max(120, Math.min(420, sheetMaxH - 162));
+  // sheet 의 실제 사용 가능 영역 계산 (2026-05-16 4차 fix):
+  //   - backdrop padding 16*2 = 32 차감
+  //   - 폰(viewport<500) 은 Safari URL bar 동적 영역 + 여유 위해 80%
+  //   - PC 는 충분한 여유로 90%
+  //   - reserved 180 = header(54) + search(50) + indexBar(50) + 여유(26)
+  const isPhone = viewportH < 500;
+  const sheetMaxH = (viewportH - 32) * (isPhone ? 0.8 : 0.9);
+  const scrollMaxH = Math.max(100, Math.min(420, sheetMaxH - 180));
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
   overlay: {
@@ -527,7 +531,7 @@ function makeStyles(scale = 1, viewportH = 800) {
   sheet: {
     width: '100%',
     maxWidth: 520,
-    maxHeight: '90%',
+    maxHeight: sheetMaxH,
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
