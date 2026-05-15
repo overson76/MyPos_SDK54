@@ -582,7 +582,11 @@ function makeStyles(scale = 1) {
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
   list: { flex: 1, maxHeight: 420 },
   // 인덱스 바를 list 하단 가로 한 줄로 배치 — 폰 가로(932×430) 잘림 해소.
-  listWithIndex: { flexDirection: 'column', maxHeight: 420 },
+  // flex: 1 필수 — 폰 가로(height 430) 에서 부모 sheet maxHeight 90% = 387 인데
+  // listWithIndex 가 flex 없으면 height auto → 자식 ScrollView 의 flex:1 이
+  // 참조할 부모 영역 0 → entries 안 보임 (PC 1455×710 에선 maxHeight 420
+  // 까지 충분해서 잘 보였던 회귀).
+  listWithIndex: { flex: 1, flexDirection: 'column', maxHeight: 420 },
   indexBar: {
     flexDirection: 'row',
     width: '100%',
