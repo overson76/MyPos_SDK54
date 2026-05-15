@@ -110,7 +110,7 @@ export function OrderProvider({ children }) {
   });
 
   useDeliveryAlerts({ orders, dispatch });
-  useAutoClearDelivery({ orders, dispatch, setRevenue, bumpAddress });
+  useAutoClearDelivery({ orders, dispatch, setRevenue, bumpAddress, addressBook });
 
   const value = useMemo(() => {
     // 분할 정리 — dispatch 직후의 next orders 를 인자로 받아 #1/#2 둘 다 비었는지 검사.
