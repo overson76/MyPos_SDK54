@@ -144,25 +144,31 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     fnsRef.current = { jumpToInitial, resetSort };
   });
 
-  // 인덱스 바는 list 하단의 가로 한 줄 — locationX 로 항목 결정.
-  // 폰 가로 모드(932×430)에서 세로 17개가 잘리는 문제 해결 + 매장 POS 가로 화면에 자연스러움.
-  //
-  // 좌표계 정책 (2026-05-16):
-  //   - iOS Safari 의 RN-Web 에서 nativeEvent.locationX 가 0 또는 잘못된 좌표로
-  //     들어오는 함정 (PanResponder grant 시점에 target 좌표계가 부정확).
-  //     → ㅋ 클릭해도 ⭐ 가 잡히고, 드래그가 ㄱㄴ 까지만 따라가다 다시 ⭐ 로
-  //     돌아오는 사고 발생.
-  //   - 해결: nativeEvent.pageX 와 indexBar 의 page left 차이로 직접 계산.
-  //     pageX 는 모든 브라우저에서 정확. barLeftRef 는 onLayout 시 측정.
+  // 인덱스 바는 list 하단의 가로 한 줄 — 좌표는 환경별 분기:
+  //   - RN native (iOS/Android 앱): nativeEvent.locationX 가 element 기준
+  //     정확. RN 표준 좌표.
+  //   - Web (PC Chrome, iPhone Safari): RN-Web 의 locationX 가 0 또는 잘못된
+  //     좌표로 들어오는 함정. pageX - getBoundingClientRect().left 사용.
+  //   환경 분기 안 하면 native 에서 getBoundingClientRect 없어 barLeft=0 →
+  //   pageX 그대로 사용 → 시작점이 ㅅㅇ 쪽으로 어긋남 사고.
+  const isWeb = Platform.OS === 'web';
   const barRef = useRef(null);
   const barLeftRef = useRef(0);
   const computeLocalX = (evt) => {
     const native = evt?.nativeEvent || {};
-    // 우선순위: pageX > locationX (pageX 가 더 robust).
+    if (isWeb) {
+      // Web: pageX 우선 (locationX 부정확).
+      if (typeof native.pageX === 'number') {
+        return native.pageX - (barLeftRef.current || 0);
+      }
+    }
+    // Native: locationX 정확 (element 기준).
+    if (typeof native.locationX === 'number') return native.locationX;
+    // 최후 fallback.
     if (typeof native.pageX === 'number') {
       return native.pageX - (barLeftRef.current || 0);
     }
-    return typeof native.locationX === 'number' ? native.locationX : 0;
+    return 0;
   };
   const handleBarTouch = (localX) => {
     const w = barWidthRef.current;
