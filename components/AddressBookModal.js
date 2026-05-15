@@ -187,8 +187,9 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     }
   };
 
-  const handleSelect = (label) => {
-    onSelect && onSelect(label);
+  // 1.0.53: entry 객체도 같이 전달 — 호출부에서 phone 자동 sync 등 활용.
+  const handleSelect = (label, entry) => {
+    onSelect && onSelect(label, entry);
     onClose && onClose();
   };
 
@@ -380,7 +381,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                       <>
                         <TouchableOpacity
                           style={styles.rowMain}
-                          onPress={() => handleSelect(it.label)}
+                          onPress={() => handleSelect(it.label, it)}
                           activeOpacity={0.6}
                         >
                           {it.alias ? (

@@ -168,6 +168,7 @@ export default function OrderScreen({
     setDeliveryAddress,
     setDeliveryTime,
     setDeliveryTimeIsPM,
+    setPhone,
     setItemLargeQty,
     setItemMemo,
     migratePendingCart,
@@ -1079,7 +1080,22 @@ export default function OrderScreen({
         <AddressBookModal
           visible={addressBookOpen}
           onClose={() => setAddressBookOpen(false)}
-          onSelect={(label) => tableId && setDeliveryAddress(tableId, label)}
+          onSelect={(label, entry) => {
+            if (!tableId) return;
+            setDeliveryAddress(tableId, label);
+            // 1.0.53: 별칭 단골 자동 등록 — 별칭만 있고 phone 비어있는 entry 클릭 시
+            // 현재 주문의 deliveryPhone (CID 또는 사장님 입력) 을 entry.phone 에 자동 sync.
+            // 다음 전화부터 같은 phone 으로 단골 자동 인식 (사장님 의도).
+            const order = getOrder(tableId);
+            if (
+              entry?.key &&
+              !entry.phone &&
+              order?.deliveryPhone &&
+              typeof setPhone === 'function'
+            ) {
+              setPhone(entry.key, order.deliveryPhone);
+            }
+          }}
         />
       )}
 

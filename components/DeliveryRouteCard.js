@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { optimizeRoute, formatRouteSummary } from '../utils/routeOptimizer';
 import { getDrivingDistance } from '../utils/geocode';
-import { normalizeAddressKey } from '../utils/orderHelpers';
+import { findAddressEntry } from '../utils/addressBookLookup';
 import { reportError } from '../utils/sentry';
 
 export default function DeliveryRouteCard({
@@ -29,6 +29,8 @@ export default function DeliveryRouteCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // 1.0.53 fix: addressBook 이 객체({entries:{...}}) 형태인데 .map() 으로 array 가정 → 운영에서
+  // candidates 항상 빈 배열 → 카드 영원히 안 보이던 버그. findAddressEntry 가 두 형태 모두 처리.
   const candidates = useMemo(() => {
     if (
       !storeInfo ||
@@ -37,14 +39,10 @@ export default function DeliveryRouteCard({
     ) {
       return [];
     }
-    const byKey = new Map(
-      (addressBook || []).map((a) => [a?.key, a]).filter(([k]) => !!k)
-    );
     return (activeOrders || [])
       .filter((o) => o?.table?.type === 'delivery' && !!o.deliveryAddress)
       .map((o) => {
-        const key = normalizeAddressKey(o.deliveryAddress);
-        const entry = byKey.get(key);
+        const entry = findAddressEntry(addressBook, o.deliveryAddress);
         if (
           !entry ||
           typeof entry.lat !== 'number' ||
