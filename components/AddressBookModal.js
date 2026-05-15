@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -37,6 +39,12 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const [pendingJump, setPendingJump] = useState(null);
   // 각 row 의 DOM node (RN-web) 추적 → scrollIntoView 점프용. native 는 noop.
   const rowRefs = useRef({});
+  // 인덱스 바 드래그 — 현재 호버 글자 큰 미리보기 표시 (iPhone 연락처 패턴).
+  const [activeHover, setActiveHover] = useState(null);
+  const barHeightRef = useRef(0);
+  const lastIdxRef = useRef(-1);
+  // 인덱스 항목 — ⭐ (자주 정렬) + 14자음 + A + # = 17개. memo 로 안정성.
+  const indexItems = useMemo(() => ['⭐', ...HANGUL_INDEX_BAR], []);
 
   const todaySet = useMemo(
     () => new Set(addressBook.todayDeliveredKeys || []),
@@ -104,6 +112,77 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const resetSort = () => {
     setSortMode('default');
     setPendingJump(null);
+  };
+
+  // 인덱스 바 드래그/탭 → locationY 로 항목 결정 → 점프 + hover preview.
+  // closure stale 방지 — fnsRef 통해 최신 jumpToInitial/resetSort 사용.
+  const fnsRef = useRef({ jumpToInitial, resetSort });
+  useEffect(() => {
+    fnsRef.current = { jumpToInitial, resetSort };
+  });
+
+  const handleBarTouch = (locationY) => {
+    const h = barHeightRef.current;
+    if (!h) return;
+    const idx = Math.max(
+      0,
+      Math.min(
+        indexItems.length - 1,
+        Math.floor((locationY / h) * indexItems.length)
+      )
+    );
+    if (idx === lastIdxRef.current) return;
+    lastIdxRef.current = idx;
+    const ch = indexItems[idx];
+    setActiveHover(ch);
+    if (ch === '⭐') fnsRef.current.resetSort();
+    else fnsRef.current.jumpToInitial(ch);
+  };
+
+  const barPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (e) => {
+          lastIdxRef.current = -1; // 새 드래그 시작 → 같은 위치도 재호출
+          handleBarTouch(e.nativeEvent.locationY);
+        },
+        onPanResponderMove: (e) => {
+          handleBarTouch(e.nativeEvent.locationY);
+        },
+        onPanResponderRelease: () => {
+          // 손가락 떼면 0.8초 후 hover preview 사라짐 — 사용자가 결과 인지할 시간.
+          setTimeout(() => setActiveHover(null), 800);
+        },
+        onPanResponderTerminate: () => setActiveHover(null),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // 삭제는 되돌릴 수 없음 (Firestore hard delete) — 한 번 더 확인.
+  // 인덱스 바 드래그 도중 실수 클릭으로 삭제되는 사고 방지.
+  const handleDelete = (it) => {
+    const label = (it.alias || '').trim() || it.label || '항목';
+    const confirmMsg = `"${label}" 을(를) 주소록에서 삭제할까요?\n삭제하면 되돌릴 수 없습니다.`;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm) {
+        if (!window.confirm(confirmMsg)) return;
+        deleteAddress(it.key);
+      } else {
+        deleteAddress(it.key);
+      }
+    } else {
+      Alert.alert('삭제 확인', confirmMsg, [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => deleteAddress(it.key),
+        },
+      ]);
+    }
   };
 
   const handleSelect = (label) => {
@@ -351,7 +430,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.iconBtn}
-                          onPress={() => deleteAddress(it.key)}
+                          onPress={() => handleDelete(it)}
                           hitSlop={6}
                         >
                           <Text style={styles.deleteText}>🗑</Text>
@@ -362,39 +441,40 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                 );
               })}
             </ScrollView>
-            <View style={styles.indexBar}>
-              <Pressable
-                onPress={resetSort}
-                style={styles.indexBtn}
-                accessibilityLabel="자주 사용 정렬로 복귀"
-              >
-                <Text
-                  style={[
-                    styles.indexStar,
-                    sortMode === 'default' && styles.indexActive,
-                  ]}
-                >
-                  ⭐
-                </Text>
-              </Pressable>
-              {HANGUL_INDEX_BAR.map((ch) => (
-                <Pressable
-                  key={ch}
-                  onPress={() => jumpToInitial(ch)}
-                  style={styles.indexBtn}
-                  accessibilityLabel={`${ch} 로 가나다 점프`}
-                >
-                  <Text
-                    style={[
-                      styles.indexText,
-                      sortMode === 'alpha' && styles.indexActive,
-                    ]}
-                  >
-                    {ch}
-                  </Text>
-                </Pressable>
-              ))}
+            <View
+              style={styles.indexBar}
+              onLayout={(e) => {
+                barHeightRef.current = e.nativeEvent.layout.height;
+              }}
+              accessibilityLabel="가나다 빠른찾기 — 탭 또는 드래그"
+              {...barPanResponder.panHandlers}
+            >
+              {indexItems.map((ch, idx) => {
+                const isStar = ch === '⭐';
+                const isHovered = activeHover === ch;
+                const isModeActive =
+                  (isStar && sortMode === 'default') ||
+                  (!isStar && sortMode === 'alpha');
+                return (
+                  <View key={`${ch}-${idx}`} style={styles.indexBtn}>
+                    <Text
+                      style={[
+                        isStar ? styles.indexStar : styles.indexText,
+                        isModeActive && styles.indexActive,
+                        isHovered && styles.indexHovered,
+                      ]}
+                    >
+                      {ch}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
+            </View>
+          )}
+          {activeHover && (
+            <View pointerEvents="none" style={styles.hoverPreview}>
+              <Text style={styles.hoverPreviewText}>{activeHover}</Text>
             </View>
           )}
         </Pressable>
@@ -501,36 +581,64 @@ function makeStyles(scale = 1) {
   list: { flex: 1, maxHeight: 420 },
   listWithIndex: { flexDirection: 'row', maxHeight: 420 },
   indexBar: {
-    width: 26,
-    paddingVertical: 4,
+    width: 38,
+    paddingVertical: 6,
     paddingHorizontal: 2,
     borderLeftWidth: 1,
-    borderLeftColor: '#f3f4f6',
-    backgroundColor: '#fafafa',
+    borderLeftColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
     alignItems: 'center',
+    // 드래그 시 텍스트 선택 방지 (RN-web).
+    userSelect: 'none',
+    cursor: 'pointer',
   },
   indexBtn: {
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
   indexText: {
-    fontSize: fp(11),
-    fontWeight: '800',
-    color: '#9ca3af',
-    minWidth: 16,
+    fontSize: fp(14),
+    fontWeight: '900',
+    color: '#6b7280',
+    minWidth: 22,
     textAlign: 'center',
   },
   indexStar: {
-    fontSize: fp(12),
-    minWidth: 16,
+    fontSize: fp(15),
+    minWidth: 22,
     textAlign: 'center',
-    opacity: 0.5,
+    opacity: 0.55,
   },
   indexActive: {
     color: '#2563eb',
     opacity: 1,
+  },
+  // 드래그 중 호버 표시 — 큰 글자 + 굵게 + 빨강.
+  indexHovered: {
+    color: '#dc2626',
+    transform: [{ scale: 1.25 }],
+    opacity: 1,
+  },
+  // iPhone 연락처 패턴 — 드래그 중 화면 가운데에 큰 글자 띄움.
+  hoverPreview: {
+    position: 'absolute',
+    top: '38%',
+    alignSelf: 'center',
+    width: 110,
+    height: 110,
+    borderRadius: 18,
+    backgroundColor: 'rgba(17, 24, 39, 0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    elevation: 16,
+  },
+  hoverPreviewText: {
+    fontSize: 60,
+    fontWeight: '900',
+    color: '#fff',
   },
   row: {
     flexDirection: 'row',
