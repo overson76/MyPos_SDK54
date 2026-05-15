@@ -10,13 +10,15 @@ $htmlPath = [System.IO.Path]::ChangeExtension($mdPath, ".html")
 $pdfPath = [System.IO.Path]::GetFullPath($PdfFile)
 
 # 1) node 스크립트 — single-quoted here-string 으로 PowerShell 변수 보간 회피
+#    한국어 string literal 제거 (PowerShell 5.1 의 -Encoding utf8 BOM 충돌 회피).
+#    title 은 영문 — PDF 파일 메타데이터라 보이지 않음.
 $nodeScript = @'
 const fs = require('fs');
 const marked = require('marked');
 const md = fs.readFileSync(process.argv[2], 'utf-8');
 const body = marked.parse(md);
 const html = '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8">' +
-  '<title>MyPos 가치 평가서</title>' +
+  '<title>Report</title>' +
   '<style>' +
   '@page { size: A4; margin: 18mm 15mm; }' +
   'body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; line-height: 1.6; color: #111827; max-width: 760px; margin: 0 auto; padding: 20px; font-size: 11pt; }' +
@@ -71,7 +73,12 @@ Copy-Item -Path $htmlPath -Destination $tmpHtml -Force
 if (Test-Path $tmpPdf) { Remove-Item $tmpPdf -Force }
 
 $tmpHtmlUrl = "file:///" + ($tmpHtml -replace '\\', '/')
-& $edge --headless --disable-gpu --no-pdf-header-footer "--print-to-pdf=$tmpPdf" $tmpHtmlUrl 2>&1 | Out-Null
+# headless=new + virtual-time-budget (페이지 완료 대기) + run-all-compositor-stages
+& $edge --headless=new --disable-gpu --no-sandbox --no-pdf-header-footer `
+  --virtual-time-budget=15000 `
+  --run-all-compositor-stages-before-draw `
+  "--print-to-pdf=$tmpPdf" `
+  $tmpHtmlUrl 2>&1 | Out-Null
 
 # Edge 가 비동기로 PDF 쓰는 경우 대비 잠깐 대기
 $maxWait = 30
