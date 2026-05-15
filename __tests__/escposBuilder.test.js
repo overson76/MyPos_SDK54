@@ -175,6 +175,37 @@ describe('buildReceiptText', () => {
     expect(text).toContain('픽업시각 오후 5시 15분');
   });
 
+  test('단골요청 — orderType=delivery 에서만 표시 (주방·라이더용)', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 하신번영로 25',
+      customerAlias: '진실보석',
+      customerRequest: '다진고추, 김치많이',
+    });
+    expect(text).toContain('요청   다진고추, 김치많이');
+  });
+
+  test('단골요청 — delivery 외 orderType 에서는 표시 안 함', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'reservation',
+      scheduledTime: '630',
+      scheduledTimeIsPM: true,
+      customerRequest: '다진고추, 김치많이',
+    });
+    expect(text).not.toContain('요청   ');
+  });
+
+  test('단골요청 없으면 줄 자체 표시 안 함', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 하신번영로 25',
+    });
+    expect(text).not.toContain('요청   ');
+  });
+
   test('1.0.44 — 배달인데 손님 전화/거리 모두 null 이어도 안전', () => {
     const text = buildReceiptText({
       ...sample,

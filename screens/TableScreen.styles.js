@@ -315,6 +315,20 @@ export default function makeStyles(scale = 1) {
     // flex 부모 안에서 다른 항목에 의해 압축되어 0 높이로 가려지는 것 방지
     flexShrink: 0,
   },
+  deliveryRequest: {
+    fontSize: fp(9),
+    lineHeight: fp(11),
+    color: '#9a3412',
+    fontWeight: '800',
+    marginTop: 1,
+    marginBottom: 2,
+    paddingHorizontal: 3,
+    backgroundColor: '#fff7ed',
+    borderRadius: 2,
+    borderLeftWidth: 2,
+    borderLeftColor: '#ea580c',
+    flexShrink: 0,
+  },
   // 4행 무조건 보장: lineHeight 13 × 4 + gap 1 × 3 = 55.
   // flexShrink: 0 으로 다른 요소가 공간을 뺏지 못하게 막음.
   // 다른 요소 (delivery / total) 가 잘릴 수는 있어도 메뉴 4개는 반드시 표시.

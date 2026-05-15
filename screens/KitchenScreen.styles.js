@@ -253,6 +253,26 @@ export default function makeStyles(scale = 1) {
     color: '#7f1d1d',
     fontWeight: '600',
   },
+  requestBar: {
+    backgroundColor: '#fff7ed',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fed7aa',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ea580c',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  requestBarLabel: {
+    fontSize: fp(11),
+    color: '#9a3412',
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  requestBarText: {
+    fontSize: fp(14),
+    color: '#7c2d12',
+    fontWeight: '800',
+  },
   changeBox: {
     backgroundColor: '#fff7ed',
     borderBottomWidth: 2,

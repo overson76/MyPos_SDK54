@@ -24,6 +24,7 @@ import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 import DeliveryRouteCard from '../components/DeliveryRouteCard';
+import { getCustomerRequest } from '../utils/addressBookLookup';
 
 const typeLabels = {
   regular: '매장',
@@ -63,6 +64,7 @@ export default function KitchenScreen() {
         .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
         .filter(Boolean),
     }));
+    const isDeliveryReceipt = o.table?.type === 'delivery';
     const receiptText = buildReceiptText({
       storeName: storeInfo?.name || 'MyPos',
       storePhone: storeInfo?.phone || '',
@@ -75,7 +77,10 @@ export default function KitchenScreen() {
       total: computeItemsTotal(o.items),
       paymentMethod: o.paymentMethod || null,
       paymentStatus: o.paymentStatus || 'pending',
-      deliveryAddress: o.table?.type === 'delivery' ? o.deliveryAddress : '',
+      deliveryAddress: isDeliveryReceipt ? o.deliveryAddress : '',
+      customerRequest: isDeliveryReceipt
+        ? getCustomerRequest(addressBook, o.deliveryAddress)
+        : '',
       printedAt: Date.now(),
     });
     printReceipt({ rawText: receiptText }).catch(() => {});
@@ -474,6 +479,17 @@ export default function KitchenScreen() {
                 </Text>
               </View>
             ) : null}
+            {(() => {
+              if (!o.deliveryAddress) return null;
+              const req = getCustomerRequest(addressBook, o.deliveryAddress);
+              if (!req) return null;
+              return (
+                <View style={styles.requestBar}>
+                  <Text style={styles.requestBarLabel}>🌟 단골요청</Text>
+                  <Text style={styles.requestBarText}>{req}</Text>
+                </View>
+              );
+            })()}
 
             {hasChanges && (() => {
               const addedRows = rows.filter((r) => r.kind === 'added');

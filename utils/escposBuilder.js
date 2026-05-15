@@ -192,6 +192,7 @@ function formatScheduledTime(rawTime, isPM) {
 //   drivingDurationSec?: number,   // 1.0.44 — 배달용 (sec)
 //   scheduledTime?: string,        // 1.0.44 — "420" / "1220"
 //   scheduledTimeIsPM?: boolean,   // 1.0.44
+//   customerRequest?: string,      // 단골요청 — 주방·라이더가 미리 준비 (예: "다진고추, 김치많이")
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
@@ -239,6 +240,9 @@ export function buildReceiptText(receipt) {
     const schedDelivery = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (schedDelivery) {
       lines.push(bigLeft(`출발   ${schedDelivery}`, 'wide'));
+    }
+    if (r.customerRequest) {
+      lines.push(bigLeft(`요청   ${r.customerRequest}`, 'wide'));
     }
   } else if (orderType === 'reservation') {
     const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);

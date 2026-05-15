@@ -161,8 +161,8 @@ export function useAddressBook() {
   }, []);
 
   // 수동 주소 추가 — 배달 완료 없이도 미리 등록 가능.
-  // label 필수. alias, phone 은 선택.
-  const addAddress = useCallback((label, alias, phone) => {
+  // label 필수. alias, phone, customerRequest 는 선택.
+  const addAddress = useCallback((label, alias, phone, customerRequest) => {
     const safe = sanitizeDeliveryAddress(label);
     if (!safe) return false;
     const key = normalizeAddressKey(safe);
@@ -180,6 +180,7 @@ export function useAddressBook() {
       };
       if (alias?.trim()) entry.alias = alias.trim();
       if (digits) entry.phone = digits;
+      if (customerRequest?.trim()) entry.customerRequest = customerRequest.trim();
       return { ...prev, entries: { ...prev.entries, [key]: entry } };
     });
     return true;
@@ -295,6 +296,21 @@ export function useAddressBook() {
     });
   }, []);
 
+  // 단골요청 설정 — 자주 시키는 손님의 패턴 (예: "다진고추, 김치많이").
+  // 주문 화면 / 주문현황 / 영수증에 자동 노출 — 주방·라이더가 미리 준비.
+  // 빈 문자열이면 필드 제거.
+  const setCustomerRequest = useCallback((key, request) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const trimmed = (request || '').trim().slice(0, 100);
+      const updated = { ...ex };
+      if (trimmed) updated.customerRequest = trimmed;
+      else delete updated.customerRequest;
+      return { ...prev, entries: { ...prev.entries, [key]: updated } };
+    });
+  }, []);
+
   return {
     addressBook,
     setAddressBook,
@@ -305,6 +321,7 @@ export function useAddressBook() {
     setAutoRemember,
     setAlias,
     setPhone,
+    setCustomerRequest,
     addAddress,
     addPhoneOnly,
     editLabel,

@@ -384,11 +384,13 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const deliveryPhoneFromOrder = order.deliveryPhone;
     let deliveryAliasFromBook = null;
     let deliveryPhoneFromBook = null;
+    let customerRequestFromBook = '';
     if (isDelivery && deliveryAddr) {
       const key = normalizeAddressKey(deliveryAddr);
       const entry = key ? addressBook?.entries?.[key] : null;
       deliveryAliasFromBook = entry?.alias || null;
       deliveryPhoneFromBook = entry?.phone || null;
+      customerRequestFromBook = (entry?.customerRequest || '').trim();
     }
     const deliveryAlias = deliveryAliasFromOrder || deliveryAliasFromBook;
     const deliveryPhone = deliveryPhoneFromOrder || deliveryPhoneFromBook;
@@ -595,6 +597,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               {(t.type === 'reservation' || t.type === 'takeout') && order.deliveryTime ? (
                 <Text style={styles.deliveryAddr} numberOfLines={1}>
                   {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
+                </Text>
+              ) : null}
+              {customerRequestFromBook ? (
+                <Text style={styles.deliveryRequest} numberOfLines={1}>
+                  🌟 {customerRequestFromBook}
                 </Text>
               ) : null}
               {(() => {

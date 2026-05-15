@@ -22,6 +22,7 @@ import {
   recommendationsToGrid,
   RECOMMENDATION_CATEGORY,
 } from '../utils/recommendations';
+import { getCustomerRequest } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
@@ -2148,6 +2149,9 @@ export default function OrderScreen({
                   paymentMethod: picked,
                   paymentStatus: 'paid',
                   deliveryAddress: orderSnap?.deliveryAddress || '',
+                  customerRequest: orderSnap?.deliveryAddress
+                    ? getCustomerRequest(addressBook, orderSnap.deliveryAddress)
+                    : '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
                   isSplit: !!isSplit,

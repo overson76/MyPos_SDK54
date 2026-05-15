@@ -57,6 +57,7 @@ export default function AddressBookPanel() {
     deleteAddress,
     setAlias,
     setPhone,
+    setCustomerRequest,
     addAddress,
     editLabel,
     setAutoRemember,
@@ -69,10 +70,12 @@ export default function AddressBookPanel() {
   const [editLabelText, setEditLabelText] = useState('');
   const [editAlias, setEditAlias] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editCustomerRequest, setEditCustomerRequest] = useState('');
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [newAlias, setNewAlias] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newCustomerRequest, setNewCustomerRequest] = useState('');
   const [showImport, setShowImport] = useState(false);
 
   const storeCoord = useMemo(() => {
@@ -196,6 +199,7 @@ export default function AddressBookPanel() {
     setEditLabelText(it.pendingAddress ? '' : it.label || '');
     setEditAlias(it.alias || '');
     setEditPhone(it.phone ? formatPhoneDisplay(it.phone) : '');
+    setEditCustomerRequest(it.customerRequest || '');
   };
 
   const confirmEdit = () => {
@@ -227,11 +231,14 @@ export default function AddressBookPanel() {
       if (!candidate) return prev;
       const digits = (editPhone || '').replace(/\D/g, '');
       const trimmedAlias = editAlias.trim();
+      const trimmedRequest = (editCustomerRequest || '').trim().slice(0, 100);
       const updated = { ...candidate };
       if (trimmedAlias) updated.alias = trimmedAlias;
       else delete updated.alias;
       if (digits) updated.phone = digits;
       else delete updated.phone;
+      if (trimmedRequest) updated.customerRequest = trimmedRequest;
+      else delete updated.customerRequest;
       return {
         ...prev,
         entries: { ...prev.entries, [candidate.key]: updated },
@@ -244,12 +251,18 @@ export default function AddressBookPanel() {
 
   const confirmAdd = () => {
     if (!newLabel.trim()) return;
-    const ok = addAddress(newLabel.trim(), newAlias.trim(), newPhone);
+    const ok = addAddress(
+      newLabel.trim(),
+      newAlias.trim(),
+      newPhone,
+      newCustomerRequest.trim()
+    );
     if (ok) {
       setAddingNew(false);
       setNewLabel('');
       setNewAlias('');
       setNewPhone('');
+      setNewCustomerRequest('');
     }
   };
 
@@ -258,6 +271,7 @@ export default function AddressBookPanel() {
     setNewLabel('');
     setNewAlias('');
     setNewPhone('');
+    setNewCustomerRequest('');
   };
 
   const handleImport = (mode) => {
@@ -429,6 +443,17 @@ export default function AddressBookPanel() {
               maxLength={14}
             />
           </View>
+          <View style={styles.addRow}>
+            <Text style={styles.fieldLabel}>단골요청</Text>
+            <TextInput
+              style={styles.addInput}
+              value={newCustomerRequest}
+              onChangeText={setNewCustomerRequest}
+              placeholder="예) 다진고추, 김치많이 (주방·라이더 자동 노출)"
+              placeholderTextColor="#9ca3af"
+              maxLength={100}
+            />
+          </View>
           <View style={styles.addActions}>
             <TouchableOpacity style={styles.addConfirmBtn} onPress={confirmAdd}>
               <Text style={styles.addConfirmText}>등록</Text>
@@ -512,6 +537,17 @@ export default function AddressBookPanel() {
                         maxLength={14}
                       />
                     </View>
+                    <View style={styles.addRow}>
+                      <Text style={styles.fieldLabel}>단골요청</Text>
+                      <TextInput
+                        style={styles.addInput}
+                        value={editCustomerRequest}
+                        onChangeText={setEditCustomerRequest}
+                        placeholder="예) 다진고추, 김치많이"
+                        placeholderTextColor="#9ca3af"
+                        maxLength={100}
+                      />
+                    </View>
                     <View style={styles.addActions}>
                       <TouchableOpacity style={styles.addConfirmBtn} onPress={confirmEdit}>
                         <Text style={styles.addConfirmText}>저장</Text>
@@ -570,6 +606,11 @@ export default function AddressBookPanel() {
                       <Text style={styles.rowDistLoading}>🚗 계산 중…</Text>
                     ) : null}
                   </View>
+                  {it.customerRequest ? (
+                    <Text style={styles.rowRequest} numberOfLines={2}>
+                      🌟 단골요청: {it.customerRequest}
+                    </Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.rowActions}>
@@ -853,6 +894,17 @@ function makeStyles(scale = 1) {
     rowCount: { fontSize: fp(11), color: '#dc2626', fontWeight: '700' },
     rowDist: { fontSize: fp(11), color: '#2563eb', fontWeight: '700' },
     rowDistLoading: { fontSize: fp(11), color: '#9ca3af', fontWeight: '600', fontStyle: 'italic' },
+    rowRequest: {
+      fontSize: fp(12),
+      color: '#9a3412',
+      fontWeight: '800',
+      backgroundColor: '#fff7ed',
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 4,
+      marginTop: 4,
+      alignSelf: 'flex-start',
+    },
     rowActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     iconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
     iconText: { fontSize: fp(16), opacity: 0.5 },
