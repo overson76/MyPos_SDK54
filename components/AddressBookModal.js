@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
 } from 'react-native';
 import { useOrders } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
+import { getEntryInitial, HANGUL_INDEX_BAR } from '../utils/hangulInitial';
 
 // 배달 주소록 — 검색 / 핀 / 삭제 / 선택.
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
@@ -28,6 +30,13 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const [newLabel, setNewLabel] = useState('');
   const [newAlias, setNewAlias] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  // 정렬 모드 — 'default' (핀/카운트) | 'alpha' (가나다)
+  // 인덱스 바 글자 클릭 시 자동 alpha + 점프. ⭐ 클릭 시 default 복귀.
+  const [sortMode, setSortMode] = useState('default');
+  // alpha 모드 진입 직후 점프 대기 — useEffect 가 items 갱신된 다음 처리.
+  const [pendingJump, setPendingJump] = useState(null);
+  // 각 row 의 DOM node (RN-web) 추적 → scrollIntoView 점프용. native 는 noop.
+  const rowRefs = useRef({});
 
   const todaySet = useMemo(
     () => new Set(addressBook.todayDeliveredKeys || []),
@@ -50,17 +59,52 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
         )
       : arr;
     return filtered.sort((a, b) => {
-      // 오늘 완료된 항목은 무조건 뒤로 (핀 고정이라도)
+      if (sortMode === 'alpha') {
+        // 가나다 정렬 — 초성 인덱스 → 같은 초성 내 별칭/라벨 가나다.
+        const ka = getEntryInitial(a);
+        const kb = getEntryInitial(b);
+        const idxA = HANGUL_INDEX_BAR.indexOf(ka);
+        const idxB = HANGUL_INDEX_BAR.indexOf(kb);
+        if (idxA !== idxB) return idxA - idxB;
+        const na = ((a.alias || '').trim() || a.label || '').toLowerCase();
+        const nb = ((b.alias || '').trim() || b.label || '').toLowerCase();
+        return na.localeCompare(nb, 'ko');
+      }
+      // default 정렬 — 핀 우선 → 같은 핀 그룹에서 오늘 미완료 우선 → 카운트 → 최근.
+      if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
       const at = todaySet.has(a.key);
       const bt = todaySet.has(b.key);
       if (at !== bt) return at ? 1 : -1;
-      if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
       const ca = a.count || 0;
       const cb = b.count || 0;
       if (cb !== ca) return cb - ca;
       return (b.lastUsedAt || 0) - (a.lastUsedAt || 0);
     });
-  }, [addressBook.entries, query, todaySet]);
+  }, [addressBook.entries, query, todaySet, sortMode]);
+
+  // 인덱스 바 클릭 → 가나다 모드 + 다음 tick 에 첫 매칭 entry 로 스크롤.
+  useEffect(() => {
+    if (!pendingJump || sortMode !== 'alpha') return;
+    const target = items.find((e) => getEntryInitial(e) === pendingJump);
+    setPendingJump(null);
+    if (!target) return;
+    const node = rowRefs.current[target.key];
+    if (node && typeof node.scrollIntoView === 'function') {
+      try {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (_) {}
+    }
+  }, [pendingJump, sortMode, items]);
+
+  const jumpToInitial = (initial) => {
+    setSortMode('alpha');
+    setPendingJump(initial);
+  };
+
+  const resetSort = () => {
+    setSortMode('default');
+    setPendingJump(null);
+  };
 
   const handleSelect = (label) => {
     onSelect && onSelect(label);
@@ -197,6 +241,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               </Text>
             </View>
           ) : (
+            <View style={styles.listWithIndex}>
             <ScrollView style={styles.list}>
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);
@@ -204,6 +249,12 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                 return (
                   <View
                     key={it.key}
+                    ref={(node) => {
+                      // RN-web 의 View ref → HTMLDivElement (scrollIntoView 가능).
+                      // native 는 RN 컴포넌트 — scrollIntoView 없어 점프 noop.
+                      if (node) rowRefs.current[it.key] = node;
+                      else delete rowRefs.current[it.key];
+                    }}
                     style={[styles.row, isToday && styles.rowToday]}
                   >
                     {isEditing ? (
@@ -311,6 +362,40 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                 );
               })}
             </ScrollView>
+            <View style={styles.indexBar}>
+              <Pressable
+                onPress={resetSort}
+                style={styles.indexBtn}
+                accessibilityLabel="자주 사용 정렬로 복귀"
+              >
+                <Text
+                  style={[
+                    styles.indexStar,
+                    sortMode === 'default' && styles.indexActive,
+                  ]}
+                >
+                  ⭐
+                </Text>
+              </Pressable>
+              {HANGUL_INDEX_BAR.map((ch) => (
+                <Pressable
+                  key={ch}
+                  onPress={() => jumpToInitial(ch)}
+                  style={styles.indexBtn}
+                  accessibilityLabel={`${ch} 로 가나다 점프`}
+                >
+                  <Text
+                    style={[
+                      styles.indexText,
+                      sortMode === 'alpha' && styles.indexActive,
+                    ]}
+                  >
+                    {ch}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            </View>
           )}
         </Pressable>
       </Pressable>
@@ -413,7 +498,40 @@ function makeStyles(scale = 1) {
   empty: { padding: 32, alignItems: 'center', gap: 6 },
   emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
-  list: { maxHeight: 420 },
+  list: { flex: 1, maxHeight: 420 },
+  listWithIndex: { flexDirection: 'row', maxHeight: 420 },
+  indexBar: {
+    width: 26,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+    borderLeftWidth: 1,
+    borderLeftColor: '#f3f4f6',
+    backgroundColor: '#fafafa',
+    alignItems: 'center',
+  },
+  indexBtn: {
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  indexText: {
+    fontSize: fp(11),
+    fontWeight: '800',
+    color: '#9ca3af',
+    minWidth: 16,
+    textAlign: 'center',
+  },
+  indexStar: {
+    fontSize: fp(12),
+    minWidth: 16,
+    textAlign: 'center',
+    opacity: 0.5,
+  },
+  indexActive: {
+    color: '#2563eb',
+    opacity: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

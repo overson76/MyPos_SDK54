@@ -85,12 +85,13 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
     const arr = Object.values(addressBook.entries || {});
     return arr
       .sort((a, b) => {
-        // 오늘 완료된 항목은 무조건 뒤로 (핀 고정이라도 회색 처리되면 뒤로 보냄)
+        // 핀 우선 (당일 배달 완료라도 핀이면 위쪽 그룹 유지)
+        if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+        // 같은 핀 그룹 안에서: 오늘 미완료 우선 → 오늘 완료는 아래로 (회색)
+        // 핀 그룹 / 비핀 그룹 둘 다 동일 정책 — 자주 가던 곳도 오늘 갔으면 일단 아래.
         const at = todaySet.has(a.key);
         const bt = todaySet.has(b.key);
         if (at !== bt) return at ? 1 : -1;
-        // 오늘 미완료끼리는 핀 우선
-        if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
         const ca = a.count || 0;
         const cb = b.count || 0;
         if (cb !== ca) return cb - ca;
@@ -124,6 +125,9 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
       >
         {items.map((it) => {
           const isToday = todaySet.has(it.key);
+          // 별칭이 있으면 별칭(짧고 식별 좋음), 없으면 주소.
+          // 칩 너비가 좁으면 5글자까지는 보이도록 chipText.minWidth 로 보장.
+          const displayText = (it.alias || '').trim() || it.label || '';
           return (
             <TouchableOpacity
               key={it.key}
@@ -149,7 +153,7 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
                 ]}
                 numberOfLines={1}
               >
-                {it.label}
+                {displayText}
               </Text>
               <Text style={[styles.chipCount, isToday && styles.chipCountToday]}>
                 ×{it.count || 0}
@@ -208,9 +212,9 @@ function makeStyles(scale = 1) {
     borderWidth: 1,
     borderColor: '#fca5a5',
     gap: 4,
-    maxWidth: 110,
+    maxWidth: 160,
   },
-  chipCompact: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 11, maxWidth: 95, gap: 3 },
+  chipCompact: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 11, maxWidth: 135, gap: 3 },
   chipPinned: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
   chipToday: {
     backgroundColor: '#f3f4f6',
@@ -218,8 +222,9 @@ function makeStyles(scale = 1) {
     opacity: 0.65,
   },
   pinIcon: { fontSize: fp(11) },
-  chipText: { fontSize: fp(12), fontWeight: '700', color: '#7f1d1d', flexShrink: 1 },
-  chipTextCompact: { fontSize: fp(10) },
+  // minWidth — 한글 5글자 정도 보이게 보장 (별칭 짧아도 너무 좁아 보이지 않게).
+  chipText: { fontSize: fp(12), fontWeight: '700', color: '#7f1d1d', flexShrink: 1, minWidth: fp(70) },
+  chipTextCompact: { fontSize: fp(10), minWidth: fp(58) },
   chipTextToday: {
     color: '#6b7280',
     textDecorationLine: 'line-through',
