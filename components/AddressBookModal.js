@@ -19,8 +19,12 @@ import { getEntryInitial, HANGUL_INDEX_BAR } from '../utils/hangulInitial';
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
 // 당일 배송 완료된 항목은 회색 처리(별도 섹션 분리하지는 않음 — 한 리스트에서 시각적으로만 구분).
 export default function AddressBookModal({ visible, onClose, onSelect }) {
-  const { scale } = useResponsive();
-  const styles = useMemo(() => makeStyles(scale), [scale]);
+  const { scale, height: viewportH } = useResponsive();
+  // viewport 높이에 따라 ScrollView 최대 높이 동적 계산 — 폰 가로(viewport 430)
+  // 에서 sheet maxHeight 90% = 387 안에 header(50)+search(50)+indexBar(46)+여유(16)
+  // = 162 가 들어가야 하므로 ScrollView 는 225 까지만. PC(viewport 800) 에선
+  // sheet 720 안에 충분히 들어가 420 까지 자연스럽게 사용.
+  const styles = useMemo(() => makeStyles(scale, viewportH), [scale, viewportH]);
   const { addressBook, pinAddress, deleteAddress, setAlias, setPhone, addAddress } = useOrders();
   const [query, setQuery] = useState('');
   // 편집 중인 항목 key. null = 편집 없음.
@@ -497,7 +501,11 @@ function formatPhoneDisplay(digits) {
 }
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
-function makeStyles(scale = 1) {
+function makeStyles(scale = 1, viewportH = 800) {
+  // sheet maxHeight 90% 의 viewport 안에서 ScrollView 가 차지할 최대 영역.
+  // header + search + indexBar + 여유 162px 제외.
+  const sheetMaxH = viewportH * 0.9;
+  const scrollMaxH = Math.max(120, Math.min(420, sheetMaxH - 162));
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
   overlay: {
@@ -580,12 +588,11 @@ function makeStyles(scale = 1) {
   empty: { padding: 32, alignItems: 'center', gap: 6 },
   emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
-  // flex 정책 변경 (2026-05-16): 폰 Safari 라이브 URL 에서 entries 안 보이는 사고.
-  // 원인: sheet 가 maxHeight 90% + height auto 라 flex 자식이 0 으로 평가됨
-  // (yoga 엔진의 동작). flex:1 만 추가해도 부모 영역이 명시 X 라 무효.
-  // 해결: ScrollView 가 자기 contents 만큼 자동 차지 + maxHeight 420 캡.
-  // flex 의존 X → 폰 가로(387) 든 PC(639) 든 동일하게 entries 표시.
-  list: { maxHeight: 420 },
+  // 동적 maxHeight (2026-05-16 3차 fix): viewport 크기에 따라 ScrollView 영역
+  // 자동 조절. 폰 가로(viewport 430) 에서 sheet maxHeight 90%=387 안에 indexBar
+  // 까지 모두 들어가도록 scrollMaxH 가 225 로 줄어듦. PC 에선 420.
+  // flex 의존 X (yoga 가 부모 height auto + flex:1 자식을 0 으로 평가하는 함정 회피).
+  list: { maxHeight: scrollMaxH },
   listWithIndex: { flexDirection: 'column' },
   indexBar: {
     flexDirection: 'row',
