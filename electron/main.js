@@ -39,7 +39,12 @@ const {
 registerOfflineScheme();
 
 const DEFAULT_URL = process.env.MYPOS_URL || 'https://mypos-sdk54.overson76.workers.dev';
-const KIOSK_MODE = process.env.MYPOS_KIOSK === '1' || app.isPackaged;
+// 1.0.49: KIOSK_MODE 정책 변경 — app.isPackaged 자동 풀스크린 제거.
+//   매장 사장님이 풀스크린에서 창 내리기/이동 못 해 불편 → 패키징 빌드도 일반 창으로.
+//   진짜 키오스크 원하면 setx MYPOS_KIOSK=1 명시 (드물게).
+//   대신 패키징 빌드는 시작 시 자동 maximize() — 화면 전체 사용.
+const KIOSK_MODE = process.env.MYPOS_KIOSK === '1';
+const START_MAXIMIZED = app.isPackaged && !KIOSK_MODE;
 const IS_DEV = !app.isPackaged;
 
 // 같은 .exe 가 두 번 실행되는 것 방지 — 매장 PC 에서 사장님이 더블클릭 한 번 더 누르면
@@ -60,9 +65,13 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1F2937', // 로딩 시 흰 화면 깜빡임 방지 — navy 와 일치
     title: 'MyPos',
+    // 1.0.49: 일반 창 + 자동 최대화 (KIOSK 명시 시만 풀스크린)
     fullscreen: KIOSK_MODE,
-    autoHideMenuBar: KIOSK_MODE,
+    autoHideMenuBar: true,                // 메뉴바 항상 숨김 (Alt 키로 표시 안 함 — 메뉴 자체 제거)
     kiosk: KIOSK_MODE,
+    minimizable: true,                    // 명시 — 최소화 버튼 활성
+    maximizable: true,                    // 명시 — 최대화 버튼 활성
+    show: false,                          // ready-to-show 후 .maximize() + show — 깜빡임 방지
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -73,10 +82,19 @@ function createWindow() {
     },
   });
 
-  // 키오스크 모드일 땐 메뉴바 자체 제거. dev 는 메뉴 유지 (개발자 도구 접근).
-  if (KIOSK_MODE) {
-    Menu.setApplicationMenu(null);
-  }
+  // 1.0.49: 메뉴 항상 제거 — 일반 창에서도 깔끔. Alt 눌러도 메뉴바 안 나옴.
+  Menu.setApplicationMenu(null);
+
+  // 1.0.49: 패키징 빌드는 자동 최대화로 시작. dev 는 1920×1080 일반 창.
+  //   - 사장님이 한 번도 클릭 안 해도 화면 가득.
+  //   - 사장님이 - □ X 버튼 자유롭게 사용 (창 내리기, 최대화 토글, 닫기).
+  //   - KIOSK_MODE 명시 시는 풀스크린 (창 컨트롤 X).
+  mainWindow.once('ready-to-show', () => {
+    if (START_MAXIMIZED) {
+      mainWindow.maximize();
+    }
+    mainWindow.show();
+  });
 
   // 라이브 URL 우선. 타임아웃/오류 시 번들된 dist/ 폴백 (Phase 4 오프라인 캐시).
   loadWithFallback(mainWindow, DEFAULT_URL).then(({ source }) => {

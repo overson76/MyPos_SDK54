@@ -36,9 +36,18 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // 1.0.50: 주소·별칭·전화번호 3가지 모두 검색 (AddressBookPanel 과 통일).
+    //   기존: label(주소)만 → "사하구 사하로... (별칭) 김진사" 일 때 "김진사" 검색 불가.
+    //   사용자 보고: 주소지 있을 때 별칭 검색 안 되는 버그.
+    const qDigits = q.replace(/\D/g, '');
     const arr = Object.values(addressBook.entries || {});
     const filtered = q
-      ? arr.filter((e) => (e.label || '').toLowerCase().includes(q))
+      ? arr.filter(
+          (e) =>
+            (e.label || '').toLowerCase().includes(q) ||
+            (e.alias || '').toLowerCase().includes(q) ||
+            (qDigits && (e.phone || '').includes(qDigits))
+        )
       : arr;
     return filtered.sort((a, b) => {
       // 오늘 완료된 항목은 무조건 뒤로 (핀 고정이라도)
@@ -165,7 +174,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="주소 검색"
+              placeholder="주소·별칭·전화번호 검색"
               placeholderTextColor="#9ca3af"
               autoFocus={false}
             />
