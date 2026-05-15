@@ -17,6 +17,11 @@ import makeStyles from './OrderScreen.styles';
 import { categories } from '../utils/menuData';
 import { useMenu } from '../utils/MenuContext';
 import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
+import {
+  computeRecommendations,
+  recommendationsToGrid,
+  RECOMMENDATION_CATEGORY,
+} from '../utils/recommendations';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
@@ -172,6 +177,7 @@ export default function OrderScreen({
     getGroupFor,
     clearTableBySource,
     computeSubtotalsBySource,
+    revenue,
   } = useOrders();
 
   const genSlotId = () =>
@@ -495,7 +501,43 @@ export default function OrderScreen({
   };
 
   const menuById = Object.fromEntries(menuItems.map((m) => [m.id, m]));
-  const currentRows = categoryRows[activeCategory] || [];
+
+  // AI 메뉴 추천 — 시간대/단골/인기도 가중 점수로 매출 history 에서 자동 선정.
+  // 외부 API 사용 X. 카탈로그 편집 불가능한 동적 카테고리.
+  const isRecommendation = activeCategory === RECOMMENDATION_CATEGORY;
+  const displayCategories = useMemo(
+    () => [RECOMMENDATION_CATEGORY, ...categories],
+    []
+  );
+  const recommendations = useMemo(() => {
+    if (!isRecommendation) return [];
+    const orderForAddr = hasRealTable ? getOrder(table.id) : null;
+    return computeRecommendations({
+      history: revenue?.history || [],
+      menus: menuItems,
+      customerAddressKey: orderForAddr?.deliveryAddress || null,
+      topN: GRID_COLS * GRID_ROWS,
+    });
+  }, [
+    isRecommendation,
+    revenue?.history,
+    menuItems,
+    hasRealTable,
+    table,
+    getOrder,
+  ]);
+  const recommendedRows = useMemo(
+    () => recommendationsToGrid(recommendations, GRID_COLS, GRID_ROWS),
+    [recommendations]
+  );
+  const currentRows = isRecommendation
+    ? recommendedRows
+    : categoryRows[activeCategory] || [];
+
+  // 추천 카테고리는 자동 생성 — editMode 진입 자체를 차단(빈 [+] 슬롯 혼동 방지).
+  useEffect(() => {
+    if (isRecommendation && editMode) setEditMode(false);
+  }, [isRecommendation, editMode]);
 
   const stopRecognition = () => {
     const rec = recognitionRef.current;
@@ -1046,7 +1088,7 @@ export default function OrderScreen({
           {/* 카테고리 탭 (1.0.27: layout 원복 — 1.0.26 의 inline flexDirection 제거) */}
           <View style={styles.categoryBar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {categories.map((cat) => {
+              {displayCategories.map((cat) => {
                 const active = activeCategory === cat;
                 const isFav = cat === '즐겨찾기';
                 // 1.0.26: 즐겨찾기 탭 — drag-drop 시 hit-test 용 onLayout + drop zone 강조
@@ -1214,6 +1256,7 @@ export default function OrderScreen({
                         dragFromIdx !== null &&
                         dragFromIdx !== dragIdx;
                       const applyDrop = (from, to) => {
+                        if (isRecommendation) return;
                         if (from === null || from === to) return;
                         setCategorySlot?.(activeCategory, from, to);
                       };
@@ -1290,12 +1333,13 @@ export default function OrderScreen({
                         const emptyBox = editMode ? (
                           <TouchableOpacity
                             key={`empty-press-${rowIdx}-${cellIdx}`}
-                            onPress={() =>
+                            onPress={() => {
+                              if (isRecommendation) return;
                               setMenuAddTarget({
                                 category: activeCategory,
                                 flatIndex: dragIdx,
-                              })
-                            }
+                              });
+                            }}
                             activeOpacity={0.6}
                             accessibilityLabel={`${activeCategory} 카테고리에 새 메뉴 추가`}
                           >
@@ -1338,6 +1382,7 @@ export default function OrderScreen({
                           ]}
                           activeOpacity={0.7}
                           onLongPress={() => {
+                            if (isRecommendation) return;
                             // 폰: 꾹 누르면 메뉴 이동 모드 진입
                             // 웹: draggable div 가 처리하므로 여기선 무시
                             if (!isWeb) {
@@ -1393,8 +1438,9 @@ export default function OrderScreen({
                           <div
                             key={`tile-w-${activeCategory}-${dragIdx}`}
                             style={{ display: 'flex' }}
-                            draggable
+                            draggable={!isRecommendation}
                             onDragStart={(e) => {
+                              if (isRecommendation) return;
                               try {
                                 e.dataTransfer.effectAllowed = 'move';
                                 e.dataTransfer.setData(
