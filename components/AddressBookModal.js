@@ -43,6 +43,11 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const [pendingJump, setPendingJump] = useState(null);
   // 각 row 의 DOM node (RN-web) 추적 → scrollIntoView 점프용. native 는 noop.
   const rowRefs = useRef({});
+  // ScrollView ref + 각 row 의 y offset — native 환경에서 scrollTo 점프용.
+  // RN-Web 의 scrollIntoView 가 native 에선 작동 안 함 → scrollTo + offset 패턴
+  // 으로 web/native 통합.
+  const listRef = useRef(null);
+  const rowOffsetsRef = useRef({});
   // 인덱스 바 드래그 — 현재 호버 글자 큰 미리보기 표시 (iPhone 연락처 패턴).
   const [activeHover, setActiveHover] = useState(null);
   const barWidthRef = useRef(0);
@@ -95,11 +100,25 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   }, [addressBook.entries, query, todaySet, sortMode]);
 
   // 인덱스 바 클릭 → 가나다 모드 + 다음 tick 에 첫 매칭 entry 로 스크롤.
+  // 우선순위: ScrollView.scrollTo (web + native 모두 지원) → scrollIntoView (web fallback).
   useEffect(() => {
     if (!pendingJump || sortMode !== 'alpha') return;
     const target = items.find((e) => getEntryInitial(e) === pendingJump);
     setPendingJump(null);
     if (!target) return;
+    // 1) ScrollView.scrollTo + 측정된 row y offset — native + web 통합.
+    const y = rowOffsetsRef.current[target.key];
+    if (
+      listRef.current &&
+      typeof listRef.current.scrollTo === 'function' &&
+      typeof y === 'number'
+    ) {
+      try {
+        listRef.current.scrollTo({ y: Math.max(0, y - 4), animated: true });
+        return;
+      } catch (_) {}
+    }
+    // 2) RN-Web fallback — scrollIntoView (네이티브에선 NOOP).
     const node = rowRefs.current[target.key];
     if (node && typeof node.scrollIntoView === 'function') {
       try {
@@ -166,8 +185,14 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const barPanResponder = useMemo(
     () =>
       PanResponder.create({
+        // Capture 우선권 — RN native 에서 자식 element 또는 부모 Pressable 이
+        // touch 를 가로채기 전에 인덱스 바가 먼저 받음. iPhone native 앱에서
+        // PanResponder 못 받던 사고의 핵심 fix.
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false, // 다른 component 가 가로채려해도 거부
         onPanResponderGrant: (e) => {
           lastIdxRef.current = -1; // 새 드래그 시작 → 같은 위치도 재호출
           handleBarTouch(computeLocalX(e));
@@ -250,7 +275,15 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <View
+          style={styles.sheet}
+          // RN native: Pressable sheet 가 child PanResponder 의 touch 를
+          // 가로채는 사고 → 인덱스 바 드래그 작동 안 함.
+          // View + responder system 패턴 — 자식 PanResponder (true 반환) 가
+          // 우선권 차지 + 자식이 못 받는 빈 영역 touch 는 sheet 가 흡수해
+          // backdrop(부모) 으로 bubble 되지 않게 함 (모달 실수 close 방지).
+          onStartShouldSetResponder={() => true}
+          onResponderTerminationRequest={() => false}>
           <View style={styles.header}>
             <Text style={styles.title}>배달 주소록</Text>
             <View style={styles.headerRight}>
@@ -345,13 +378,17 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             </View>
           ) : (
             <View style={styles.listWithIndex}>
-            <ScrollView style={styles.list}>
+            <ScrollView ref={listRef} style={styles.list}>
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);
                 const isEditing = editingKey === it.key;
                 return (
                   <View
                     key={it.key}
+                    onLayout={(e) => {
+                      // native 환경 scrollTo 점프용 — row 의 ScrollView 안 y offset 저장.
+                      rowOffsetsRef.current[it.key] = e.nativeEvent.layout.y;
+                    }}
                     ref={(node) => {
                       // RN-web 의 View ref → HTMLDivElement (scrollIntoView 가능).
                       // native 는 RN 컴포넌트 — scrollIntoView 없어 점프 noop.
@@ -508,7 +545,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               <Text style={styles.hoverPreviewText}>{activeHover}</Text>
             </View>
           )}
-        </Pressable>
+        </View>
       </Pressable>
     </View>
   );
