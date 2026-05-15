@@ -20,6 +20,7 @@ import StoreManagementSection from '../components/StoreManagementSection';
 import AdminSettingsView from '../components/AdminSettingsView';
 import AddressBookPanel from '../components/AddressBookPanel';
 import PinManageModal, { PIN_LENGTH } from '../components/PinManageModal';
+import DeliveryRouteDemo from '../components/DeliveryRouteDemo';
 import {
   getSpeakAddress,
   getVolume,
@@ -77,6 +78,7 @@ function SystemSettingsView() {
   const { storeInfo, isOwner } = useStore();
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
+  const [routeDemoOpen, setRouteDemoOpen] = useState(false);
 
   // Electron(.exe) 자동 업데이트 — 매장 PC 카운터 환경. 일반 브라우저 / 폰 에서는 카드 안 보임.
   const updateSupported = isElectronUpdateAvailable();
@@ -225,6 +227,7 @@ function SystemSettingsView() {
   };
 
   return (
+    <>
     <ScrollView
       style={sysStyles.container}
       contentContainerStyle={{ paddingBottom: 24 }}
@@ -528,6 +531,24 @@ function SystemSettingsView() {
         </>
       ) : null}
 
+      {/* === 시뮬레이션 — 외부 시연 / 신입 교육. 운영 빌드에서도 노출 (실제 데이터 영향 X). === */}
+      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>🎬 시뮬레이션</Text>
+      <View style={sysStyles.row}>
+        <View style={sysStyles.rowText}>
+          <Text style={sysStyles.label}>배달 경로 최적화 데모</Text>
+          <Text style={sysStyles.helper}>
+            가짜 매장(부산 사하구) + 배달 4건으로 카드 동작을 즉시 시각화.
+            카카오 API 의존 X — 직선거리 보정으로 mock 계산. 외부 시연 / 신입 교육용.
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={sysStyles.btnSecondary}
+          onPress={() => setRouteDemoOpen(true)}
+        >
+          <Text style={sysStyles.btnSecondaryText}>🛵 시연 보기</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* === 진단 — Sentry 연동 확인용. 개발 빌드(__DEV__)에서만 노출. 운영 빌드에서는 자동 숨김. === */}
       {__DEV__ ? (
         <>
@@ -576,6 +597,11 @@ function SystemSettingsView() {
 
       {/* (1.0.24: PinManageModal 은 AdminSettingsView 로 이동) */}
     </ScrollView>
+    <DeliveryRouteDemo
+      visible={routeDemoOpen}
+      onClose={() => setRouteDemoOpen(false)}
+    />
+    </>
   );
 }
 

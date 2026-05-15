@@ -19,7 +19,12 @@ import { getDrivingDistance } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
 import { reportError } from '../utils/sentry';
 
-export default function DeliveryRouteCard({ activeOrders, storeInfo, addressBook }) {
+export default function DeliveryRouteCard({
+  activeOrders,
+  storeInfo,
+  addressBook,
+  getDistanceFn = getDrivingDistance,
+}) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -68,7 +73,7 @@ export default function DeliveryRouteCard({ activeOrders, storeInfo, addressBook
     setError(null);
     setResult(null);
     try {
-      const r = await optimizeRoute(origin, candidates, getDrivingDistance);
+      const r = await optimizeRoute(origin, candidates, getDistanceFn);
       if (r.order.length === 0 || r.missing === candidates.length) {
         setError('카카오 길찾기 결과 없음 — 좌표 또는 API 키 확인');
       } else {
