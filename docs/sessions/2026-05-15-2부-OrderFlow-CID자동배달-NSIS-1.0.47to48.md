@@ -1,4 +1,4 @@
-# 2026-05-15 2부 — 주문 흐름 + CID 단골 자동 + NSIS 덮어쓰기 + UX 다듬기 (1.0.47-50)
+# 2026-05-15 2부 — 주문/CID/NSIS/UX/카트사라짐 진짜 fix (1.0.47-51)
 
 ## 한 줄 요약
 
@@ -151,6 +151,54 @@ npm run deploy:web
 | `ce05673` | feat(order+cid+nsis): 1.0.47-48 — 미선택 배달 자동/CID 단골 자동/포장·예약 시간/NSIS 덮어쓰기 fix |
 | `c32daf1` | docs(sessions): 2026-05-15 2부 세션 노트 |
 | `c083df5` | feat(ux): 1.0.49-50 — 배달 카드 별칭 우선 + 일반 창 자동 최대화 + 주소록 3가지 검색 |
+| `8106091` | docs(sessions): 1.0.49-50 한 세션 네 빌드 통합 |
+| `87a78c1` | fix(orders): 1.0.51 — 카트 사라짐 진짜 fix + 배달 카드 alias→phone→addr |
+
+## 1.0.51 — 카트 사라짐 진짜 원인 (사장님 누적 보고 해결)
+
+3 세션 누적 미해결이었던 "테이블 선택 없이 메뉴 담으면 카트가 계속 지워짐" 의 진짜 원인:
+
+`useOrderFirestoreSync.js` 의 orders onSnapshot 콜백:
+```js
+const unsubOrders = storeRef.collection('orders').onSnapshot((snap) => {
+  const next = {};
+  snap.docs.forEach((d) => { next[d.id] = d.data(); });
+  dispatch({ type: 'orders/hydrate', payload: next });  // ← 매번 통째 교체!
+  ...
+});
+```
+
+`orderReducer` 의 hydrate 케이스:
+```js
+case 'orders/hydrate': {
+  return action.payload && typeof action.payload === 'object'
+    ? action.payload   // ← Firestore payload 로 통째 교체. PENDING 없음 → 사라짐!
+    : state;
+}
+```
+
+**Firestore 에는 PENDING_TABLE_ID 문서가 없으므로** (write 시점에 명시 제외 안 되어 있었지만, write 자체가 디바운스라 짧은 순간 read 후 write 순서), onSnapshot 콜백이 매번 발화할 때 local 의 PENDING cart 가 통째 사라짐.
+
+**1.0.51 처방 2개:**
+1. `orders/hydrate` reducer 가 state 의 PENDING_TABLE_ID 를 보존 (local-only 정책).
+2. `useOrderFirestoreSync` 의 write/delete 흐름에서 PENDING_TABLE_ID 명시 제외 (클라우드에 미선택 cart 가 남는 보안 이슈도 함께 해결).
+
+## 매장 PC / 폰 / 태블릿 모든 기기 적용 흐름
+
+| 기기 | 적용 방법 |
+|---|---|
+| 매장 PC (.exe) | `deploy:web` 후 사장님이 **MyPos 종료 → 재실행** 한 번. .exe 재설치 X. 라이브 URL 부터 로드라 즉시 새 코드. |
+| 폰 / 태블릿 (Expo OTA) | `eas update --branch production` push 후 다음 앱 시작 시 캐시된 옛 거 즉시 + 새 거 백그라운드 → 그 다음 시작 시 적용. **영업 중 갑작스러운 새로고침 X**. |
+| 라이브 URL 직접 접속 사용자 | `deploy:web` 즉시 — F5 한 번. |
+
+## 배포 채널 통합 (1.0.51 끝나는 시점)
+
+| 채널 | 1.0.51 상태 |
+|---|---|
+| GitHub Releases | ✅ v1.0.51 (Setup.exe + portable.exe) |
+| 폰 OTA (EAS Update) | ✅ production push |
+| Cloudflare 라이브 URL | ✅ deploy:web (Version 4a824f41) |
+| main push | ✅ deploy:web 끝나면 |
 
 ## 다음 체크리스트
 
