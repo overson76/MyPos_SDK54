@@ -580,13 +580,13 @@ function makeStyles(scale = 1) {
   empty: { padding: 32, alignItems: 'center', gap: 6 },
   emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
-  list: { flex: 1, maxHeight: 420 },
-  // 인덱스 바를 list 하단 가로 한 줄로 배치 — 폰 가로(932×430) 잘림 해소.
-  // flex: 1 필수 — 폰 가로(height 430) 에서 부모 sheet maxHeight 90% = 387 인데
-  // listWithIndex 가 flex 없으면 height auto → 자식 ScrollView 의 flex:1 이
-  // 참조할 부모 영역 0 → entries 안 보임 (PC 1455×710 에선 maxHeight 420
-  // 까지 충분해서 잘 보였던 회귀).
-  listWithIndex: { flex: 1, flexDirection: 'column', maxHeight: 420 },
+  // flex 정책 변경 (2026-05-16): 폰 Safari 라이브 URL 에서 entries 안 보이는 사고.
+  // 원인: sheet 가 maxHeight 90% + height auto 라 flex 자식이 0 으로 평가됨
+  // (yoga 엔진의 동작). flex:1 만 추가해도 부모 영역이 명시 X 라 무효.
+  // 해결: ScrollView 가 자기 contents 만큼 자동 차지 + maxHeight 420 캡.
+  // flex 의존 X → 폰 가로(387) 든 PC(639) 든 동일하게 entries 표시.
+  list: { maxHeight: 420 },
+  listWithIndex: { flexDirection: 'column' },
   indexBar: {
     flexDirection: 'row',
     width: '100%',
