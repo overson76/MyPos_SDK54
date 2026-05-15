@@ -611,6 +611,11 @@ function makeStyles(scale = 1, viewportH = 800) {
     // 드래그 시 텍스트 선택 방지 (RN-web).
     userSelect: 'none',
     cursor: 'pointer',
+    // iOS Safari: 기본 touch-action(=auto) 이면 가로 스와이프가 페이지 동작에
+    // 흡수되어 RN-Web PanResponder 의 onPanResponderMove 가 안 들어옴
+    // → PC 에선 정상이지만 폰 Safari 에서 드래그가 첫 탭만 인식되는 사고.
+    // 'none' 으로 모든 default touch 동작 차단 → PanResponder 가 모든 move 수신.
+    touchAction: 'none',
   },
   indexBtn: {
     flex: 1,
