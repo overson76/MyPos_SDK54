@@ -22,6 +22,7 @@ import { getFirestore } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
 import { setSharedAudioStore } from './sharedAudio';
+import { PENDING_TABLE_ID } from './orderReducer';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -217,12 +218,15 @@ export function useOrderFirestoreSync({
       let opCount = 0;
 
       for (const tid of Object.keys(orders)) {
+        // 1.0.51: PENDING_TABLE_ID 는 local-only. 클라우드에 미선택 cart 남기지 않음.
+        if (tid === PENDING_TABLE_ID) continue;
         if (orders[tid] !== synced[tid]) {
           batch.set(storeRef.collection('orders').doc(tid), orders[tid]);
           opCount++;
         }
       }
       for (const tid of Object.keys(synced)) {
+        if (tid === PENDING_TABLE_ID) continue;
         if (!(tid in orders)) {
           batch.delete(storeRef.collection('orders').doc(tid));
           opCount++;

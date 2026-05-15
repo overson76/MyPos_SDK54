@@ -376,19 +376,41 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const isPaid = order.paymentStatus === 'paid';
     const deliveryAddr = order.deliveryAddress;
     const isDelivery = t.type === 'delivery';
-    // 1.0.49: 배달 카드 별칭 우선 표시.
-    //   1순위: order.deliveryAlias (CID "주문받기" 시 자동 박힘 + 사장님 수동 입력)
-    //   2순위: 주소록 entry.alias (전화번호 또는 주소 매칭)
-    //   3순위: 주소 자체 (기존)
+    // 1.0.51: 배달 카드 표시 우선순위 (사장님 보고).
+    //   1순위: 별칭 (order.deliveryAlias 또는 주소록 entry.alias) — 👤
+    //   2순위: 전화번호 (order.deliveryPhone 또는 주소록 entry.phone) — ☎
+    //   3순위: 주소 (order.deliveryAddress) — 📍
     const deliveryAliasFromOrder = order.deliveryAlias;
+    const deliveryPhoneFromOrder = order.deliveryPhone;
     let deliveryAliasFromBook = null;
+    let deliveryPhoneFromBook = null;
     if (isDelivery && deliveryAddr) {
       const key = normalizeAddressKey(deliveryAddr);
       const entry = key ? addressBook?.entries?.[key] : null;
       deliveryAliasFromBook = entry?.alias || null;
+      deliveryPhoneFromBook = entry?.phone || null;
     }
-    const deliveryPrimary = deliveryAliasFromOrder || deliveryAliasFromBook || deliveryAddr;
-    const deliveryHasAlias = !!(deliveryAliasFromOrder || deliveryAliasFromBook);
+    const deliveryAlias = deliveryAliasFromOrder || deliveryAliasFromBook;
+    const deliveryPhone = deliveryPhoneFromOrder || deliveryPhoneFromBook;
+    let deliveryPrimary;
+    let deliveryIcon;
+    if (deliveryAlias) {
+      deliveryPrimary = deliveryAlias;
+      deliveryIcon = '👤';
+    } else if (deliveryPhone) {
+      // 표시용 포맷 (010-1234-5678) — 길면 그대로
+      const d = String(deliveryPhone).replace(/\D/g, '');
+      deliveryPrimary =
+        d.length === 11 && d.startsWith('010')
+          ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
+          : d.length === 10
+          ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
+          : deliveryPhone;
+      deliveryIcon = '☎';
+    } else {
+      deliveryPrimary = deliveryAddr;
+      deliveryIcon = '📍';
+    }
     // 배달 거리 — 매장 좌표 + 주소록의 변환 좌표 모두 있을 때만 표시.
     // useAddressBook 의 백그라운드 effect 가 lat/lng 채워주면 자동으로 나타남.
     let distanceLabel = null;
@@ -563,7 +585,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   activeOpacity={0.7}
                 >
                   <Text style={styles.deliveryAddr} numberOfLines={1}>
-                    {deliveryHasAlias ? '👤' : '📍'} {deliveryPrimary}
+                    {deliveryIcon} {deliveryPrimary}
                     {distanceLabel ? ` · ${distanceLabel}` : ''}
                     {' 🗺️'}
                   </Text>

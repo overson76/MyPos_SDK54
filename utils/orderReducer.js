@@ -57,9 +57,17 @@ export function orderReducer(state, action) {
   switch (action.type) {
     case 'orders/hydrate': {
       // payload 가 falsy 면 변화 없음 — useOrderPersistence 가드와 별개로 안전하게.
-      return action.payload && typeof action.payload === 'object'
-        ? action.payload
-        : state;
+      if (!action.payload || typeof action.payload !== 'object') return state;
+      // 1.0.51: PENDING_TABLE_ID 는 local-only — Firestore sync 무관.
+      //   사장님 보고 (1.0.50): "테이블 선택 없이 메뉴 담으면 카트가 계속 지워짐".
+      //   원인: useOrderFirestoreSync 의 orders onSnapshot 콜백이 매번 dispatch('orders/hydrate')
+      //         → Firestore 에는 PENDING 문서 없음 → 통째 교체 시 local 의 PENDING cart 사라짐.
+      //   처방: hydrate 시 local 의 PENDING 이 있으면 그대로 보존.
+      const pending = state?.[PENDING_TABLE_ID];
+      if (pending) {
+        return { ...action.payload, [PENDING_TABLE_ID]: pending };
+      }
+      return action.payload;
     }
 
     case 'orders/addItem': {
