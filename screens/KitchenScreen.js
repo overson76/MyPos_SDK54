@@ -23,6 +23,7 @@ import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+import DeliveryRouteCard from '../components/DeliveryRouteCard';
 
 const typeLabels = {
   regular: '매장',
@@ -39,8 +40,13 @@ function formatElapsed(ts, now) {
 }
 
 export default function KitchenScreen() {
-  const { orders, markReady, cycleItemCookState, cycleItemCookStatePortion } =
-    useOrders();
+  const {
+    orders,
+    markReady,
+    cycleItemCookState,
+    cycleItemCookStatePortion,
+    addressBook,
+  } = useOrders();
   const { items: menuItems, optionsList: OPTIONS_CATALOG } = useMenu();
   const { storeInfo } = useStore();
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
@@ -394,6 +400,11 @@ export default function KitchenScreen() {
         <View style={styles.versionBar}>
           <Text style={styles.versionText}>v3 · 변경감지 활성</Text>
         </View>
+        <DeliveryRouteCard
+          activeOrders={activeOrders}
+          storeInfo={storeInfo}
+          addressBook={addressBook}
+        />
       {activeOrders.map((o, idx) => {
         const color = tableTypeColors[o.table.type] || '#6b7280';
         const total = computeItemsTotal(o.items);
