@@ -42,7 +42,7 @@ import {
 } from '../utils/deliveryReturns';
 import { buildDeliveryReturnText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
-import { useDeliveryRounds } from '../utils/useDeliveryRounds';
+import { useDeliveryRounds, getRoundReturnProgress } from '../utils/useDeliveryRounds';
 import { getDrivingDistance, isNaviAvailable } from '../utils/geocode';
 import { localDateString } from '../utils/orderHelpers';
 import DeliveryMapModal from '../components/DeliveryMapModal';
@@ -53,7 +53,13 @@ export default function DeliveryReturnScreen() {
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const { revenue, addressBook, setAddressBook } = useOrders();
   const { storeInfo } = useStore();
-  const { rounds, finalizeRound } = useDeliveryRounds();
+  const {
+    rounds,
+    finalizeRound,
+    markEntryReturned,
+    markRoundAllReturned,
+    clearRoundReturned,
+  } = useDeliveryRounds();
 
   const storeCoord = useMemo(() => {
     if (
@@ -269,75 +275,146 @@ export default function DeliveryReturnScreen() {
     setMapInfo({ storeCoord, deliveries });
   };
 
-  const renderRoundDetail = (ranked, unknown, sortMode) => (
-    <View style={styles.detail}>
-      {unknown.length > 0 && (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, styles.sectionTitleUnknown]}>
-            ⚠️ 주소불명 ({unknown.length}건)
-          </Text>
-          {unknown.map((u) => (
-            <View key={u.key} style={[styles.row, styles.rowUnknown]}>
-              <Text style={styles.rank}>0</Text>
-              <View style={styles.rowMain}>
-                <Text style={styles.rowLabel} numberOfLines={1}>
-                  {u.label}
-                </Text>
-                <Text style={styles.rowMenu} numberOfLines={2}>
-                  {u.menuSummary
-                    .map((m) => `${m.name} ${m.qty}`)
-                    .join(', ')}
-                </Text>
-                {u.totalDishes > 1 && (
-                  <Text style={styles.rowTotal}>총 {u.totalDishes} 그릇</Text>
-                )}
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-      {ranked.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {sortMode === 'near' ? '📍 근거리 순' : '🛵 원거리 순'} (
-            {ranked.length}건)
-          </Text>
-          {ranked.map((it) => (
-            <View key={it.key} style={styles.row}>
-              <Text style={styles.rank}>{it.rank}</Text>
-              <View style={styles.rowMain}>
-                <View style={styles.rowTitleLine}>
-                  <Text style={styles.rowLabel} numberOfLines={1}>
-                    {it.label}
-                  </Text>
-                  {typeof it.distanceM === 'number' && (
-                    <Text style={styles.rowDist}>
-                      {formatDist(it.distanceM)}
-                      {it.isDrivingDistance ? '' : '*'}
-                    </Text>
+  // roundId 가 null 이면 진행중 차수(pending) — 체크박스 없음 (마감 전이라 의미 X).
+  const renderRoundDetail = (ranked, unknown, sortMode, roundId) => {
+    const canCheck = !!roundId;
+    const onToggle = (entryKey) => {
+      if (!canCheck) return;
+      markEntryReturned(roundId, entryKey);
+    };
+    return (
+      <View style={styles.detail}>
+        {unknown.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, styles.sectionTitleUnknown]}>
+              ⚠️ 주소불명 ({unknown.length}건)
+            </Text>
+            {unknown.map((u) => {
+              const done = !!u.returnedAt;
+              return (
+                <View
+                  key={u.key}
+                  style={[
+                    styles.row,
+                    styles.rowUnknown,
+                    done && styles.rowDone,
+                  ]}
+                >
+                  {canCheck && (
+                    <TouchableOpacity
+                      onPress={() => onToggle(u.key)}
+                      style={styles.checkBox}
+                      accessibilityLabel={done ? '회수 해제' : '회수 완료'}
+                    >
+                      <Text style={styles.checkBoxText}>{done ? '✓' : ''}</Text>
+                    </TouchableOpacity>
                   )}
+                  <Text style={[styles.rank, done && styles.textDone]}>0</Text>
+                  <View style={styles.rowMain}>
+                    <Text
+                      style={[styles.rowLabel, done && styles.textDone]}
+                      numberOfLines={1}
+                    >
+                      {u.label}
+                    </Text>
+                    <Text
+                      style={[styles.rowMenu, done && styles.textDone]}
+                      numberOfLines={2}
+                    >
+                      {u.menuSummary
+                        .map((m) => `${m.name} ${m.qty}`)
+                        .join(', ')}
+                    </Text>
+                    {u.totalDishes > 1 && (
+                      <Text style={[styles.rowTotal, done && styles.textDone]}>
+                        총 {u.totalDishes} 그릇
+                      </Text>
+                    )}
+                    {done && (
+                      <Text style={styles.returnedTag}>
+                        ✓ 회수 {formatTime(u.returnedAt)}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <Text style={styles.rowMenu} numberOfLines={2}>
-                  {it.menuSummary
-                    .map((m) => `${m.name} ${m.qty}`)
-                    .join(', ')}
-                </Text>
-                <Text style={styles.rowTotal}>총 {it.totalDishes} 그릇</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-      {ranked.some((it) => !it.isDrivingDistance) && (
-        <Text style={styles.fineNote}>
-          * 표시: 직선거리(임시) — 카카오 도로 실거리 계산 후 자동 갱신
-        </Text>
-      )}
-    </View>
-  );
+              );
+            })}
+          </View>
+        )}
+        {ranked.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {sortMode === 'near' ? '📍 근거리 순' : '🛵 원거리 순'} (
+              {ranked.length}건)
+            </Text>
+            {ranked.map((it) => {
+              const done = !!it.returnedAt;
+              return (
+                <View
+                  key={it.key}
+                  style={[styles.row, done && styles.rowDone]}
+                >
+                  {canCheck && (
+                    <TouchableOpacity
+                      onPress={() => onToggle(it.key)}
+                      style={styles.checkBox}
+                      accessibilityLabel={done ? '회수 해제' : '회수 완료'}
+                    >
+                      <Text style={styles.checkBoxText}>{done ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <Text style={[styles.rank, done && styles.textDone]}>
+                    {it.rank}
+                  </Text>
+                  <View style={styles.rowMain}>
+                    <View style={styles.rowTitleLine}>
+                      <Text
+                        style={[styles.rowLabel, done && styles.textDone]}
+                        numberOfLines={1}
+                      >
+                        {it.label}
+                      </Text>
+                      {typeof it.distanceM === 'number' && (
+                        <Text style={[styles.rowDist, done && styles.textDone]}>
+                          {formatDist(it.distanceM)}
+                          {it.isDrivingDistance ? '' : '*'}
+                        </Text>
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.rowMenu, done && styles.textDone]}
+                      numberOfLines={2}
+                    >
+                      {it.menuSummary
+                        .map((m) => `${m.name} ${m.qty}`)
+                        .join(', ')}
+                    </Text>
+                    <Text style={[styles.rowTotal, done && styles.textDone]}>
+                      총 {it.totalDishes} 그릇
+                    </Text>
+                    {done && (
+                      <Text style={styles.returnedTag}>
+                        ✓ 회수 {formatTime(it.returnedAt)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {ranked.some((it) => !it.isDrivingDistance) && (
+          <Text style={styles.fineNote}>
+            * 표시: 직선거리(임시) — 카카오 도로 실거리 계산 후 자동 갱신
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   const renderRoundCard = ({
     id,
+    roundId,
     title,
     subtitle,
     totalCount,
@@ -348,12 +425,20 @@ export default function DeliveryReturnScreen() {
     onPrint,
     onMap,
     isPending,
+    progress,
+    onMarkAll,
+    onClearAll,
   }) => {
     const expand = !!expanded[id];
+    const showProgress = !isPending && progress && progress.total > 0;
     return (
       <View
         key={id}
-        style={[styles.roundCard, isPending && styles.roundCardPending]}
+        style={[
+          styles.roundCard,
+          isPending && styles.roundCardPending,
+          showProgress && progress.complete && styles.roundCardComplete,
+        ]}
       >
         <View style={styles.roundHeader}>
           <TouchableOpacity
@@ -366,13 +451,21 @@ export default function DeliveryReturnScreen() {
                 style={[
                   styles.roundTitle,
                   isPending && styles.roundTitlePending,
+                  showProgress && progress.complete && styles.roundTitleComplete,
                 ]}
               >
-                {isPending ? '🟢' : '✓'} {title}
+                {isPending ? '🟢' : showProgress && progress.complete ? '✅' : '✓'}{' '}
+                {title}
               </Text>
               <Text style={styles.expandIcon}>{expand ? '▾' : '▸'}</Text>
             </View>
-            <Text style={styles.roundSubtitle}>{subtitle}</Text>
+            <Text style={styles.roundSubtitle}>
+              {subtitle}
+              {showProgress &&
+                ` · 회수 ${progress.done}/${progress.total}${
+                  progress.complete ? ' ✅' : ''
+                }`}
+            </Text>
           </TouchableOpacity>
           <View style={styles.roundActions}>
             <TouchableOpacity
@@ -403,6 +496,24 @@ export default function DeliveryReturnScreen() {
                 🛵
               </Text>
             </TouchableOpacity>
+            {!isPending && showProgress && !progress.complete && (
+              <TouchableOpacity
+                style={styles.actionBtnSecondary}
+                onPress={onMarkAll}
+                accessibilityLabel="모두 회수 처리"
+              >
+                <Text style={styles.actionBtnSecondaryText}>✓모두</Text>
+              </TouchableOpacity>
+            )}
+            {!isPending && showProgress && progress.done > 0 && (
+              <TouchableOpacity
+                style={styles.actionBtnGhost}
+                onPress={onClearAll}
+                accessibilityLabel="회수 상태 해제"
+              >
+                <Text style={styles.actionBtnGhostText}>↩</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[
                 styles.actionBtn,
@@ -427,7 +538,7 @@ export default function DeliveryReturnScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        {expand && renderRoundDetail(ranked, unknown, sortMode)}
+        {expand && renderRoundDetail(ranked, unknown, sortMode, roundId)}
       </View>
     );
   };
@@ -454,6 +565,7 @@ export default function DeliveryReturnScreen() {
         {hasPending &&
           renderRoundCard({
             id: 'pending',
+            roundId: null,
             title: `${today} · ${pendingRoundNo}차 (진행 중)`,
             subtitle: `${pendingTotal}건 — 🖨️ 누르면 마감, 다음 배달은 다음 차수로`,
             totalCount: pendingTotal,
@@ -464,13 +576,18 @@ export default function DeliveryReturnScreen() {
             onPrint: handlePrintPending,
             onMap: () => openMap(pendingDisplay.ranked, pendingDisplay.unknown),
             isPending: true,
+            progress: null,
+            onMarkAll: null,
+            onClearAll: null,
           })}
 
         {finalizedRounds.map((round) => {
           const display = getRoundDisplay(round);
           const total = display.ranked.length + display.unknown.length;
+          const progress = getRoundReturnProgress(round);
           return renderRoundCard({
             id: round.id,
+            roundId: round.id,
             title: `${round.date} · ${round.roundNo}차`,
             subtitle: `${total}건 · ${formatTime(round.createdAt)} 출력`,
             totalCount: total,
@@ -481,6 +598,9 @@ export default function DeliveryReturnScreen() {
             onPrint: () => handlePrintRound(round),
             onMap: () => openMap(display.ranked, display.unknown),
             isPending: false,
+            progress,
+            onMarkAll: () => markRoundAllReturned(round.id),
+            onClearAll: () => clearRoundReturned(round.id),
           });
         })}
 
@@ -554,6 +674,11 @@ function makeStyles(scale = 1) {
       borderWidth: 2,
       backgroundColor: '#f0fdf4',
     },
+    roundCardComplete: {
+      borderColor: '#9ca3af',
+      backgroundColor: '#f9fafb',
+    },
+    roundTitleComplete: { color: '#6b7280' },
     roundHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -597,6 +722,30 @@ function makeStyles(scale = 1) {
     },
     actionBtnDisabled: { backgroundColor: '#d1d5db' },
     actionBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
+    actionBtnSecondary: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#0ea5e9',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actionBtnSecondaryText: {
+      color: '#fff',
+      fontSize: fp(11),
+      fontWeight: '800',
+    },
+    actionBtnGhost: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#9ca3af',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actionBtnGhostText: { color: '#4b5563', fontSize: fp(13), fontWeight: '800' },
 
     detail: {
       paddingHorizontal: 4,
@@ -630,6 +779,33 @@ function makeStyles(scale = 1) {
       gap: 10,
     },
     rowUnknown: { backgroundColor: '#fffbeb' },
+    rowDone: { backgroundColor: '#f3f4f6', opacity: 0.7 },
+    textDone: {
+      color: '#9ca3af',
+      textDecorationLine: 'line-through',
+    },
+    checkBox: {
+      width: 28,
+      height: 28,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: '#16a34a',
+      backgroundColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    checkBoxText: {
+      fontSize: fp(16),
+      fontWeight: '900',
+      color: '#16a34a',
+    },
+    returnedTag: {
+      fontSize: fp(10),
+      fontWeight: '700',
+      color: '#16a34a',
+      marginTop: 2,
+    },
     rank: {
       fontSize: fp(18),
       fontWeight: '900',
