@@ -20,10 +20,11 @@ try {
 
 const DELIVERY_COLORS = ['#FF7A45', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#F59E0B'];
 
-function buildMapHtml({ storeCoord, deliveries = [] }) {
+function buildMapHtml({ storeCoord, deliveries = [], mode = 'individual' }) {
   const markerLines = [];
   const routeLines = [];
   const allCoords = [];
+  const sequentialColor = '#FF7A45';
 
   if (storeCoord) {
     markerLines.push(
@@ -35,7 +36,10 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
 
   deliveries.forEach((d, i) => {
     if (!d.coord) return;
-    const color = DELIVERY_COLORS[i % DELIVERY_COLORS.length];
+    const color =
+      mode === 'sequential'
+        ? sequentialColor
+        : DELIVERY_COLORS[i % DELIVERY_COLORS.length];
     const num = i + 1;
     const safeLabel = (d.label || `배달${num}`).replace(/'/g, "\\'");
     const safeAddr = (d.addr || '').substring(0, 25).replace(/'/g, "\\'");
@@ -50,7 +54,7 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
     `);
     allCoords.push([d.coord.lat, d.coord.lng]);
 
-    if (storeCoord) {
+    if (mode === 'individual' && storeCoord) {
       routeLines.push(`
         L.Routing.control({
           waypoints:[L.latLng(${storeCoord.lat},${storeCoord.lng}),L.latLng(${d.coord.lat},${d.coord.lng})],
@@ -62,6 +66,26 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
       `);
     }
   });
+
+  if (mode === 'sequential' && storeCoord) {
+    const stops = deliveries.filter((d) => d.coord);
+    if (stops.length > 0) {
+      const waypoints = [
+        `L.latLng(${storeCoord.lat},${storeCoord.lng})`,
+        ...stops.map((d) => `L.latLng(${d.coord.lat},${d.coord.lng})`),
+        `L.latLng(${storeCoord.lat},${storeCoord.lng})`,
+      ];
+      routeLines.push(`
+        L.Routing.control({
+          waypoints:[${waypoints.join(',')}],
+          routeWhileDragging:false,addWaypoints:false,draggableWaypoints:false,
+          show:false,fitSelectedRoutes:false,
+          lineOptions:{styles:[{color:'${sequentialColor}',weight:5,opacity:0.9}]},
+          createMarker:function(){return null;}
+        }).addTo(map);
+      `);
+    }
+  }
 
   let fitCode = `map.setView([37.5665,126.9780],12);`;
   if (allCoords.length >= 2) {
@@ -103,6 +127,7 @@ export default function DeliveryMapModal({
   onClose,
   storeCoord,
   deliveries = [],
+  mode = 'individual',
 }) {
   const { width, height } = useWindowDimensions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -139,7 +164,7 @@ export default function DeliveryMapModal({
 
   if (!visible) return null;
 
-  const mapHtml = buildMapHtml({ storeCoord, deliveries });
+  const mapHtml = buildMapHtml({ storeCoord, deliveries, mode });
   const mapDisplayH = height * 0.82;
   const isMulti = deliveries.length > 1;
 

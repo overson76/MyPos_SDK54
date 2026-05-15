@@ -28,7 +28,9 @@ const DELIVERY_COLORS = ['#FF7A45', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', 
 
 // deliveries: [{ coord: {lat,lng}, addr: string, label: string, distanceLabel: string }]
 // storeCoord: {lat,lng} | null
-function buildMapHtml({ storeCoord, deliveries = [] }) {
+// mode: 'individual' (default, 매장→각 배달지 별도 색깔별 경로)
+//     | 'sequential' (회수 모드 — 매장→1→2→...→N→매장 한 줄 경로, 순회)
+function buildMapHtml({ storeCoord, deliveries = [], mode = 'individual' }) {
   const markerLines = [];
   const routeLines = [];
   const allCoords = [];
@@ -41,9 +43,15 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
     allCoords.push([storeCoord.lat, storeCoord.lng]);
   }
 
+  // sequential 모드 — 마커 색깔 통일(주황), 경로는 마지막에 한 줄로 그림.
+  const sequentialColor = '#FF7A45';
+
   deliveries.forEach((d, i) => {
     if (!d.coord) return;
-    const color = DELIVERY_COLORS[i % DELIVERY_COLORS.length];
+    const color =
+      mode === 'sequential'
+        ? sequentialColor
+        : DELIVERY_COLORS[i % DELIVERY_COLORS.length];
     const num = i + 1;
     const safeLabel = (d.label || `배달${num}`).replace(/'/g, "\\'");
     const safeAddr = (d.addr || '').substring(0, 25).replace(/'/g, "\\'");
@@ -58,8 +66,8 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
     `);
     allCoords.push([d.coord.lat, d.coord.lng]);
 
-    // 매장 → 배달지 경로 (색깔별)
-    if (storeCoord) {
+    // individual 모드 — 매장 → 각 배달지 별도 색깔 경로 (기존 동작)
+    if (mode === 'individual' && storeCoord) {
       routeLines.push(`
         L.Routing.control({
           waypoints:[L.latLng(${storeCoord.lat},${storeCoord.lng}),L.latLng(${d.coord.lat},${d.coord.lng})],
@@ -71,6 +79,28 @@ function buildMapHtml({ storeCoord, deliveries = [] }) {
       `);
     }
   });
+
+  // sequential 모드 — 매장 → 1 → 2 → ... → N → 매장 한 줄 routing (순회).
+  // 거리순으로 정렬된 deliveries 기준 라이더 동선 시각화.
+  if (mode === 'sequential' && storeCoord) {
+    const stops = deliveries.filter((d) => d.coord);
+    if (stops.length > 0) {
+      const waypoints = [
+        `L.latLng(${storeCoord.lat},${storeCoord.lng})`,
+        ...stops.map((d) => `L.latLng(${d.coord.lat},${d.coord.lng})`),
+        `L.latLng(${storeCoord.lat},${storeCoord.lng})`,
+      ];
+      routeLines.push(`
+        L.Routing.control({
+          waypoints:[${waypoints.join(',')}],
+          routeWhileDragging:false,addWaypoints:false,draggableWaypoints:false,
+          show:false,fitSelectedRoutes:false,
+          lineOptions:{styles:[{color:'${sequentialColor}',weight:5,opacity:0.9}]},
+          createMarker:function(){return null;}
+        }).addTo(map);
+      `);
+    }
+  }
 
   let fitCode = `map.setView([37.5665,126.9780],12);`;
   if (allCoords.length >= 2) {
@@ -112,11 +142,13 @@ ${fitCode}
 //   deliveries     — 배달지 배열 [{ coord, addr, label, distanceLabel }]
 //   visible        — 모달 표시 여부
 //   onClose        — 닫기 콜백
+//   mode           — 'individual' (default) | 'sequential' (회수 동선)
 export default function DeliveryMapModal({
   visible,
   onClose,
   storeCoord,
   deliveries = [],
+  mode = 'individual',
 }) {
   const { width, height } = useWindowDimensions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -149,7 +181,7 @@ export default function DeliveryMapModal({
     })
   ).current;
 
-  const mapHtml = buildMapHtml({ storeCoord, deliveries });
+  const mapHtml = buildMapHtml({ storeCoord, deliveries, mode });
   const mapDisplayH = height * 0.82;
   const isMulti = deliveries.length > 1;
 

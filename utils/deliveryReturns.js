@@ -5,25 +5,25 @@
 //
 // 입력:
 //   - history: revenue.history (결제완료 배달 entries)
-//   - addressBook: { entries: { [key]: { lat, lng, alias, label, phone, ... } } }
-//   - storeCoord: { lat, lng } | null (매장 좌표 없으면 거리 정렬 불가)
+//   - addressBook: { entries: { [key]: { lat, lng, drivingM, drivingFromLat, drivingFromLng, alias, ... } } }
+//   - storeCoord: { lat, lng } | null
 //   - now: 기준 시각 (default Date.now())
 //   - sortMode: 'far' (원거리 우선, 기본) | 'near' (근거리 우선)
-//   - withinHours: 회수 후보 시간 윈도우 (default 24시간 — 오늘 + 어제 새벽까지)
+//   - withinHours: 회수 후보 시간 윈도우 (default 24시간)
+//   - sinceMs: 이 시각 이후 entry 만 — 차수 진행중 계산용 (마지막 차수 createdAt)
+//   - untilMs: 이 시각 이전 entry 만 — 특정 시간대 회수용
+//
+// 거리 정책:
+//   - 우선: entry.drivingM (카카오 모빌리티 도로 실거리, 매장 좌표 일치 시)
+//   - fallback: 직선거리(haversine) — 캐시 채워질 때까지 임시
 //
 // 출력:
 //   {
-//     ranked: [{ rank, key, label, alias, address, distanceM, menuSummary, totalDishes, entryIds }],
-//     unknown: [{ key, label, alias, address, menuSummary, totalDishes, entryIds }],
+//     ranked: [{ rank, key, label, alias, address, distanceM, isDrivingDistance, menuSummary, totalDishes, entryIds }],
+//     unknown: [...],
 //     sortMode,
 //     storeHasCoord,
 //   }
-//
-// "주소불명" 정책:
-//   - 주소록 entry 가 없거나
-//   - entry.lat / entry.lng 가 없음
-//   - 매장 좌표가 없음 (이 경우 전체가 거리 측정 불가 → 모두 ranked 에 거리 null 로)
-//   → 무조건 최상단 별도 섹션, 번호 X (UI 에서 "0." 표기).
 
 import { normalizeAddressKey } from './orderHelpers';
 
@@ -67,24 +67,32 @@ export function computeDeliveryReturns({
   now = Date.now(),
   sortMode = 'far',
   withinHours = 24,
+  sinceMs = null,
+  untilMs = null,
 } = {}) {
   const empty = { ranked: [], unknown: [], sortMode, storeHasCoord: !!storeCoord };
   if (!Array.isArray(history)) return empty;
 
-  const sinceMs = withinHours * HOUR_MS;
+  const windowMs = withinHours * HOUR_MS;
   const entriesMap = (addressBook && addressBook.entries) || {};
   const validStoreCoord =
     storeCoord && typeof storeCoord.lat === 'number' && typeof storeCoord.lng === 'number';
 
-  // 1) 회수 대상 필터 — 배달 + 결제완료 + 미취소 + 시간 윈도우.
+  // 1) 회수 대상 필터 — 배달 + 결제완료 + 미취소 + 시간 윈도우 / 차수 범위.
   const candidates = history.filter((e) => {
     if (!e || e.reverted) return false;
     if (e.paymentStatus !== 'paid') return false;
     if (!e.deliveryAddress) return false;
     const ts = e.clearedAt;
     if (typeof ts !== 'number') return false;
-    if (now - ts > sinceMs) return false;
-    if (now - ts < 0) return false;
+    // sinceMs / untilMs 가 명시되면 그 범위만 — 차수 진행중 계산용.
+    if (typeof sinceMs === 'number' && ts <= sinceMs) return false;
+    if (typeof untilMs === 'number' && ts > untilMs) return false;
+    // 명시 안 됐으면 withinHours 윈도우 (default 24시간).
+    if (typeof sinceMs !== 'number' && typeof untilMs !== 'number') {
+      if (now - ts > windowMs) return false;
+      if (now - ts < 0) return false;
+    }
     return true;
   });
 
@@ -107,13 +115,27 @@ export function computeDeliveryReturns({
   }
 
   // 3) 주소록 매칭 + 거리 계산 + 별칭/라벨 추출.
+  //    drivingM 캐시(카카오 모빌리티 도로 실거리)가 매장 좌표 일치 시 우선 사용.
+  //    없으면 직선거리(haversine) fallback — DeliveryReturnScreen 의 lazy fetch
+  //    가 캐시 채우면 다음 렌더에 실거리로 자동 갱신.
   const enriched = Array.from(groups.values()).map((g) => {
     const entry = entriesMap[g.key] || null;
     const alias = (entry?.alias || '').trim();
     const label = alias || g.address;
-    const distanceM = validStoreCoord && entry
-      ? haversineM(storeCoord, { lat: entry.lat, lng: entry.lng })
-      : null;
+    let distanceM = null;
+    let isDrivingDistance = false;
+    if (validStoreCoord && entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
+      const cachedDriving =
+        typeof entry.drivingM === 'number' &&
+        entry.drivingFromLat === storeCoord.lat &&
+        entry.drivingFromLng === storeCoord.lng;
+      if (cachedDriving) {
+        distanceM = entry.drivingM;
+        isDrivingDistance = true;
+      } else {
+        distanceM = haversineM(storeCoord, { lat: entry.lat, lng: entry.lng });
+      }
+    }
     const totalDishes = g.menuSummary.reduce((s, m) => s + m.qty, 0);
     return {
       key: g.key,
@@ -121,6 +143,11 @@ export function computeDeliveryReturns({
       alias,
       label,
       distanceM,
+      isDrivingDistance,
+      coord:
+        entry && typeof entry.lat === 'number' && typeof entry.lng === 'number'
+          ? { lat: entry.lat, lng: entry.lng }
+          : null,
       menuSummary: g.menuSummary,
       totalDishes,
       entryIds: g.entryIds,
@@ -141,4 +168,35 @@ export function computeDeliveryReturns({
     .map((g, idx) => ({ ...g, rank: idx + 1 }));
 
   return { ranked, unknown, sortMode, storeHasCoord: !!validStoreCoord };
+}
+
+// 마감 차수의 snapshot.ranked 를 sortMode 로 재정렬 (snapshot 자체는 보존).
+// 화면에서 같은 차수를 근거리/원거리로 토글할 때 사용 — 출력은 snapshot 그대로.
+export function resortRanked(ranked, sortMode) {
+  if (!Array.isArray(ranked)) return [];
+  return [...ranked]
+    .sort((a, b) => {
+      const ad = typeof a.distanceM === 'number' ? a.distanceM : null;
+      const bd = typeof b.distanceM === 'number' ? b.distanceM : null;
+      if (ad == null && bd == null) return 0;
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return sortMode === 'near' ? ad - bd : bd - ad;
+    })
+    .map((it, idx) => ({ ...it, rank: idx + 1 }));
+}
+
+// 그날 마지막 차수의 createdAt — 진행중 차수의 sinceMs 기준.
+// rounds: useDeliveryRounds 의 { [id]: round } 객체.
+export function getLastRoundCreatedAt(rounds, date) {
+  if (!rounds) return null;
+  const list = Object.values(rounds).filter((r) => r && r.date === date);
+  if (list.length === 0) return null;
+  return list.reduce((max, r) => Math.max(max, r.createdAt || 0), 0);
+}
+
+// 그날 차수 개수 + 1 — 진행중 차수의 표시용 번호.
+export function getNextRoundNo(rounds, date) {
+  if (!rounds) return 1;
+  return Object.values(rounds).filter((r) => r && r.date === date).length + 1;
 }
