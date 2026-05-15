@@ -404,6 +404,89 @@ export function buildOrderSlipText(slip) {
   return lines.join('\n');
 }
 
+// 배달 회수 목록 — 그릇 회수용 출력물.
+// 사장님이 출력물 들고 다니며 회수. 멀리부터 들어와 가까이로 — 라이더 동선 효율.
+//
+// result 는 utils/deliveryReturns.js 의 computeDeliveryReturns() 반환값.
+//   { ranked: [{ rank, label, address, alias, distanceM, menuSummary, totalDishes }], unknown: [...], sortMode }
+//
+// 형식:
+//   ═══════════════
+//      배 달 회 수
+//   2026-05-15 16:30
+//   원거리 순  ⏶  N건
+//   ───────────────
+//   [ 주소불명 (3) ]
+//    0. 하나자원
+//       칼국수 1
+//    0. 불고기
+//       팥죽 2
+//   ───────────────
+//   1. 진실보석   2.3km
+//      칼국수 2, 팥죽 1
+//      총 3 그릇
+//   2. 하나헤어   1.8km
+//      만두 1
+//      총 1 그릇
+//   ═══════════════
+export function buildDeliveryReturnText(result, opts = {}) {
+  const r = result || {};
+  const ranked = Array.isArray(r.ranked) ? r.ranked : [];
+  const unknown = Array.isArray(r.unknown) ? r.unknown : [];
+  const sortMode = r.sortMode || 'far';
+  const printedAt = opts.printedAt || Date.now();
+
+  const lines = [];
+  lines.push(divider('='));
+  lines.push(bigCenter('배 달 회 수', 'wide'));
+  lines.push(centerText(formatDateTime(printedAt)));
+  const orderLabel = sortMode === 'near' ? '근거리 순' : '원거리 순';
+  lines.push(centerText(`${orderLabel}  ·  ${ranked.length + unknown.length}건`));
+  lines.push(divider('='));
+
+  if (unknown.length > 0) {
+    lines.push(`[ 주소불명 ${unknown.length}건 ]`);
+    for (const u of unknown) {
+      lines.push(` 0. ${u.label}`);
+      if (u.menuSummary && u.menuSummary.length > 0) {
+        lines.push(`    ${u.menuSummary.map((m) => `${m.name} ${m.qty}`).join(', ')}`);
+      }
+      if (typeof u.totalDishes === 'number' && u.totalDishes > 1) {
+        lines.push(`    총 ${u.totalDishes} 그릇`);
+      }
+    }
+    lines.push(divider('-'));
+  }
+
+  if (ranked.length === 0 && unknown.length === 0) {
+    lines.push(centerText('회수할 그릇이 없습니다.'));
+    lines.push(divider('='));
+    return lines.join('\n');
+  }
+
+  for (const it of ranked) {
+    const dist = typeof it.distanceM === 'number' ? `  ${formatDistance(it.distanceM)}` : '';
+    lines.push(`${it.rank}. ${it.label}${dist}`);
+    if (it.menuSummary && it.menuSummary.length > 0) {
+      lines.push(`   ${it.menuSummary.map((m) => `${m.name} ${m.qty}`).join(', ')}`);
+    }
+    if (typeof it.totalDishes === 'number') {
+      lines.push(`   총 ${it.totalDishes} 그릇`);
+    }
+  }
+
+  lines.push(divider('='));
+  return lines.join('\n');
+}
+
+// 거리 m → "1.2km" / "250m" 짧은 표기.
+function formatDistance(distanceM) {
+  const m = Number(distanceM) || 0;
+  if (m < 1000) return `${m}m`;
+  const km = m / 1000;
+  return km < 10 ? `${km.toFixed(1)}km` : `${Math.round(km)}km`;
+}
+
 // 미리 만들어진 텍스트를 ESC/POS bytes 로 래핑. buildOrderSlipText 결과 등에 사용.
 export function buildTextBytes(text, textEncoder) {
   const encode = textEncoder || ((s) => new TextEncoder().encode(s));

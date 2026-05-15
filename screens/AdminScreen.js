@@ -21,6 +21,7 @@ import AdminSettingsView from '../components/AdminSettingsView';
 import AddressBookPanel from '../components/AddressBookPanel';
 import PinManageModal, { PIN_LENGTH } from '../components/PinManageModal';
 import DeliveryRouteDemo from '../components/DeliveryRouteDemo';
+import DeliveryReturnScreen from './DeliveryReturnScreen';
 import {
   getSpeakAddress,
   getVolume,
@@ -61,6 +62,7 @@ function quitElectron() {
 //   (배달 주소 자동 기억 / 주문지 출력 정책 / 앱 종료).
 // 시스템 탭은 운영·진단 도구 (자동 업데이트, CID/KIS 진단, OTA, Sentry, 초기화) 만 남음.
 const SECTIONS = [
+  { key: 'returns', label: '🍱 배달회수' },
   { key: 'menu', label: '메뉴 관리' },
   { key: 'addressBook', label: '주소록' },
   { key: 'revenue', label: '수익 현황' },
@@ -608,7 +610,7 @@ function SystemSettingsView() {
 export default function AdminScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const [section, setSection] = useState('menu');
+  const [section, setSection] = useState('returns');
   const [volume, setVolumeState] = useState(() => getVolume());
 
   useEffect(() => {
@@ -687,7 +689,9 @@ export default function AdminScreen() {
         </TouchableOpacity>
       </View>
       <View style={{ flex: 1 }}>
-        {section === 'menu' ? (
+        {section === 'returns' ? (
+          <DeliveryReturnScreen />
+        ) : section === 'menu' ? (
           <SettingScreen />
         ) : section === 'addressBook' ? (
           <AddressBookPanel />

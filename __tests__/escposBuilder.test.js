@@ -5,6 +5,7 @@ import {
   divider,
   buildReceiptText,
   buildReceiptBytes,
+  buildDeliveryReturnText,
 } from '../utils/escposBuilder';
 
 describe('visualWidth', () => {
@@ -340,5 +341,104 @@ describe('CMD 명령 상수', () => {
     expect(Array.from(CMD.alignCenter)).toEqual([0x1B, 0x61, 0x01]);
     expect(Array.from(CMD.cutPartial)).toEqual([0x1D, 0x56, 0x01]);
     expect(Array.from(CMD.boldOn)).toEqual([0x1B, 0x45, 0x01]);
+  });
+});
+
+describe('buildDeliveryReturnText', () => {
+  const sample = {
+    sortMode: 'far',
+    ranked: [
+      {
+        rank: 1,
+        label: '진실보석',
+        address: '부산 사하구 하신번영로 25',
+        alias: '진실보석',
+        distanceM: 2300,
+        menuSummary: [
+          { name: '칼국수', qty: 2 },
+          { name: '팥죽', qty: 1 },
+        ],
+        totalDishes: 3,
+      },
+      {
+        rank: 2,
+        label: '하나헤어',
+        address: '부산 사하구 하신번영로 185',
+        alias: '하나헤어',
+        distanceM: 1800,
+        menuSummary: [{ name: '만두', qty: 1 }],
+        totalDishes: 1,
+      },
+    ],
+    unknown: [
+      {
+        label: '하나자원',
+        address: '하나자원',
+        menuSummary: [{ name: '칼국수', qty: 1 }],
+        totalDishes: 1,
+      },
+      {
+        label: '불고기',
+        address: '불고기',
+        menuSummary: [{ name: '팥죽', qty: 2 }],
+        totalDishes: 2,
+      },
+    ],
+  };
+
+  test('헤더 + 정렬 모드 + 건수 표시', () => {
+    const text = buildDeliveryReturnText(sample, { printedAt: new Date(2026, 4, 15, 16, 30).getTime() });
+    expect(text).toContain('배 달 회 수');
+    expect(text).toContain('2026-05-15 16:30');
+    expect(text).toContain('원거리 순');
+    expect(text).toContain('4건'); // ranked 2 + unknown 2
+  });
+
+  test('주소불명 섹션 — 0. 번호 + 메뉴', () => {
+    const text = buildDeliveryReturnText(sample);
+    expect(text).toContain('[ 주소불명 2건 ]');
+    expect(text).toContain(' 0. 하나자원');
+    expect(text).toContain(' 0. 불고기');
+    expect(text).toContain('칼국수 1');
+  });
+
+  test('근거리 순 정렬 표기', () => {
+    const text = buildDeliveryReturnText({ ...sample, sortMode: 'near' });
+    expect(text).toContain('근거리 순');
+  });
+
+  test('거리 km 표기', () => {
+    const text = buildDeliveryReturnText(sample);
+    expect(text).toContain('2.3km'); // ranked[0]
+    expect(text).toContain('1.8km'); // ranked[1]
+  });
+
+  test('순위별 메뉴 + 총 그릇 수', () => {
+    const text = buildDeliveryReturnText(sample);
+    expect(text).toContain('1. 진실보석');
+    expect(text).toContain('칼국수 2, 팥죽 1');
+    expect(text).toContain('총 3 그릇');
+    expect(text).toContain('2. 하나헤어');
+    expect(text).toContain('만두 1');
+  });
+
+  test('회수 대상 0건 — 안내 메시지', () => {
+    const text = buildDeliveryReturnText({ ranked: [], unknown: [], sortMode: 'far' });
+    expect(text).toContain('회수할 그릇이 없습니다');
+  });
+
+  test('null / 빈 결과 안전', () => {
+    expect(typeof buildDeliveryReturnText(null)).toBe('string');
+    expect(typeof buildDeliveryReturnText({})).toBe('string');
+  });
+
+  test('주소불명만 있을 때 (ranked 비어있어도) — 안내 메시지 X', () => {
+    const text = buildDeliveryReturnText({
+      ranked: [],
+      unknown: [{ label: '하나자원', menuSummary: [{ name: '칼국수', qty: 1 }], totalDishes: 1 }],
+      sortMode: 'far',
+    });
+    expect(text).toContain('주소불명');
+    expect(text).not.toContain('회수할 그릇이 없습니다');
   });
 });
