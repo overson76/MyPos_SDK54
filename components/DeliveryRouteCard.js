@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { optimizeRoute, formatRouteSummary } from '../utils/routeOptimizer';
 import { getDrivingDistance } from '../utils/geocode';
-import { normalizeAddressKey } from '../utils/orderHelpers';
+import { buildRouteCandidates } from '../utils/routeCandidates';
 import { reportError } from '../utils/sentry';
 
 export default function DeliveryRouteCard({
@@ -29,40 +29,10 @@ export default function DeliveryRouteCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const candidates = useMemo(() => {
-    if (
-      !storeInfo ||
-      typeof storeInfo.lat !== 'number' ||
-      typeof storeInfo.lng !== 'number'
-    ) {
-      return [];
-    }
-    const byKey = new Map(
-      (addressBook || []).map((a) => [a?.key, a]).filter(([k]) => !!k)
-    );
-    return (activeOrders || [])
-      .filter((o) => o?.table?.type === 'delivery' && !!o.deliveryAddress)
-      .map((o) => {
-        const key = normalizeAddressKey(o.deliveryAddress);
-        const entry = byKey.get(key);
-        if (
-          !entry ||
-          typeof entry.lat !== 'number' ||
-          typeof entry.lng !== 'number'
-        ) {
-          return null;
-        }
-        return {
-          id: o.tableId,
-          tableId: o.tableId,
-          label: o.table?.label || o.tableId,
-          address: o.deliveryAddress,
-          lat: entry.lat,
-          lng: entry.lng,
-        };
-      })
-      .filter(Boolean);
-  }, [activeOrders, storeInfo, addressBook]);
+  const candidates = useMemo(
+    () => buildRouteCandidates(activeOrders, storeInfo, addressBook),
+    [activeOrders, storeInfo, addressBook]
+  );
 
   if (!storeInfo || candidates.length < 2) return null;
 
