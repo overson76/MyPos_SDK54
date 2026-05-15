@@ -143,6 +143,42 @@ export function compactSlotsByPrefix(orders, prefix) {
   return { orders: next, mapping };
 }
 
+// 1.0.47: 빈 배달 슬롯 찾기 — d1~d5 순서로 확인 + 모두 차있으면 다음 동적 슬롯(d6, d7...).
+// "비어있다" = items 와 cartItems 둘 다 없음. 분할(d1#1) 자식 슬롯도 검사 — 분할된 슬롯은 점유로 판정.
+// 사용처:
+//   - 일반 미선택 + cart + "주문" 버튼 클릭 시 자동 배달 슬롯 배당
+//   - CID "주문받기" → 메뉴 → 주문 시 자동 배달 슬롯 배당
+export function findEmptyDeliverySlot(orders) {
+  const isUsed = (slotId) => {
+    const o = orders?.[slotId];
+    if (o && ((o.items?.length || 0) > 0 || (o.cartItems?.length || 0) > 0)) {
+      return true;
+    }
+    // 분할 자식 (예: d1#1, d1#2)
+    const splitOccupied = Object.entries(orders || {}).some(
+      ([oid, oo]) =>
+        oid.startsWith(`${slotId}#`) &&
+        ((oo.items?.length || 0) > 0 || (oo.cartItems?.length || 0) > 0)
+    );
+    return splitOccupied;
+  };
+  // d1..d5 우선
+  for (let n = 1; n <= 5; n += 1) {
+    const id = `d${n}`;
+    if (!isUsed(id)) return id;
+  }
+  // 모두 차있으면 동적 확장 — 현재 점유된 d{n} 중 최대 n+1
+  let maxN = 5;
+  Object.keys(orders || {}).forEach((k) => {
+    const m = /^d(\d+)/.exec(k);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!Number.isNaN(n) && n > maxN) maxN = n;
+    }
+  });
+  return `d${maxN + 1}`;
+}
+
 // 동일한 (id, options, cookState/portion states, sourceTableId)를 가진 슬롯들을 qty/largeQty 합산하여 병합.
 // 1.0.35: sourceTableId 추가 — 단체(group, 묶음) 결성 후에도 각 손님 테이블별 슬롯이 살아남아야
 // 1인/테이블별 결제 분리가 가능. 동일 메뉴라도 sourceTable 이 다르면 별도 슬롯 유지.

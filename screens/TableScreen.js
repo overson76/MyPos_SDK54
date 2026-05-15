@@ -25,6 +25,8 @@ import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
+// 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
+import { formatShort12h } from '../utils/timeUtil';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
 import DeliveryMapModal from '../components/DeliveryMapModal';
 
@@ -553,6 +555,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     {' 🗺️'}
                   </Text>
                 </TouchableOpacity>
+              ) : null}
+              {/* 1.0.47: 예약 시각 / 포장 픽업 시각 표기 — 배달 deliveryTime 필드 재사용 */}
+              {(t.type === 'reservation' || t.type === 'takeout') && order.deliveryTime ? (
+                <Text style={styles.deliveryAddr} numberOfLines={1}>
+                  {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
+                </Text>
               ) : null}
               {(() => {
                 const shown = order.items.slice(0, ITEMS_VISIBLE_LIMIT);

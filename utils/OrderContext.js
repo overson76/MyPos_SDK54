@@ -17,6 +17,7 @@ import {
   computeItemsTotal,
   computeSubtotalsBySource,
   detectDynamicSlotPrefix,
+  findEmptyDeliverySlot,
   findHistoryEntry,
   groupItemsBySource,
   markHistoryReverted,
@@ -354,6 +355,17 @@ export function OrderProvider({ children }) {
       });
     };
 
+    // 1.0.47: 배달 phone/alias 박기 — CID "주문받기" 흐름에서 PENDING_TABLE_ID 또는
+    // 배달 슬롯에 발신번호/단골 별칭 미리 박을 때 사용. reducer 가 자체 sanitize.
+    const setDeliveryContact = (tableId, { phone, alias } = {}) => {
+      dispatch({
+        type: 'orders/setDeliveryContact',
+        tableId,
+        phone: phone || null,
+        alias: alias || null,
+      });
+    };
+
     const setDeliveryTime = (tableId, time) => {
       const safeTime = sanitizeDeliveryTimeRaw(time);
       dispatch({
@@ -609,6 +621,43 @@ export function OrderProvider({ children }) {
       dispatch({ type: 'orders/clearPendingCart' });
     };
 
+    // 1.0.47: PENDING 장바구니 → 빈 배달 슬롯 자동 배당 + 주소/전화/별칭 박기.
+    // 두 흐름 통합:
+    //   - 미선택 + cart + "주문" 버튼 누름 (cart migrate)
+    //   - CID "주문받기" (cart 없이 빈 슬롯만 + 주소/전화 미리 박음)
+    // findEmptyDeliverySlot 은 d1..d5 순서로 빈 슬롯 찾고, 모두 차있으면 d6, d7 동적 확장.
+    // 반환: 배당된 슬롯 ID (caller 가 setSelectedTable 호출해서 그 테이블로 진입)
+    const submitPendingAsDelivery = (opts = {}) => {
+      const { deliveryAddress, deliveryPhone, deliveryAlias } = opts;
+      const targetId = findEmptyDeliverySlot(orders);
+      // 1단계: PENDING cart 있으면 배달 슬롯으로 migrate. 없으면 빈 슬롯 그대로.
+      dispatch({ type: 'orders/migratePendingCart', toTableId: targetId });
+      // 2단계: 주소 박기 — setDeliveryAddress 헬퍼 재사용 (sanitize 포함)
+      if (deliveryAddress) {
+        const safeAddress = sanitizeDeliveryAddress(deliveryAddress);
+        dispatch({
+          type: 'orders/setDeliveryAddress',
+          tableId: targetId,
+          safeAddress,
+        });
+      }
+      // 3단계: phone / alias 박기 — reducer 가 자체 sanitize
+      if (deliveryPhone || deliveryAlias) {
+        dispatch({
+          type: 'orders/setDeliveryContact',
+          tableId: targetId,
+          phone: deliveryPhone || null,
+          alias: deliveryAlias || null,
+        });
+      }
+      addBreadcrumb('order.submitPendingAsDelivery', {
+        targetId,
+        hasAddress: !!deliveryAddress,
+        hasPhone: !!deliveryPhone,
+      });
+      return targetId;
+    };
+
     return {
       orders,
       splits,
@@ -651,6 +700,7 @@ export function OrderProvider({ children }) {
       setItemLargeQty,
       setItemMemo,
       setDeliveryAddress,
+      setDeliveryContact,
       setDeliveryTime,
       setDeliveryTimeIsPM,
       moveOrder,
@@ -662,6 +712,7 @@ export function OrderProvider({ children }) {
       getCartQty,
       migratePendingCart,
       clearPendingCart,
+      submitPendingAsDelivery,
       groups,
       createGroup,
       dissolveGroup,
@@ -693,12 +744,12 @@ const ORDERS_FALLBACK = {
   cycleItemCookState: noop, cycleItemCookStatePortion: noop,
   toggleItemOption: noop, incrementSlotQty: noop,
   splitOffWithOptionToggle: noop, setItemLargeQty: noop, setItemMemo: noop,
-  setDeliveryAddress: noop, setDeliveryTime: noop, setDeliveryTimeIsPM: noop,
+  setDeliveryAddress: noop, setDeliveryContact: noop, setDeliveryTime: noop, setDeliveryTimeIsPM: noop,
   moveOrder: noop, toggleSplit: noop,
   getOrder: () => ({ items: [], cartItems: [], confirmedItems: [] }),
   getOrderTotal: () => 0, getOrderQty: () => 0,
   getCartTotal: () => 0, getCartQty: () => 0,
-  migratePendingCart: noop, clearPendingCart: noop,
+  migratePendingCart: noop, clearPendingCart: noop, submitPendingAsDelivery: () => null,
   createGroup: noop, dissolveGroup: noop, getGroupFor: () => null,
 };
 

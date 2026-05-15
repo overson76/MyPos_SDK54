@@ -257,6 +257,30 @@ export function orderReducer(state, action) {
       };
     }
 
+    // 1.0.47: CID "주문받기" / 미선택 → 배달 자동 흐름에서 phone/alias 도 함께 박음.
+    // 영수증 빌더가 deliveryPhone + deliveryAlias 표시 (주소록 entry 변경 시에도 보존).
+    case 'orders/setDeliveryContact': {
+      const { tableId, phone, alias } = action;
+      const safePhone = phone ? String(phone).replace(/[^0-9+]/g, '').slice(0, 20) : null;
+      const safeAlias = alias ? String(alias).replace(/[\x00-\x1F]/g, '').slice(0, 30) : null;
+      const existing = state[tableId];
+      if (!existing) {
+        return {
+          ...state,
+          [tableId]: {
+            ...emptyOrder,
+            createdAt: Date.now(),
+            deliveryPhone: safePhone,
+            deliveryAlias: safeAlias,
+          },
+        };
+      }
+      return {
+        ...state,
+        [tableId]: { ...existing, deliveryPhone: safePhone, deliveryAlias: safeAlias },
+      };
+    }
+
     case 'orders/setDeliveryTime': {
       const { tableId, safeTime } = action;
       const existing = state[tableId];

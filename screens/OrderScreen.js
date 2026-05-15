@@ -166,6 +166,7 @@ export default function OrderScreen({
     setItemMemo,
     migratePendingCart,
     clearPendingCart,
+    submitPendingAsDelivery,
     addressBook,
     addAddress,
     getGroupFor,
@@ -1827,13 +1828,37 @@ export default function OrderScreen({
                     disabled={!isPending && cart.length === 0}
                     onPress={() => {
                       if (isPending) {
-                        // cart 가 비어있지 않으면 자동 확정 의도와 함께 테이블 탭으로,
-                        // 비어있으면 단순 이동.
-                        if (cart.length > 0 && onRequestOrderWithTable) {
-                          onRequestOrderWithTable();
-                        } else {
-                          onGoToTables?.();
+                        // 1.0.47: 미선택 + cart 있음 + "주문" → 빈 배달 슬롯 자동 배당 + 확정.
+                        // PENDING 에 미리 박힌 주소/전화/별칭(CID 흐름)이 있으면 같이 옮김.
+                        if (cart.length > 0) {
+                          const targetId = submitPendingAsDelivery({
+                            deliveryAddress: order?.deliveryAddress,
+                            deliveryPhone: order?.deliveryPhone,
+                            deliveryAlias: order?.deliveryAlias,
+                          });
+                          if (targetId) {
+                            const targetTable = {
+                              id: targetId,
+                              label: `배달${targetId.slice(1)}`,
+                              type: 'delivery',
+                            };
+                            playOrderSound();
+                            speakOrder({
+                              table: targetTable,
+                              order: { ...order, items: cart },
+                              menuItems,
+                              optionsList: options,
+                            });
+                            // migrate 가 dispatch 비동기라 다음 마이크로태스크에 확정.
+                            setTimeout(() => {
+                              confirmOrder(targetId);
+                              onBack?.();
+                            }, 0);
+                          }
+                          return;
                         }
+                        // cart 비어있으면 단순 테이블 탭 이동.
+                        onGoToTables?.();
                         return;
                       }
                       // 이미 확정된 주문이 있고 cart 와 다르면 변경 음성/사운드로 안내,

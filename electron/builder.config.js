@@ -75,17 +75,21 @@ module.exports = {
   },
 
   // NSIS 인스톨러 옵션 — 매장 사장님이 알아서 설치할 수 있게 친숙한 UI.
+  // 1.0.47 변경: oneClick true → false. 1.0.11~1.0.46 의 silent install 이 1.0.45 락 들고
+  // 있는 상태에서 customInit 의 2초 종료 시간 부족 → 인스톨러 silent fail. 사장님이 매번
+  // 수동 삭제 + 재설치 패턴을 강요당함. UI 표시 + Sleep 5000 으로 덮어쓰기 설치 정상화.
   nsis: {
-    // oneClick: true — silent install. 이전 false 설정에서 기존 파일 잠금 해제 실패로
-    // "Failed to uninstall old application files" 에러가 자동 업데이트마다 반복됨.
-    // true 로 변경 시 설치 다이얼로그 없이 바로 덮어쓰기 → 에러 없어짐.
-    oneClick: true,
-    perMachine: false, // 사용자 폴더 (관리자 권한 불필요)
+    oneClick: false,                              // UI 표시 — silent fail 차단
+    allowElevation: true,                         // 권한 자동 승격
+    allowToChangeInstallationDirectory: false,    // 경로 변경 X (단순화)
+    runAfterFinish: true,                         // 설치 끝나면 자동 실행
+    perMachine: false,                            // 사용자 폴더 (관리자 권한 불필요)
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'MyPos',
-    deleteAppDataOnUninstall: false, // 재설치 시 IndexedDB / cookie 유지 (매장 멤버십)
+    deleteAppDataOnUninstall: false,              // 재설치 시 IndexedDB / cookie 유지 (매장 멤버십)
     // 1.0.11: NSIS uninstall 단계 hang 영구 차단 — 사전 hook 으로 mypos*.exe 강제 종료.
+    // 1.0.47: Sleep 2000 → 5000 (Service Worker 정리 시간 보장).
     // include 경로는 buildResources(=electron/build) 기준 상대경로.
     include: 'installer.nsh',
   },

@@ -13,15 +13,19 @@
 ;   PowerShell 단축구문(Where-Object property -operator value) 사용 — $_ 자동변수 안 씀
 ;   → NSIS 의 $ 변수 prefix 충돌도 회피.
 
+; 1.0.47: Sleep 2000 → 5000 (customInit), 1000 → 3000 (customInstall).
+; 1.0.45 의 Service Worker / 자식 프로세스 정리에 2초 부족 → 인스톨러 락 fail → silent fail
+; → 사장님 매번 수동 삭제+재설치 패턴. 더 넉넉히 기다리도록 시간 증가.
+
 !macro customInit
   ; mypos 관련 프로세스 모두 종료. 단 Setup 인스톨러 자신은 제외 (자살 방지).
   nsExec::ExecToLog 'powershell -NoProfile -Command "Get-Process -Name MyPos*,mypos* -ErrorAction SilentlyContinue | Where-Object ProcessName -notlike *Setup* | Stop-Process -Force -ErrorAction SilentlyContinue"'
-  ; 락 해제 대기 (2초). 프로세스 종료 직후 파일 핸들 풀리는 데 시간 걸림.
-  Sleep 2000
+  ; 락 해제 대기 (5초). Service Worker / 자식 프로세스 정리 + 파일 핸들 풀림.
+  Sleep 5000
 !macroend
 
 !macro customInstall
   ; install 단계 직전 한 번 더. customInit 이 어떤 이유로 누락돼도 안전망.
   nsExec::ExecToLog 'powershell -NoProfile -Command "Get-Process -Name MyPos*,mypos* -ErrorAction SilentlyContinue | Where-Object ProcessName -notlike *Setup* | Stop-Process -Force -ErrorAction SilentlyContinue"'
-  Sleep 1000
+  Sleep 3000
 !macroend

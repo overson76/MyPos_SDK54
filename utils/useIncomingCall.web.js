@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getFirestore } from './firebase';
 
-const CUTOFF_MS = 10_000; // 10초 이내 착신만 유효
+const CUTOFF_MS = 15_000; // 15초 이내 착신만 유효 (1.0.47 — 사장님 충분히 보고 누를 시간)
 
 export function useIncomingCall(storeId) {
   const [call, setCall] = useState(null);
@@ -39,10 +39,10 @@ export function useIncomingCall(storeId) {
     return () => unsub();
   }, [storeId]);
 
-  // 5초 후 자동 해제 — 팝업이 오래 떠 있지 않게
+  // 15초 후 자동 해제 — 사장님이 손 떼고도 충분히 정보 확인 + 주문받기 누를 시간 (1.0.47)
   useEffect(() => {
     if (!call) return;
-    const t = setTimeout(() => setCall(null), 8_000);
+    const t = setTimeout(() => setCall(null), 15_000);
     return () => clearTimeout(t);
   }, [call]);
 
