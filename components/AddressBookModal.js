@@ -127,14 +127,32 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
 
   // 인덱스 바는 list 하단의 가로 한 줄 — locationX 로 항목 결정.
   // 폰 가로 모드(932×430)에서 세로 17개가 잘리는 문제 해결 + 매장 POS 가로 화면에 자연스러움.
-  const handleBarTouch = (locationX) => {
+  //
+  // 좌표계 정책 (2026-05-16):
+  //   - iOS Safari 의 RN-Web 에서 nativeEvent.locationX 가 0 또는 잘못된 좌표로
+  //     들어오는 함정 (PanResponder grant 시점에 target 좌표계가 부정확).
+  //     → ㅋ 클릭해도 ⭐ 가 잡히고, 드래그가 ㄱㄴ 까지만 따라가다 다시 ⭐ 로
+  //     돌아오는 사고 발생.
+  //   - 해결: nativeEvent.pageX 와 indexBar 의 page left 차이로 직접 계산.
+  //     pageX 는 모든 브라우저에서 정확. barLeftRef 는 onLayout 시 측정.
+  const barRef = useRef(null);
+  const barLeftRef = useRef(0);
+  const computeLocalX = (evt) => {
+    const native = evt?.nativeEvent || {};
+    // 우선순위: pageX > locationX (pageX 가 더 robust).
+    if (typeof native.pageX === 'number') {
+      return native.pageX - (barLeftRef.current || 0);
+    }
+    return typeof native.locationX === 'number' ? native.locationX : 0;
+  };
+  const handleBarTouch = (localX) => {
     const w = barWidthRef.current;
-    if (!w) return;
+    if (!w || localX < 0 || localX > w + 4) return; // 바 영역 밖이면 무시
     const idx = Math.max(
       0,
       Math.min(
         indexItems.length - 1,
-        Math.floor((locationX / w) * indexItems.length)
+        Math.floor((localX / w) * indexItems.length)
       )
     );
     if (idx === lastIdxRef.current) return;
@@ -152,10 +170,10 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (e) => {
           lastIdxRef.current = -1; // 새 드래그 시작 → 같은 위치도 재호출
-          handleBarTouch(e.nativeEvent.locationX);
+          handleBarTouch(computeLocalX(e));
         },
         onPanResponderMove: (e) => {
-          handleBarTouch(e.nativeEvent.locationX);
+          handleBarTouch(computeLocalX(e));
         },
         onPanResponderRelease: () => {
           // 손가락 떼면 0.8초 후 hover preview 사라짐 — 사용자가 결과 인지할 시간.
@@ -448,9 +466,16 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               })}
             </ScrollView>
             <View
+              ref={barRef}
               style={styles.indexBar}
               onLayout={(e) => {
                 barWidthRef.current = e.nativeEvent.layout.width;
+                // page 기준 left 측정 — RN-Web 에서 ref→HTMLDivElement.
+                // pageX - barLeft 로 정확한 local x 계산 (locationX 함정 우회).
+                const node = barRef.current;
+                if (node && typeof node.getBoundingClientRect === 'function') {
+                  barLeftRef.current = node.getBoundingClientRect().left;
+                }
               }}
               accessibilityLabel="가나다 빠른찾기 — 탭 또는 좌우 드래그"
               {...barPanResponder.panHandlers}
