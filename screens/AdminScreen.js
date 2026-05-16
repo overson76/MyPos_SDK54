@@ -82,6 +82,20 @@ function SystemSettingsView() {
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
   const [routeDemoOpen, setRouteDemoOpen] = useState(false);
 
+  // 🎬 시연 모드 — 평소엔 시뮬레이션 섹션 숨김(일반 사장님 혼란 방지).
+  // 외부 손님/투자자/신입 교육 시 사장님이 토글 ON → 섹션 노출.
+  // AsyncStorage 영속 — 한 번 켜면 매장 PC 재시작해도 유지.
+  const DEMO_VISIBLE_KEY = 'ui.demoVisible';
+  const [demoVisible, setDemoVisible] = useState(false);
+  useEffect(() => {
+    loadJSON(DEMO_VISIBLE_KEY, false).then((v) => setDemoVisible(!!v));
+  }, []);
+  const toggleDemoVisible = (next) => {
+    setDemoVisible(next);
+    saveJSON(DEMO_VISIBLE_KEY, next);
+    if (!next) setRouteDemoOpen(false);
+  };
+
   // Electron(.exe) 자동 업데이트 — 매장 PC 카운터 환경. 일반 브라우저 / 폰 에서는 카드 안 보임.
   const updateSupported = isElectronUpdateAvailable();
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -533,23 +547,39 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === 시뮬레이션 — 외부 시연 / 신입 교육. 운영 빌드에서도 노출 (실제 데이터 영향 X). === */}
-      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>🎬 시뮬레이션</Text>
+      {/* === 시연 모드 토글 — default OFF. 외부 손님 보여줄 때만 ON. === */}
+      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>🎬 시연 모드</Text>
       <View style={sysStyles.row}>
         <View style={sysStyles.rowText}>
-          <Text style={sysStyles.label}>배달 경로 최적화 데모</Text>
+          <Text style={sysStyles.label}>시연 섹션 표시</Text>
           <Text style={sysStyles.helper}>
-            가짜 매장(부산 사하구) + 배달 4건으로 카드 동작을 즉시 시각화.
-            카카오 API 의존 X — 직선거리 보정으로 mock 계산. 외부 시연 / 신입 교육용.
+            외부 손님 / 투자자 / 신입 교육용 시연 도구. 평소엔 숨김.
+            ON 하면 아래 시뮬레이션 메뉴가 나타납니다.
           </Text>
         </View>
-        <TouchableOpacity
-          style={sysStyles.btnSecondary}
-          onPress={() => setRouteDemoOpen(true)}
-        >
-          <Text style={sysStyles.btnSecondaryText}>🛵 시연 보기</Text>
-        </TouchableOpacity>
+        <Switch value={demoVisible} onValueChange={toggleDemoVisible} />
       </View>
+
+      {demoVisible && (
+        <>
+          <Text style={[sysStyles.sectionTitle, { marginTop: 12 }]}>🎬 시뮬레이션</Text>
+          <View style={sysStyles.row}>
+            <View style={sysStyles.rowText}>
+              <Text style={sysStyles.label}>배달 경로 최적화 데모</Text>
+              <Text style={sysStyles.helper}>
+                가짜 매장(부산 사하구) + 배달 4건으로 카드 동작을 즉시 시각화.
+                카카오 API 의존 X — 직선거리 보정으로 mock 계산. 실제 데이터 영향 X.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={sysStyles.btnSecondary}
+              onPress={() => setRouteDemoOpen(true)}
+            >
+              <Text style={sysStyles.btnSecondaryText}>🛵 시연 보기</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       {/* === 진단 — Sentry 연동 확인용. 개발 빌드(__DEV__)에서만 노출. 운영 빌드에서는 자동 숨김. === */}
       {__DEV__ ? (
@@ -599,10 +629,12 @@ function SystemSettingsView() {
 
       {/* (1.0.24: PinManageModal 은 AdminSettingsView 로 이동) */}
     </ScrollView>
-    <DeliveryRouteDemo
-      visible={routeDemoOpen}
-      onClose={() => setRouteDemoOpen(false)}
-    />
+    {demoVisible && (
+      <DeliveryRouteDemo
+        visible={routeDemoOpen}
+        onClose={() => setRouteDemoOpen(false)}
+      />
+    )}
     </>
   );
 }

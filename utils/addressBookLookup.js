@@ -41,3 +41,15 @@ export function getAddressAlias(addressBook, deliveryAddress) {
   const entry = findAddressEntry(addressBook, deliveryAddress);
   return (entry?.alias || '').trim();
 }
+
+// 객체/배열 두 형태 모두 흡수해 entries 배열로 반환. 비어 있으면 빈 배열.
+// 추천 로직 등에서 entries 전체 순회 필요할 때 사용.
+export function listAddressBookEntries(addressBook) {
+  if (!addressBook) return [];
+  if (Array.isArray(addressBook)) return addressBook;
+  const entries = addressBook.entries;
+  if (!entries) return [];
+  if (Array.isArray(entries)) return entries;
+  if (typeof entries === 'object') return Object.values(entries);
+  return [];
+}

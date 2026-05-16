@@ -19,8 +19,12 @@ import { getEntryInitial, HANGUL_INDEX_BAR } from '../utils/hangulInitial';
 // pinned 우선, 그 다음 사용 횟수 desc, 그 다음 lastUsedAt desc.
 // 당일 배송 완료된 항목은 회색 처리(별도 섹션 분리하지는 않음 — 한 리스트에서 시각적으로만 구분).
 export default function AddressBookModal({ visible, onClose, onSelect }) {
-  const { scale } = useResponsive();
-  const styles = useMemo(() => makeStyles(scale), [scale]);
+  const { scale, height: viewportH } = useResponsive();
+  // viewport 높이에 따라 ScrollView 최대 높이 동적 계산 — 폰 가로(viewport 430)
+  // 에서 sheet maxHeight 90% = 387 안에 header(50)+search(50)+indexBar(46)+여유(16)
+  // = 162 가 들어가야 하므로 ScrollView 는 225 까지만. PC(viewport 800) 에선
+  // sheet 720 안에 충분히 들어가 420 까지 자연스럽게 사용.
+  const styles = useMemo(() => makeStyles(scale, viewportH), [scale, viewportH]);
   const { addressBook, pinAddress, deleteAddress, setAlias, setPhone, addAddress } = useOrders();
   const [query, setQuery] = useState('');
   // 편집 중인 항목 key. null = 편집 없음.
@@ -39,6 +43,11 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const [pendingJump, setPendingJump] = useState(null);
   // 각 row 의 DOM node (RN-web) 추적 → scrollIntoView 점프용. native 는 noop.
   const rowRefs = useRef({});
+  // ScrollView ref + 각 row 의 y offset — native 환경에서 scrollTo 점프용.
+  // RN-Web 의 scrollIntoView 가 native 에선 작동 안 함 → scrollTo + offset 패턴
+  // 으로 web/native 통합.
+  const listRef = useRef(null);
+  const rowOffsetsRef = useRef({});
   // 인덱스 바 드래그 — 현재 호버 글자 큰 미리보기 표시 (iPhone 연락처 패턴).
   const [activeHover, setActiveHover] = useState(null);
   const barWidthRef = useRef(0);
@@ -91,11 +100,25 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   }, [addressBook.entries, query, todaySet, sortMode]);
 
   // 인덱스 바 클릭 → 가나다 모드 + 다음 tick 에 첫 매칭 entry 로 스크롤.
+  // 우선순위: ScrollView.scrollTo (web + native 모두 지원) → scrollIntoView (web fallback).
   useEffect(() => {
     if (!pendingJump || sortMode !== 'alpha') return;
     const target = items.find((e) => getEntryInitial(e) === pendingJump);
     setPendingJump(null);
     if (!target) return;
+    // 1) ScrollView.scrollTo + 측정된 row y offset — native + web 통합.
+    const y = rowOffsetsRef.current[target.key];
+    if (
+      listRef.current &&
+      typeof listRef.current.scrollTo === 'function' &&
+      typeof y === 'number'
+    ) {
+      try {
+        listRef.current.scrollTo({ y: Math.max(0, y - 4), animated: true });
+        return;
+      } catch (_) {}
+    }
+    // 2) RN-Web fallback — scrollIntoView (네이티브에선 NOOP).
     const node = rowRefs.current[target.key];
     if (node && typeof node.scrollIntoView === 'function') {
       try {
@@ -121,16 +144,40 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     fnsRef.current = { jumpToInitial, resetSort };
   });
 
-  // 인덱스 바는 list 하단의 가로 한 줄 — locationX 로 항목 결정.
-  // 폰 가로 모드(932×430)에서 세로 17개가 잘리는 문제 해결 + 매장 POS 가로 화면에 자연스러움.
-  const handleBarTouch = (locationX) => {
+  // 인덱스 바는 list 하단의 가로 한 줄 — 좌표는 환경별 분기:
+  //   - RN native (iOS/Android 앱): nativeEvent.locationX 가 element 기준
+  //     정확. RN 표준 좌표.
+  //   - Web (PC Chrome, iPhone Safari): RN-Web 의 locationX 가 0 또는 잘못된
+  //     좌표로 들어오는 함정. pageX - getBoundingClientRect().left 사용.
+  //   환경 분기 안 하면 native 에서 getBoundingClientRect 없어 barLeft=0 →
+  //   pageX 그대로 사용 → 시작점이 ㅅㅇ 쪽으로 어긋남 사고.
+  const isWeb = Platform.OS === 'web';
+  const barRef = useRef(null);
+  const barLeftRef = useRef(0);
+  const computeLocalX = (evt) => {
+    const native = evt?.nativeEvent || {};
+    if (isWeb) {
+      // Web: pageX 우선 (locationX 부정확).
+      if (typeof native.pageX === 'number') {
+        return native.pageX - (barLeftRef.current || 0);
+      }
+    }
+    // Native: locationX 정확 (element 기준).
+    if (typeof native.locationX === 'number') return native.locationX;
+    // 최후 fallback.
+    if (typeof native.pageX === 'number') {
+      return native.pageX - (barLeftRef.current || 0);
+    }
+    return 0;
+  };
+  const handleBarTouch = (localX) => {
     const w = barWidthRef.current;
-    if (!w) return;
+    if (!w || localX < 0 || localX > w + 4) return; // 바 영역 밖이면 무시
     const idx = Math.max(
       0,
       Math.min(
         indexItems.length - 1,
-        Math.floor((locationX / w) * indexItems.length)
+        Math.floor((localX / w) * indexItems.length)
       )
     );
     if (idx === lastIdxRef.current) return;
@@ -144,14 +191,20 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const barPanResponder = useMemo(
     () =>
       PanResponder.create({
+        // Capture 우선권 — RN native 에서 자식 element 또는 부모 Pressable 이
+        // touch 를 가로채기 전에 인덱스 바가 먼저 받음. iPhone native 앱에서
+        // PanResponder 못 받던 사고의 핵심 fix.
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false, // 다른 component 가 가로채려해도 거부
         onPanResponderGrant: (e) => {
           lastIdxRef.current = -1; // 새 드래그 시작 → 같은 위치도 재호출
-          handleBarTouch(e.nativeEvent.locationX);
+          handleBarTouch(computeLocalX(e));
         },
         onPanResponderMove: (e) => {
-          handleBarTouch(e.nativeEvent.locationX);
+          handleBarTouch(computeLocalX(e));
         },
         onPanResponderRelease: () => {
           // 손가락 떼면 0.8초 후 hover preview 사라짐 — 사용자가 결과 인지할 시간.
@@ -229,7 +282,15 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <View
+          style={styles.sheet}
+          // RN native: Pressable sheet 가 child PanResponder 의 touch 를
+          // 가로채는 사고 → 인덱스 바 드래그 작동 안 함.
+          // View + responder system 패턴 — 자식 PanResponder (true 반환) 가
+          // 우선권 차지 + 자식이 못 받는 빈 영역 touch 는 sheet 가 흡수해
+          // backdrop(부모) 으로 bubble 되지 않게 함 (모달 실수 close 방지).
+          onStartShouldSetResponder={() => true}
+          onResponderTerminationRequest={() => false}>
           <View style={styles.header}>
             <Text style={styles.title}>배달 주소록</Text>
             <View style={styles.headerRight}>
@@ -324,13 +385,17 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             </View>
           ) : (
             <View style={styles.listWithIndex}>
-            <ScrollView style={styles.list}>
+            <ScrollView ref={listRef} style={styles.list}>
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);
                 const isEditing = editingKey === it.key;
                 return (
                   <View
                     key={it.key}
+                    onLayout={(e) => {
+                      // native 환경 scrollTo 점프용 — row 의 ScrollView 안 y offset 저장.
+                      rowOffsetsRef.current[it.key] = e.nativeEvent.layout.y;
+                    }}
                     ref={(node) => {
                       // RN-web 의 View ref → HTMLDivElement (scrollIntoView 가능).
                       // native 는 RN 컴포넌트 — scrollIntoView 없어 점프 noop.
@@ -445,9 +510,16 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               })}
             </ScrollView>
             <View
+              ref={barRef}
               style={styles.indexBar}
               onLayout={(e) => {
                 barWidthRef.current = e.nativeEvent.layout.width;
+                // page 기준 left 측정 — RN-Web 에서 ref→HTMLDivElement.
+                // pageX - barLeft 로 정확한 local x 계산 (locationX 함정 우회).
+                const node = barRef.current;
+                if (node && typeof node.getBoundingClientRect === 'function') {
+                  barLeftRef.current = node.getBoundingClientRect().left;
+                }
               }}
               accessibilityLabel="가나다 빠른찾기 — 탭 또는 좌우 드래그"
               {...barPanResponder.panHandlers}
@@ -480,7 +552,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               <Text style={styles.hoverPreviewText}>{activeHover}</Text>
             </View>
           )}
-        </Pressable>
+        </View>
       </Pressable>
     </View>
   );
@@ -498,7 +570,15 @@ function formatPhoneDisplay(digits) {
 }
 
 // scale: useResponsive() 의 폰트 배율(lg=1.3, 그 외 1.0).
-function makeStyles(scale = 1) {
+function makeStyles(scale = 1, viewportH = 800) {
+  // sheet 의 실제 사용 가능 영역 계산 (2026-05-16 4차 fix):
+  //   - backdrop padding 16*2 = 32 차감
+  //   - 폰(viewport<500) 은 Safari URL bar 동적 영역 + 여유 위해 80%
+  //   - PC 는 충분한 여유로 90%
+  //   - reserved 180 = header(54) + search(50) + indexBar(50) + 여유(26)
+  const isPhone = viewportH < 500;
+  const sheetMaxH = (viewportH - 32) * (isPhone ? 0.8 : 0.9);
+  const scrollMaxH = Math.max(100, Math.min(420, sheetMaxH - 180));
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
   overlay: {
@@ -520,7 +600,7 @@ function makeStyles(scale = 1) {
   sheet: {
     width: '100%',
     maxWidth: 520,
-    maxHeight: '90%',
+    maxHeight: sheetMaxH,
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
@@ -581,9 +661,12 @@ function makeStyles(scale = 1) {
   empty: { padding: 32, alignItems: 'center', gap: 6 },
   emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '600' },
   emptyHint: { fontSize: fp(11), color: '#9ca3af' },
-  list: { flex: 1, maxHeight: 420 },
-  // 인덱스 바를 list 하단 가로 한 줄로 배치 — 폰 가로(932×430) 잘림 해소.
-  listWithIndex: { flexDirection: 'column', maxHeight: 420 },
+  // 동적 maxHeight (2026-05-16 3차 fix): viewport 크기에 따라 ScrollView 영역
+  // 자동 조절. 폰 가로(viewport 430) 에서 sheet maxHeight 90%=387 안에 indexBar
+  // 까지 모두 들어가도록 scrollMaxH 가 225 로 줄어듦. PC 에선 420.
+  // flex 의존 X (yoga 가 부모 height auto + flex:1 자식을 0 으로 평가하는 함정 회피).
+  list: { maxHeight: scrollMaxH },
+  listWithIndex: { flexDirection: 'column' },
   indexBar: {
     flexDirection: 'row',
     width: '100%',
@@ -597,6 +680,11 @@ function makeStyles(scale = 1) {
     // 드래그 시 텍스트 선택 방지 (RN-web).
     userSelect: 'none',
     cursor: 'pointer',
+    // iOS Safari: 기본 touch-action(=auto) 이면 가로 스와이프가 페이지 동작에
+    // 흡수되어 RN-Web PanResponder 의 onPanResponderMove 가 안 들어옴
+    // → PC 에선 정상이지만 폰 Safari 에서 드래그가 첫 탭만 인식되는 사고.
+    // 'none' 으로 모든 default touch 동작 차단 → PanResponder 가 모든 move 수신.
+    touchAction: 'none',
   },
   indexBtn: {
     flex: 1,
