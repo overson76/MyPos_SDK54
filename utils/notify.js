@@ -4,6 +4,33 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { formatKorean12h, parseDeliveryTime } from './timeUtil';
 import { triggerSharedAudio, registerLocalDispatch } from './sharedAudio';
 import { isAzureConfigured, azureSpeak, cancelAzureSpeech } from './azureTts';
+import { formatDeliveryLabel, findAddressEntry } from './addressBookLookup';
+
+// 배달 손님 라벨 캐시 — OrderProvider 가 addressBook 변경 시 한 번 sync.
+// speak* 함수가 매번 컨텍스트 받지 않아도 별칭 > 전번 > 주소 정책 적용.
+// 사장님 정책 (2026-05-16): 배달 모든 음성/표시가 동일 우선순위.
+let _addressBookCache = null;
+export function setNotifyAddressBook(addressBook) {
+  _addressBookCache = addressBook || null;
+}
+
+// 배달 손님 음성 라벨 — alias > phone(spoken) > address. _speakAddress 정책:
+// 별칭은 사장님 식별용이라 toggle 무관 항상 음성. 전번/주소는 toggle ON 일 때만.
+function spokenDeliveryLabel(order) {
+  const addr = (order?.deliveryAddress || '').trim();
+  const entry = _addressBookCache && addr
+    ? findAddressEntry(_addressBookCache, addr)
+    : null;
+  const alias = (entry?.alias || '').trim();
+  if (alias) return alias; // 별칭은 항상 음성
+  if (!_speakAddress) return ''; // 토글 OFF → 전번/주소 X
+  // 전번 우선 (음성용 — 공백 분리)
+  const phone = entry?.phone || order?.deliveryPhone || '';
+  return formatDeliveryLabel(
+    { alias: '', phone, label: addr, deliveryAddress: addr },
+    { phoneStyle: 'spoken' }
+  );
+}
 
 const isWeb = Platform.OS === 'web';
 
@@ -467,8 +494,8 @@ export function speakOrder({ table, order, menuItems, optionsList }) {
   const itemsText = itemsSentence(order.items, menuItems, optionsList);
   const opts = optionsSentence(order.options || [], optionsList);
   const isDelivery = table.type === 'delivery';
-  // 개인정보 보호: 토글 OFF면 주소를 음성으로 안 읽음 (화면에는 그대로 표시)
-  const addr = _speakAddress ? (order.deliveryAddress || '').trim() : '';
+  // 배달 손님 라벨 — 별칭 > 전번 > 주소 (사장님 정책 일관 적용).
+  const addr = isDelivery ? spokenDeliveryLabel(order) : '';
 
   const parts = [];
   parts.push(
@@ -503,7 +530,7 @@ export function speakOrderChange({
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
   const isDelivery = table.type === 'delivery';
-  const addr = _speakAddress ? (order?.deliveryAddress || '').trim() : '';
+  const addr = isDelivery ? spokenDeliveryLabel(order) : '';
 
   const added = diff.filter((r) => r.kind === 'added');
   const changed = diff.filter((r) => r.kind === 'changed');
@@ -600,14 +627,17 @@ export function speakOrderChange({
   if (text) triggerSharedAudio({ type: 'speak', text });
 }
 
-export function speakDeliveryAlert({ table, minutesLeft, address }) {
+export function speakDeliveryAlert({ table, minutesLeft, address, order }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
   const mins = Math.max(0, Math.round(minutesLeft || 0));
   const parts = [
     `${name}, 배달 출발 ${mins > 0 ? mins + '분 전' : '시간'}입니다.`,
   ];
-  if (_speakAddress && address) parts.push(`배달지는 ${address} 입니다.`);
+  // 별칭 > 전번 > 주소 (order 가 있으면 우선, 없으면 주소만 옛 호환).
+  const label = order ? spokenDeliveryLabel(order)
+                      : (_speakAddress && address ? address : '');
+  if (label) parts.push(`배달지는 ${label} 입니다.`);
   const text = joinSpeech(parts);
   if (text) triggerSharedAudio({ type: 'speak', text });
 }
@@ -647,7 +677,7 @@ export function speakReady({ table, order, menuItems, optionsList = [] }) {
   const name = tableSpokenLabel(table.label);
   const itemsText = itemsSentence(order.items, menuItems, optionsList);
   const isDelivery = table.type === 'delivery';
-  const addr = _speakAddress ? (order?.deliveryAddress || '').trim() : '';
+  const addr = isDelivery ? spokenDeliveryLabel(order) : '';
 
   const parts = [`${name}, 조리 완료됐어요.`];
   if (itemsText) parts.push(`${itemsText} 나갑니다.`);

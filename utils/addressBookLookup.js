@@ -53,3 +53,56 @@ export function listAddressBookEntries(addressBook) {
   if (typeof entries === 'object') return Object.values(entries);
   return [];
 }
+
+// 배달 손님 라벨 — 사장님 정책: **별칭 > 전번 > 주소** 우선순위.
+// 모든 배달 표시 (자주 칩 / 배달 카드 / 영수증 / 음성) 가 같은 규칙을 따르도록
+// 통합 헬퍼. 사용처마다 phoneStyle/addressMaxLen 으로 미세 조정.
+//
+// 입력 (모두 optional):
+//   - alias / phone / label / address / deliveryAddress
+//
+// 옵션:
+//   - phoneStyle:
+//       'full'   = 010-1234-5678 (default, 화면 표시용)
+//       'short'  = 📞 5678        (좁은 칩용, 끝 4자리)
+//       'spoken' = 공일공 일이삼사 오륙칠팔 (TTS — 숫자 사이 공백)
+//   - addressMaxLen: fallback 주소가 너무 길면 자름 (음성용)
+export function formatDeliveryLabel(
+  { alias, phone, label, address, deliveryAddress } = {},
+  opts = {}
+) {
+  const { phoneStyle = 'full', addressMaxLen } = opts;
+  const aliasText = (alias || '').trim();
+  if (aliasText) return aliasText;
+
+  const phoneDigits = String(phone || '').replace(/\D/g, '');
+  if (phoneDigits.length >= 4) {
+    if (phoneStyle === 'short') {
+      return `📞 ${phoneDigits.slice(-4)}`;
+    }
+    if (phoneStyle === 'spoken') {
+      // TTS 가 자연스럽게 끊어 읽도록 공백.
+      if (phoneDigits.length === 11) {
+        return `${phoneDigits.slice(0, 3)} ${phoneDigits.slice(3, 7)} ${phoneDigits.slice(7)}`;
+      }
+      if (phoneDigits.length === 10) {
+        return `${phoneDigits.slice(0, 3)} ${phoneDigits.slice(3, 6)} ${phoneDigits.slice(6)}`;
+      }
+      return phoneDigits;
+    }
+    // full (default — 화면 표시용 표준 형태)
+    if (phoneDigits.length === 11) {
+      return `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 7)}-${phoneDigits.slice(7)}`;
+    }
+    if (phoneDigits.length === 10) {
+      return `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
+    }
+    return phoneDigits;
+  }
+
+  const addr = (label || address || deliveryAddress || '').trim();
+  if (addressMaxLen && addr.length > addressMaxLen) {
+    return addr.slice(0, addressMaxLen) + '…';
+  }
+  return addr;
+}

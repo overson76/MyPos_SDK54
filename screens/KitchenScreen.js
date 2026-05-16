@@ -24,7 +24,11 @@ import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 import DeliveryRouteCard from '../components/DeliveryRouteCard';
-import { getCustomerRequest } from '../utils/addressBookLookup';
+import {
+  getCustomerRequest,
+  findAddressEntry,
+  formatDeliveryLabel,
+} from '../utils/addressBookLookup';
 
 const typeLabels = {
   regular: '매장',
@@ -471,14 +475,24 @@ export default function KitchenScreen() {
               </Text>
             </View>
 
-            {o.table.type === 'delivery' && o.deliveryAddress ? (
-              <View style={styles.deliveryBar}>
-                <Text style={styles.deliveryBarLabel}>📍 배달지</Text>
-                <Text style={styles.deliveryBarText}>
-                  {o.deliveryAddress}
-                </Text>
-              </View>
-            ) : null}
+            {o.table.type === 'delivery' && o.deliveryAddress ? (() => {
+              // 배달지 표시 — 별칭 > 전번 > 주소 (사장님 정책 일관 적용).
+              const entry = findAddressEntry(addressBook, o.deliveryAddress);
+              const displayLabel = formatDeliveryLabel(
+                {
+                  alias: entry?.alias,
+                  phone: entry?.phone || o.deliveryPhone,
+                  label: o.deliveryAddress,
+                },
+                { phoneStyle: 'full' }
+              );
+              return (
+                <View style={styles.deliveryBar}>
+                  <Text style={styles.deliveryBarLabel}>📍 배달지</Text>
+                  <Text style={styles.deliveryBarText}>{displayLabel}</Text>
+                </View>
+              );
+            })() : null}
             {(() => {
               if (!o.deliveryAddress) return null;
               const req = getCustomerRequest(addressBook, o.deliveryAddress);

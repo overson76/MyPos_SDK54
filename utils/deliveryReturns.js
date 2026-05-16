@@ -26,6 +26,7 @@
 //   }
 
 import { normalizeAddressKey } from './orderHelpers';
+import { formatDeliveryLabel } from './addressBookLookup';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -125,7 +126,11 @@ export function computeDeliveryReturns({
   const enriched = Array.from(groups.values()).map((g) => {
     const entry = entriesMap[g.key] || null;
     const alias = (entry?.alias || '').trim();
-    const label = alias || g.address;
+    // 회수 차수 라벨 — 사장님 정책: 별칭 > 전번 > 주소.
+    const label = formatDeliveryLabel(
+      { alias, phone: entry?.phone, label: g.address },
+      { phoneStyle: 'full' }
+    );
     let distanceM = null;
     let isDrivingDistance = false;
     if (validStoreCoord && entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
   useRef,
@@ -26,6 +27,7 @@ import {
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
+import { setNotifyAddressBook } from './notify';
 import {
   emptyOrder,
   orderReducer,
@@ -113,6 +115,12 @@ export function OrderProvider({ children }) {
 
   useDeliveryAlerts({ orders, dispatch });
   useAutoClearDelivery({ orders, dispatch, setRevenue, bumpAddress, addressBook });
+
+  // 음성 나레이션 모듈에 addressBook 캐시 sync — speak* 함수가 별칭/전번
+  // 라벨을 그때그때 lookup 할 수 있게 (사장님 정책: 별칭 > 전번 > 주소).
+  useEffect(() => {
+    setNotifyAddressBook(addressBook);
+  }, [addressBook]);
 
   const value = useMemo(() => {
     // 분할 정리 — dispatch 직후의 next orders 를 인자로 받아 #1/#2 둘 다 비었는지 검사.
