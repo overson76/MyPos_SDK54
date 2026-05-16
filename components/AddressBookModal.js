@@ -282,15 +282,14 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View
+        <Pressable
           style={styles.sheet}
-          // RN native: Pressable sheet 가 child PanResponder 의 touch 를
-          // 가로채는 사고 → 인덱스 바 드래그 작동 안 함.
-          // View + responder system 패턴 — 자식 PanResponder (true 반환) 가
-          // 우선권 차지 + 자식이 못 받는 빈 영역 touch 는 sheet 가 흡수해
-          // backdrop(부모) 으로 bubble 되지 않게 함 (모달 실수 close 방지).
-          onStartShouldSetResponder={() => true}
-          onResponderTerminationRequest={() => false}>
+          // 7차 fix(View+responder) 가 PC web 에서 자식 click bubble 을
+          // backdrop 까지 흘려보내 모달 자동 close 회귀 → Pressable 복원.
+          // native 의 child PanResponder 가로채기 문제는 PanResponder 의
+          // capture 옵션(onStartShouldSetPanResponderCapture)으로 우선권
+          // 확보하므로 Pressable sheet 와 공존 가능.
+          onPress={() => {}}>
           <View style={styles.header}>
             <Text style={styles.title}>배달 주소록</Text>
             <View style={styles.headerRight}>
@@ -552,7 +551,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               <Text style={styles.hoverPreviewText}>{activeHover}</Text>
             </View>
           )}
-        </View>
+        </Pressable>
       </Pressable>
     </View>
   );

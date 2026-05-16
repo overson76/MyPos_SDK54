@@ -83,7 +83,41 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
 
   const items = useMemo(() => {
     const arr = Object.values(addressBook.entries || {});
-    return arr
+
+    // 같은 손님(별칭/전번 일치) 의 entry 들 합치기 — 자주 칩 중복 제거 (2026-05-16).
+    // 사장님 보고: "낙동" 별칭만 있는 entry 와 "낙동 + 사하구 사하로 + 전번"
+    // 두 entry 가 자주 칩에 따로 떠 어지러움. 같은 손님이면 한 칩으로.
+    // group key 우선순위: alias > phone(4자리 이상) > key. 그룹 안에서 label
+    // 있는 entry 대표 (주문화면 주소칸 채우려면 label 필요).
+    const groups = new Map();
+    for (const e of arr) {
+      const aliasKey = (e.alias || '').trim().toLowerCase();
+      const phoneKey = (e.phone || '').replace(/\D/g, '');
+      const groupKey = aliasKey
+        ? `alias:${aliasKey}`
+        : phoneKey && phoneKey.length >= 4
+        ? `phone:${phoneKey}`
+        : `key:${e.key}`;
+      const existing = groups.get(groupKey);
+      if (!existing) {
+        groups.set(groupKey, { ...e });
+      } else {
+        // merge — 카운트 합산, lastUsedAt 최신, pinned OR.
+        // label/alias/phone 은 비어있던 쪽에 채워줌 (정보 풍부한 entry 흡수).
+        existing.count = (existing.count || 0) + (e.count || 0);
+        existing.lastUsedAt = Math.max(existing.lastUsedAt || 0, e.lastUsedAt || 0);
+        existing.pinned = existing.pinned || e.pinned;
+        // label 비어있는 entry 가 대표면 채워진 entry 의 label 흡수.
+        if (!existing.label && e.label) existing.label = e.label;
+        if (!existing.alias && e.alias) existing.alias = e.alias;
+        if (!existing.phone && e.phone) existing.phone = e.phone;
+        // key 도 label 있는 쪽으로 — 클릭 시 주문화면이 정상 주소 받게.
+        if (!existing.label && e.label && e.key) existing.key = e.key;
+      }
+    }
+    const merged = Array.from(groups.values());
+
+    return merged
       .sort((a, b) => {
         // 핀 우선 (당일 배달 완료라도 핀이면 위쪽 그룹 유지)
         if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
@@ -125,9 +159,12 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
       >
         {items.map((it) => {
           const isToday = todaySet.has(it.key);
-          // 별칭이 있으면 별칭(짧고 식별 좋음), 없으면 주소.
-          // 칩 너비가 좁으면 5글자까지는 보이도록 chipText.minWidth 로 보장.
-          const displayText = (it.alias || '').trim() || it.label || '';
+          // 표시 우선순위: 별칭 > 전번(끝 4자리) > 주소. 칩이 좁아 전번
+          // 전체는 안 들어가니 끝 4자리만(식별 목적). 별칭이 가장 식별 좋음.
+          const aliasText = (it.alias || '').trim();
+          const phoneDigits = (it.phone || '').replace(/\D/g, '');
+          const phoneTail = phoneDigits ? `📞 ${phoneDigits.slice(-4)}` : '';
+          const displayText = aliasText || phoneTail || it.label || '';
           return (
             <TouchableOpacity
               key={it.key}
