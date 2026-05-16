@@ -59,7 +59,7 @@ describe('computeDeliveryReturns — 빈 입력 / 가드', () => {
 });
 
 describe('computeDeliveryReturns — 필터링', () => {
-  test('미결제 entry 제외 (paymentStatus !== paid)', () => {
+  test('알 수 없는 status entry 제외 (paymentStatus = pending 등)', () => {
     const history = [
       payment({ id: 'p1', address: '하신번영로 25', ts: NOW - HOUR, items: [{ name: '칼국수', qty: 1 }], status: 'pending' }),
     ];
@@ -71,6 +71,28 @@ describe('computeDeliveryReturns — 필터링', () => {
     });
     expect(r.ranked).toEqual([]);
     expect(r.unknown).toEqual([]);
+  });
+
+  test('조리완료(status=ready) 도 회수 후보로 포함 — 2026-05-16 사장님 의도', () => {
+    // 후불 배달 등에서 결제완료가 늦어 회수 차수에 안 잡히던 문제 해소.
+    // 조리완료 = 라이더 출발 = 회수 시작 가능.
+    const history = [
+      payment({ id: 'r1', address: '하신번영로 25', ts: NOW - HOUR, items: [{ name: '칼국수', qty: 1 }], status: 'ready' }),
+      payment({ id: 'p1', address: '하신번영로 200', ts: NOW - HOUR, items: [{ name: '비빔밥', qty: 1 }], status: 'paid' }),
+    ];
+    const r = computeDeliveryReturns({
+      history,
+      addressBook: book({
+        '하신번영로 25': { lat: 35.085, lng: 128.972, alias: '진실보석' },
+        '하신번영로 200': { lat: 35.09, lng: 128.975 },
+      }),
+      storeCoord: STORE,
+      now: NOW,
+    });
+    // ready 1건 + paid 1건 = 총 2건이 ranked 에 들어감.
+    expect(r.ranked.length).toBe(2);
+    const aliases = r.ranked.map((it) => it.label);
+    expect(aliases).toContain('진실보석');
   });
 
   test('reverted entry 제외 (결제 되돌리기)', () => {

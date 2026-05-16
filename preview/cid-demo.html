@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=932, initial-scale=1" />
+<title>CID 정상 작동 미리보기</title>
+<style>
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background: #0b1220;
+    color: #e5e7eb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Noto Sans KR', sans-serif;
+    padding: 16px 12px;
+  }
+  h1 {
+    font-size: 14px;
+    color: #9ca3af;
+    margin: 0 0 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    background:
+      linear-gradient(180deg, #111827 0%, #1f2937 100%);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+  }
+  /* 매장 카운터 화면 배경 — 테이블 그리드 흉내 */
+  .table-grid {
+    position: absolute;
+    inset: 50px 14px 14px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px;
+    opacity: 0.6;
+  }
+  .table-tile {
+    background: #2d3748;
+    border-radius: 6px;
+    color: #94a3b8;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+  }
+  .table-tile.occupied {
+    background: #1e3a8a;
+    color: #93c5fd;
+  }
+  /* 상단 4 탭 (테이블/주문/주문현황/관리자) */
+  .topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 40px;
+    background: #0f172a;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 14px;
+    font-size: 13px;
+    color: #cbd5e1;
+    font-weight: 600;
+    border-bottom: 1px solid #1f2937;
+  }
+  .topbar .tab.active {
+    color: #fff;
+    border-bottom: 2px solid #f59e0b;
+    padding-bottom: 6px;
+  }
+
+  /* IncomingCallBanner — components/IncomingCallBanner.js 스타일 그대로 */
+  .banner {
+    position: absolute;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 300px;
+    max-width: 500px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1F2937;
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 10;
+    animation: slideDown 0.25s ease-out;
+  }
+  @keyframes slideDown {
+    from { transform: translate(-50%, -20px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+  }
+  .banner .icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+  .banner .center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .banner .number {
+    font-size: 17px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .banner .address {
+    font-size: 13px;
+    color: #FF7A45;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+  }
+  .banner .new-customer {
+    font-size: 12px;
+    color: #9CA3AF;
+  }
+  .banner .count {
+    font-size: 11px;
+    color: #6EE7B7;
+  }
+  .banner .right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .banner .order-btn {
+    background: #FF7A45;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+  }
+  .banner .dismiss-btn {
+    color: #6B7280;
+    font-size: 16px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .legend {
+    font-size: 11px;
+    color: #6b7280;
+    margin: -10px 0 14px;
+    padding-left: 4px;
+  }
+  .legend b {
+    color: #cbd5e1;
+    font-weight: 700;
+  }
+  .footer-note {
+    margin-top: 24px;
+    padding: 14px;
+    background: #111827;
+    border-radius: 10px;
+    border-left: 3px solid #f59e0b;
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.6;
+  }
+  .footer-note h2 {
+    margin: 0 0 8px;
+    color: #fbbf24;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<h1>CID 정상 작동 시 화면 미리보기 — 매장 카운터 PC</h1>
+
+<!-- 시나리오 1: 새 손님 (이전 주문 X, 주소 X) -->
+<div class="stage">
+  <div class="topbar">
+    <span class="tab active">테이블</span>
+    <span class="tab">주문</span>
+    <span class="tab">주문현황</span>
+    <span class="tab">관리자</span>
+  </div>
+  <div class="table-grid">
+    <div class="table-tile occupied">01</div>
+    <div class="table-tile">02</div>
+    <div class="table-tile">03</div>
+    <div class="table-tile occupied">04</div>
+    <div class="table-tile">05</div>
+    <div class="table-tile">y1</div>
+    <div class="table-tile">p1</div>
+    <div class="table-tile occupied">d1</div>
+    <div class="table-tile">d2</div>
+    <div class="table-tile">d3</div>
+  </div>
+  <div class="banner">
+    <div class="icon">📞</div>
+    <div class="center">
+      <div class="number">010-1234-5678</div>
+      <div class="new-customer">새 손님</div>
+    </div>
+    <div class="right">
+      <button class="order-btn">주문받기</button>
+      <button class="dismiss-btn">✕</button>
+    </div>
+  </div>
+</div>
+<div class="legend"><b>① 새 손님</b> — 처음 걸려온 번호. 회색 "새 손님" 안내. "주문받기" 클릭 시 빈 배달 슬롯 자동 생성.</div>
+
+<!-- 시나리오 2: 단골 손님 (주소 있음, 5번째 주문) -->
+<div class="stage">
+  <div class="topbar">
+    <span class="tab active">테이블</span>
+    <span class="tab">주문</span>
+    <span class="tab">주문현황</span>
+    <span class="tab">관리자</span>
+  </div>
+  <div class="table-grid">
+    <div class="table-tile occupied">01</div>
+    <div class="table-tile">02</div>
+    <div class="table-tile">03</div>
+    <div class="table-tile occupied">04</div>
+    <div class="table-tile">05</div>
+    <div class="table-tile">y1</div>
+    <div class="table-tile">p1</div>
+    <div class="table-tile occupied">d1</div>
+    <div class="table-tile">d2</div>
+    <div class="table-tile">d3</div>
+  </div>
+  <div class="banner">
+    <div class="icon">📞</div>
+    <div class="center">
+      <div class="number">010-9876-5432</div>
+      <div class="address">📍 서울시 강남구 테헤란로 123 호반리버파크 1502호</div>
+      <div class="count">5번째 주문</div>
+    </div>
+    <div class="right">
+      <button class="order-btn">주문받기</button>
+      <button class="dismiss-btn">✕</button>
+    </div>
+  </div>
+</div>
+<div class="legend"><b>② 단골 손님</b> — 주소록에 저장된 번호. 주황색 📍 주소 + 초록색 "5번째 주문". "주문받기" 클릭 시 주소가 자동으로 박힌 배달 슬롯 생성 → 메뉴만 담으면 끝.</div>
+
+<!-- 시나리오 3: 별칭 손님 (VIP / 사장님이 별명 저장) -->
+<div class="stage">
+  <div class="topbar">
+    <span class="tab active">테이블</span>
+    <span class="tab">주문</span>
+    <span class="tab">주문현황</span>
+    <span class="tab">관리자</span>
+  </div>
+  <div class="table-grid">
+    <div class="table-tile occupied">01</div>
+    <div class="table-tile">02</div>
+    <div class="table-tile">03</div>
+    <div class="table-tile occupied">04</div>
+    <div class="table-tile">05</div>
+    <div class="table-tile">y1</div>
+    <div class="table-tile">p1</div>
+    <div class="table-tile occupied">d1</div>
+    <div class="table-tile">d2</div>
+    <div class="table-tile">d3</div>
+  </div>
+  <div class="banner">
+    <div class="icon">📞</div>
+    <div class="center">
+      <div class="number">010-5555-1234</div>
+      <div class="address">👤 옆건물 사장님</div>
+      <div class="count">23번째 주문</div>
+    </div>
+    <div class="right">
+      <button class="order-btn">주문받기</button>
+      <button class="dismiss-btn">✕</button>
+    </div>
+  </div>
+</div>
+<div class="legend"><b>③ 별칭 저장된 단골</b> — 사장님이 주소록에서 "옆건물 사장님" 같은 alias 박아둔 번호. 주소 대신 👤 별칭이 우선 표시. 가장 빠른 식별.</div>
+
+<div class="footer-note">
+  <h2>화면 동작 요약</h2>
+  • 전화 들어오면 화면 <b>상단 중앙</b>에 navy(검정 가까운 남색) 배너가 위에서 부드럽게 슬라이드 다운<br>
+  • 배너는 어떤 탭에 있든(테이블/주문/주문현황/관리자) 무조건 위에 떠 있음 — 작업 안 끊김<br>
+  • <b>주문받기</b> 클릭 → 자동으로 "배달" 탭으로 이동 + 빈 배달 슬롯(d1, d2 …)에 주소 자동 채움 → 사장님은 메뉴만 누르면 됨<br>
+  • <b>✕</b> 클릭 → 배너만 사라짐(이미 받은 전화 다시 안 떠)<br>
+  • 같은 번호로 다시 걸려오면 같은 배너가 다시 표시 + 주문횟수 갱신
+</div>
+
+</body>
+</html>

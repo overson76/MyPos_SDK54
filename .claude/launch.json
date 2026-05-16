@@ -13,6 +13,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--port", "8081", "--lan", "--clear"],
       "port": 8081
+    },
+    {
+      "name": "cid-demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "preview", "-l", "4567", "--no-clipboard"],
+      "port": 4567
     }
   ]
 }

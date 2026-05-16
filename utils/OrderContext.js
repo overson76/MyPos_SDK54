@@ -25,6 +25,7 @@ import {
   resolveTableForAlert,
 } from './orderHelpers';
 import { addBreadcrumb } from './sentry';
+import { resolveAnyTable } from './tableData';
 import {
   emptyOrder,
   orderReducer,
@@ -588,6 +589,33 @@ export function OrderProvider({ children }) {
 
     const getOrder = (tableId) => orders[tableId] || emptyOrder;
 
+    // 조리완료(readyAt 있음) + 아직 결제 안 된 배달 자리 목록.
+    // 회수 차수에 결제완료 대신 조리완료 시점부터 포함하기 위한 어댑터.
+    // 사장님 의도: 후불 배달이라 결제완료가 늦게 잡혀 회수 차수 누락되던 문제 해소.
+    // history schema 와 통일 — { id, deliveryAddress, items, clearedAt, paymentStatus: 'ready', reverted: false }.
+    const getReadyDeliveries = () => {
+      const result = [];
+      for (const [tableId, order] of Object.entries(orders || {})) {
+        if (!order || tableId === PENDING_TABLE_ID) continue;
+        if (!order.readyAt) continue;
+        if (order.paid) continue; // 결제완료는 history 가 담당
+        const table = resolveAnyTable(tableId);
+        if (table?.type !== 'delivery') continue;
+        const addr = (order.deliveryAddress || '').trim();
+        if (!addr) continue;
+        result.push({
+          id: `ready:${tableId}`,
+          tableId,
+          deliveryAddress: addr,
+          items: order.items || [],
+          clearedAt: order.readyAt,
+          paymentStatus: 'ready',
+          reverted: false,
+        });
+      }
+      return result;
+    };
+
     const getOrderTotal = (tableId) =>
       computeItemsTotal(orders[tableId]?.items);
 
@@ -712,6 +740,7 @@ export function OrderProvider({ children }) {
       getOrderQty,
       getCartTotal,
       getCartQty,
+      getReadyDeliveries,
       migratePendingCart,
       clearPendingCart,
       submitPendingAsDelivery,
@@ -752,6 +781,7 @@ const ORDERS_FALLBACK = {
   getOrder: () => ({ items: [], cartItems: [], confirmedItems: [] }),
   getOrderTotal: () => 0, getOrderQty: () => 0,
   getCartTotal: () => 0, getCartQty: () => 0,
+  getReadyDeliveries: () => [],
   migratePendingCart: noop, clearPendingCart: noop, submitPendingAsDelivery: () => null,
   createGroup: noop, dissolveGroup: noop, getGroupFor: () => null,
 };

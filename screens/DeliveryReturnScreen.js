@@ -51,7 +51,7 @@ import { reportError } from '../utils/sentry';
 export default function DeliveryReturnScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { revenue, addressBook, setAddressBook } = useOrders();
+  const { revenue, addressBook, setAddressBook, getReadyDeliveries } = useOrders();
   const { storeInfo } = useStore();
   const {
     rounds,
@@ -150,17 +150,31 @@ export default function DeliveryReturnScreen() {
     [rounds, today]
   );
 
-  // 진행중 차수 — 마지막 차수 이후 결제완료 배달.
+  // 회수 후보 = 결제완료(history) + 조리완료(아직 paid 안 된 ready 배달).
+  // 사장님 의도: 후불 배달처럼 결제가 늦어도 조리완료 시점부터 회수 차수에 진입.
+  const readyDeliveries = useMemo(
+    () => (typeof getReadyDeliveries === 'function' ? getReadyDeliveries() : []),
+    // orders 객체는 OrderContext 안에 들어있고 매 렌더마다 다시 함수 호출 — 안전하게
+    // revenue 변화(결제 시점) + rounds 변화(차수 마감 시점) 시 재평가.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [revenue, rounds]
+  );
+  const combinedHistory = useMemo(
+    () => [...readyDeliveries, ...(revenue?.history || [])],
+    [readyDeliveries, revenue?.history]
+  );
+
+  // 진행중 차수 — 마지막 차수 이후 결제완료/조리완료 배달.
   const pending = useMemo(
     () =>
       computeDeliveryReturns({
-        history: revenue?.history || [],
+        history: combinedHistory,
         addressBook,
         storeCoord,
         sortMode: 'far',
         sinceMs: lastCreatedAt,
       }),
-    [revenue, addressBook, storeCoord, lastCreatedAt]
+    [combinedHistory, addressBook, storeCoord, lastCreatedAt]
   );
 
   // 화면 표시용 — 차수별 sortMode 적용 (snapshot/계산 결과 자체는 보존).

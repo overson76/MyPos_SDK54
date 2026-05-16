@@ -546,6 +546,45 @@ export default function OrderScreen({
     ? recommendedRows
     : categoryRows[activeCategory] || [];
 
+  // 배달 헤더에 노출할 "전번 등록 prompt" 대상 entry.
+  // 시나리오: CID 새 번호 → PENDING 자리 → 배달 자리로 변환 → 사장님이 통화하며
+  // 주소 알게 됨 → 주소 입력 → 매칭된 entry 에 전번이 비어있으면 한 클릭으로 등록.
+  // 사장님 직접 편집 화면 진입 불필요.
+  const phoneRegisterTarget = useMemo(() => {
+    if (table?.type !== 'delivery') return null;
+    const phoneRaw = order?.deliveryPhone || '';
+    const phoneDigits = String(phoneRaw).replace(/\D/g, '');
+    if (!phoneDigits || phoneDigits.length < 4) return null;
+    const addr = (order?.deliveryAddress || '').trim();
+    if (!addr) return null;
+    const key = normalizeAddressKey(addr);
+    if (!key) return null;
+    const entry = addressBook?.entries?.[key];
+    if (!entry) return null;
+    if (entry.phone) {
+      // 이미 등록된 phone 이 현재 phone 과 다르면 prompt 안 띄움 (사장님이 의도해서
+      // 옛 phone 유지 중일 수 있음. 변경은 수동 편집으로).
+      return null;
+    }
+    return {
+      key,
+      alias: (entry.alias || '').trim() || entry.label || addr,
+      phone: phoneRaw,
+      phoneDigits,
+    };
+  }, [
+    table?.type,
+    order?.deliveryPhone,
+    order?.deliveryAddress,
+    addressBook?.entries,
+  ]);
+
+  const handleRegisterPhone = () => {
+    if (!phoneRegisterTarget) return;
+    if (typeof setPhone !== 'function') return;
+    setPhone(phoneRegisterTarget.key, phoneRegisterTarget.phone);
+  };
+
   // 추천 카테고리는 자동 생성 — editMode 진입 자체를 차단(빈 [+] 슬롯 혼동 방지).
   useEffect(() => {
     if (isRecommendation && editMode) setEditMode(false);
@@ -1032,6 +1071,19 @@ export default function OrderScreen({
                     max={12}
                     onSelect={(label) => tableId && setDeliveryAddress(tableId, label)}
                   />
+                  {phoneRegisterTarget && (
+                    <TouchableOpacity
+                      style={styles.phoneRegisterChip}
+                      activeOpacity={0.7}
+                      onPress={handleRegisterPhone}
+                      accessibilityLabel={`${phoneRegisterTarget.phone} 를 ${phoneRegisterTarget.alias} 에 등록`}
+                    >
+                      <Text style={styles.phoneRegisterChipText} numberOfLines={1}>
+                        📞 {phoneRegisterTarget.phone} → {phoneRegisterTarget.alias}{' '}
+                        등록
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               )}
               <Text style={styles.deliveryLabelTight}>🕐</Text>

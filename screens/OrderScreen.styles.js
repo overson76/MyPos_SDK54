@@ -98,6 +98,23 @@ export default function makeStyles(scale = 1) {
     borderRadius: 6,
     backgroundColor: '#fff',
   },
+  // CID 전번 → 기존 entry 빠른 등록 prompt — 배달 헤더 inline chip.
+  // 조건부 표시 (phoneRegisterTarget 있을 때만) — 사장님 의도와 일치할 때만 등장.
+  phoneRegisterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#10b981',
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
+    marginLeft: 8,
+    maxWidth: 280,
+  },
+  phoneRegisterChipText: {
+    fontSize: fp(11),
+    fontWeight: '800',
+    color: '#065f46',
+  },
   addressBookBtnText: {
     fontSize: fp(12),
     fontWeight: '900',

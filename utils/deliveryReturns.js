@@ -78,10 +78,14 @@ export function computeDeliveryReturns({
   const validStoreCoord =
     storeCoord && typeof storeCoord.lat === 'number' && typeof storeCoord.lng === 'number';
 
-  // 1) 회수 대상 필터 — 배달 + 결제완료 + 미취소 + 시간 윈도우 / 차수 범위.
+  // 1) 회수 대상 필터 — 배달 + 결제완료(paid) 또는 조리완료(ready) + 미취소 + 시간 윈도우.
+  //    사장님 의도: 후불 배달 등에서 결제완료가 늦어 회수 차수에 안 잡히던 문제 해소.
+  //    조리완료 = 라이더 출발 시점 = 회수 시작 가능 시점.
+  //    호출부가 orders 의 readyAt 배달을 history-like 어댑터로 변환해 함께 전달.
+  const ACCEPT_STATUSES = new Set(['paid', 'ready']);
   const candidates = history.filter((e) => {
     if (!e || e.reverted) return false;
-    if (e.paymentStatus !== 'paid') return false;
+    if (!ACCEPT_STATUSES.has(e.paymentStatus)) return false;
     if (!e.deliveryAddress) return false;
     const ts = e.clearedAt;
     if (typeof ts !== 'number') return false;
