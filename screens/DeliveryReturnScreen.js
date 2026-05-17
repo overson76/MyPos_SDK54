@@ -51,7 +51,7 @@ import { reportError } from '../utils/sentry';
 export default function DeliveryReturnScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { revenue, addressBook, setAddressBook, getReadyDeliveries } = useOrders();
+  const { revenue, addressBook, setAddressBook, getReadyDeliveries, orders } = useOrders();
   const { storeInfo } = useStore();
   const {
     rounds,
@@ -152,12 +152,12 @@ export default function DeliveryReturnScreen() {
 
   // 회수 후보 = 결제완료(history) + 조리완료(아직 paid 안 된 ready 배달).
   // 사장님 의도: 후불 배달처럼 결제가 늦어도 조리완료 시점부터 회수 차수에 진입.
+  // 버그 fix (2026-05-16): 기존 dep 가 [revenue, rounds] 만이라 markReady 시
+  // orders.readyAt 박힘에도 useMemo 가 재실행 안 돼 ready 배달이 차수에 안 잡힘.
+  // orders 자체를 dep 에 추가 — Firestore 동기화 / 로컬 markReady 모두 트리거.
   const readyDeliveries = useMemo(
     () => (typeof getReadyDeliveries === 'function' ? getReadyDeliveries() : []),
-    // orders 객체는 OrderContext 안에 들어있고 매 렌더마다 다시 함수 호출 — 안전하게
-    // revenue 변화(결제 시점) + rounds 변화(차수 마감 시점) 시 재평가.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revenue, rounds]
+    [orders, revenue, rounds, getReadyDeliveries]
   );
   const combinedHistory = useMemo(
     () => [...readyDeliveries, ...(revenue?.history || [])],
