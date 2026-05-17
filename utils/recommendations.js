@@ -20,7 +20,7 @@
 //   - reverted entry / 30일 초과 entry 자동 제외
 
 import { normalizeAddressKey } from './orderHelpers';
-import { listAddressBookEntries } from './addressBookLookup';
+import { listAddressBookEntries, getAllPhoneDigits } from './addressBookLookup';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RECENT_DAYS = 30;
@@ -67,7 +67,9 @@ export function buildRegularKeySet(customerAddressKey, customerPhone, addressBoo
   const target = digitsOnly(customerPhone);
   if (target && target.length >= 4) {
     for (const e of listAddressBookEntries(addressBook)) {
-      if (digitsOnly(e?.phone) === target) {
+      // 2026-05-16: phones array 다중 phone 모두 매칭 + 옛 phone 단일 fallback.
+      const allDigits = getAllPhoneDigits(e);
+      if (allDigits.includes(target)) {
         const k = normalizeAddressKey(e?.key || e?.label || '');
         if (k) set.add(k);
       }

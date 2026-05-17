@@ -283,15 +283,96 @@ export function useAddressBook() {
     });
   }, []);
 
-  // 전화번호 설정 — 숫자만 저장. 빈 문자열이면 필드 제거
+  // 전화번호 설정 — 숫자만 저장. 빈 문자열이면 필드 제거.
+  // 2026-05-16: phones array 도입 후에도 단일 phone 도 같이 sync (옛 코드 호환).
+  // 단일 set 은 phones 의 첫 번째 도 같이 갱신.
   const setPhone = useCallback((key, phone) => {
     setAddressBook((prev) => {
       const ex = prev.entries[key];
       if (!ex) return prev;
       const digits = (phone || '').replace(/\D/g, '');
       const updated = { ...ex };
-      if (digits) updated.phone = digits;
-      else delete updated.phone;
+      if (digits) {
+        updated.phone = digits;
+        // phones array 도 첫 번째로 갱신 (다른 번호 보존)
+        const others = Array.isArray(ex.phones)
+          ? ex.phones.filter((p) => (p || '').replace(/\D/g, '') !== digits)
+          : [];
+        updated.phones = [digits, ...others];
+      } else {
+        delete updated.phone;
+        delete updated.phones;
+      }
+      return { ...prev, entries: { ...prev.entries, [key]: updated } };
+    });
+  }, []);
+
+  // phones array 통째 설정 — 한 entry 에 휴대폰 + 일반전화 같이 저장.
+  // 빈 array 또는 모두 빈 문자열 → phones / phone 둘 다 제거.
+  // 첫 번째 phone 은 옛 phone 필드에도 sync (CID listing / 옛 코드 호환).
+  const setPhones = useCallback((key, phones) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const cleaned = (Array.isArray(phones) ? phones : [])
+        .map((p) => String(p || '').replace(/\D/g, ''))
+        .filter(Boolean);
+      // 중복 제거 (digits 기준)
+      const uniq = [];
+      for (const d of cleaned) if (!uniq.includes(d)) uniq.push(d);
+      const updated = { ...ex };
+      if (uniq.length === 0) {
+        delete updated.phone;
+        delete updated.phones;
+      } else {
+        updated.phones = uniq;
+        updated.phone = uniq[0]; // 호환 sync
+      }
+      return { ...prev, entries: { ...prev.entries, [key]: updated } };
+    });
+  }, []);
+
+  // 한 phone 만 추가 — 기존 phones 에 append (중복 제외).
+  const addPhone = useCallback((key, phone) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const d = String(phone || '').replace(/\D/g, '');
+      if (!d) return prev;
+      const existing = Array.isArray(ex.phones)
+        ? ex.phones.map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean)
+        : (ex.phone ? [String(ex.phone).replace(/\D/g, '')] : []);
+      if (existing.includes(d)) return prev;
+      const next = [...existing, d];
+      return {
+        ...prev,
+        entries: {
+          ...prev.entries,
+          [key]: { ...ex, phone: next[0], phones: next },
+        },
+      };
+    });
+  }, []);
+
+  // 한 phone 제거.
+  const removePhone = useCallback((key, phone) => {
+    setAddressBook((prev) => {
+      const ex = prev.entries[key];
+      if (!ex) return prev;
+      const d = String(phone || '').replace(/\D/g, '');
+      if (!d) return prev;
+      const existing = Array.isArray(ex.phones)
+        ? ex.phones.map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean)
+        : (ex.phone ? [String(ex.phone).replace(/\D/g, '')] : []);
+      const next = existing.filter((p) => p !== d);
+      const updated = { ...ex };
+      if (next.length === 0) {
+        delete updated.phone;
+        delete updated.phones;
+      } else {
+        updated.phones = next;
+        updated.phone = next[0];
+      }
       return { ...prev, entries: { ...prev.entries, [key]: updated } };
     });
   }, []);
@@ -321,6 +402,9 @@ export function useAddressBook() {
     setAutoRemember,
     setAlias,
     setPhone,
+    setPhones,
+    addPhone,
+    removePhone,
     setCustomerRequest,
     addAddress,
     addPhoneOnly,

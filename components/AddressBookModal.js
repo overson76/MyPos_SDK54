@@ -68,12 +68,20 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
     const qDigits = q.replace(/\D/g, '');
     const arr = Object.values(addressBook.entries || {});
     const filtered = q
-      ? arr.filter(
-          (e) =>
-            (e.label || '').toLowerCase().includes(q) ||
-            (e.alias || '').toLowerCase().includes(q) ||
-            (qDigits && (e.phone || '').includes(qDigits))
-        )
+      ? arr.filter((e) => {
+          if ((e.label || '').toLowerCase().includes(q)) return true;
+          if ((e.alias || '').toLowerCase().includes(q)) return true;
+          if (qDigits) {
+            // 2026-05-16: phones array 다중 phone 모두 검색.
+            if (Array.isArray(e.phones)) {
+              for (const p of e.phones) {
+                if (String(p || '').replace(/\D/g, '').includes(qDigits)) return true;
+              }
+            }
+            if (String(e.phone || '').replace(/\D/g, '').includes(qDigits)) return true;
+          }
+          return false;
+        })
       : arr;
     return filtered.sort((a, b) => {
       if (sortMode === 'alpha') {

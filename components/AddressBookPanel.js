@@ -71,6 +71,9 @@ export default function AddressBookPanel() {
   const [editLabelText, setEditLabelText] = useState('');
   const [editAlias, setEditAlias] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  // 2026-05-16: 같은 손님이 휴대폰 + 일반전화 2개 가능 — 2개 입력란.
+  // confirmEdit 에서 [editPhone, editPhone2] 를 phones array 로 저장.
+  const [editPhone2, setEditPhone2] = useState('');
   const [editCustomerRequest, setEditCustomerRequest] = useState('');
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState('');
@@ -285,7 +288,12 @@ export default function AddressBookPanel() {
     setEditingKey(it.key);
     setEditLabelText(it.pendingAddress ? '' : it.label || '');
     setEditAlias(it.alias || '');
-    setEditPhone(it.phone ? formatPhoneDisplay(it.phone) : '');
+    // phones array (신) 우선 + 옛 phone 단일 fallback. 두 입력란 채움.
+    const phones = Array.isArray(it.phones)
+      ? it.phones.filter(Boolean)
+      : (it.phone ? [it.phone] : []);
+    setEditPhone(phones[0] ? formatPhoneDisplay(phones[0]) : '');
+    setEditPhone2(phones[1] ? formatPhoneDisplay(phones[1]) : '');
     setEditCustomerRequest(it.customerRequest || '');
   };
 
@@ -316,14 +324,24 @@ export default function AddressBookPanel() {
           (trimmedNewLabel && e.label === trimmedNewLabel)
       );
       if (!candidate) return prev;
-      const digits = (editPhone || '').replace(/\D/g, '');
+      const d1 = (editPhone || '').replace(/\D/g, '');
+      const d2 = (editPhone2 || '').replace(/\D/g, '');
+      // phones array — 중복/빈 제외. 첫 phone 은 옛 phone 필드에도 sync.
+      const phones = [];
+      if (d1) phones.push(d1);
+      if (d2 && d2 !== d1) phones.push(d2);
       const trimmedAlias = editAlias.trim();
       const trimmedRequest = (editCustomerRequest || '').trim().slice(0, 100);
       const updated = { ...candidate };
       if (trimmedAlias) updated.alias = trimmedAlias;
       else delete updated.alias;
-      if (digits) updated.phone = digits;
-      else delete updated.phone;
+      if (phones.length > 0) {
+        updated.phone = phones[0];
+        updated.phones = phones;
+      } else {
+        delete updated.phone;
+        delete updated.phones;
+      }
       if (trimmedRequest) updated.customerRequest = trimmedRequest;
       else delete updated.customerRequest;
       return {
@@ -627,12 +645,24 @@ export default function AddressBookPanel() {
                       />
                     </View>
                     <View style={styles.addRow}>
-                      <Text style={styles.fieldLabel}>전화</Text>
+                      <Text style={styles.fieldLabel}>전화 ①</Text>
                       <TextInput
                         style={styles.addInput}
                         value={editPhone}
                         onChangeText={setEditPhone}
-                        placeholder="예) 010-1234-5678"
+                        placeholder="예) 010-1234-5678 (휴대폰)"
+                        placeholderTextColor="#9ca3af"
+                        keyboardType="phone-pad"
+                        maxLength={14}
+                      />
+                    </View>
+                    <View style={styles.addRow}>
+                      <Text style={styles.fieldLabel}>전화 ②</Text>
+                      <TextInput
+                        style={styles.addInput}
+                        value={editPhone2}
+                        onChangeText={setEditPhone2}
+                        placeholder="예) 051-200-1234 (일반전화, 선택)"
                         placeholderTextColor="#9ca3af"
                         keyboardType="phone-pad"
                         maxLength={14}
@@ -690,11 +720,16 @@ export default function AddressBookPanel() {
                     {it.label}
                   </Text>
                   <View style={styles.rowMeta}>
-                    {it.phone && (
-                      <Text style={styles.rowPhone}>
-                        ☎ {formatPhoneDisplay(it.phone)}
-                      </Text>
-                    )}
+                    {(() => {
+                      // 2026-05-16: phones array 우선 + 옛 phone fallback 모두 표시.
+                      // 휴대폰 + 일반전화 두 개 있으면 "/" 로 구분해 한 줄.
+                      const allPhones = Array.isArray(it.phones) && it.phones.length > 0
+                        ? it.phones
+                        : (it.phone ? [it.phone] : []);
+                      if (allPhones.length === 0) return null;
+                      const text = allPhones.map((p) => formatPhoneDisplay(p)).join(' / ');
+                      return <Text style={styles.rowPhone}>☎ {text}</Text>;
+                    })()}
                     {it.count > 0 && (
                       <Text style={styles.rowCount}>×{it.count}회</Text>
                     )}

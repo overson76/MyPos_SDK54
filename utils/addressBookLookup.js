@@ -42,6 +42,36 @@ export function getAddressAlias(addressBook, deliveryAddress) {
   return (entry?.alias || '').trim();
 }
 
+// 한 entry 의 전번들 — phones array (신) + 옛 phone (단일) 통합.
+// 2026-05-16: 같은 손님이 휴대폰 + 일반전화 2개 가질 수 있게 phones array 도입.
+// 옛 entry 호환 — phone 단일 필드 유지 + phones 추가. read 헬퍼가 둘 다 흡수.
+export function getAllPhones(entry) {
+  if (!entry) return [];
+  const result = [];
+  if (Array.isArray(entry.phones)) {
+    for (const p of entry.phones) {
+      const t = String(p || '').trim();
+      if (t && !result.includes(t)) result.push(t);
+    }
+  }
+  const single = String(entry.phone || '').trim();
+  if (single && !result.includes(single)) result.push(single);
+  return result;
+}
+
+// 주 전번 — 첫 phones[0], 없으면 옛 phone. 표시 / 음성 / CID listing 등 single 필요 시.
+export function getPrimaryPhone(entry) {
+  const all = getAllPhones(entry);
+  return all[0] || '';
+}
+
+// entry 의 모든 phone digits 모음 — CID 매칭 / AI 단골 매칭에 사용.
+export function getAllPhoneDigits(entry) {
+  return getAllPhones(entry)
+    .map((p) => p.replace(/\D/g, ''))
+    .filter(Boolean);
+}
+
 // 객체/배열 두 형태 모두 흡수해 entries 배열로 반환. 비어 있으면 빈 배열.
 // 추천 로직 등에서 entries 전체 순회 필요할 때 사용.
 export function listAddressBookEntries(addressBook) {
@@ -68,14 +98,19 @@ export function listAddressBookEntries(addressBook) {
 //       'spoken' = 공일공 일이삼사 오륙칠팔 (TTS — 숫자 사이 공백)
 //   - addressMaxLen: fallback 주소가 너무 길면 자름 (음성용)
 export function formatDeliveryLabel(
-  { alias, phone, label, address, deliveryAddress } = {},
+  { alias, phone, phones, label, address, deliveryAddress } = {},
   opts = {}
 ) {
   const { phoneStyle = 'full', addressMaxLen } = opts;
   const aliasText = (alias || '').trim();
   if (aliasText) return aliasText;
 
-  const phoneDigits = String(phone || '').replace(/\D/g, '');
+  // 2026-05-16: phones array (다중 phone) 우선 + 옛 phone 단일 fallback.
+  // 첫 phone 만 표시 (자주 칩/카드 등 좁은 영역 가정).
+  const firstPhone = Array.isArray(phones) && phones.length > 0
+    ? phones[0]
+    : phone;
+  const phoneDigits = String(firstPhone || '').replace(/\D/g, '');
   if (phoneDigits.length >= 4) {
     if (phoneStyle === 'short') {
       return `📞 ${phoneDigits.slice(-4)}`;

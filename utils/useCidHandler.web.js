@@ -23,11 +23,26 @@ export function useCidHandler(storeId) {
       const db = getFirestore();
       if (!db || !storeId) return;
 
-      // 전화번호(숫자만)로 주소록 항목 조회
+      // 전화번호(숫자만)로 주소록 항목 조회.
+      // 2026-05-16: phones array (휴대폰 + 일반전화 다중) + 옛 phone 단일 모두 검색.
       const digits = (phoneNumber || '').replace(/\D/g, '');
       const entries = Object.values(abRef.current?.entries || {});
+      const phoneDigitsOf = (e) => {
+        const list = [];
+        if (Array.isArray(e?.phones)) {
+          for (const p of e.phones) {
+            const d = String(p || '').replace(/\D/g, '');
+            if (d) list.push(d);
+          }
+        }
+        if (e?.phone) {
+          const d = String(e.phone).replace(/\D/g, '');
+          if (d && !list.includes(d)) list.push(d);
+        }
+        return list;
+      };
       const match = digits
-        ? entries.find((e) => e.phone && e.phone.replace(/\D/g, '') === digits)
+        ? entries.find((e) => phoneDigitsOf(e).includes(digits))
         : null;
 
       const alias = match?.alias || null;

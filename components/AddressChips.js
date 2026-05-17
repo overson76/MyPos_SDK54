@@ -85,18 +85,18 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
     const arr = Object.values(addressBook.entries || {});
 
     // 같은 손님(별칭/전번 일치) 의 entry 들 합치기 — 자주 칩 중복 제거 (2026-05-16).
-    // 사장님 보고: "낙동" 별칭만 있는 entry 와 "낙동 + 사하구 사하로 + 전번"
-    // 두 entry 가 자주 칩에 따로 떠 어지러움. 같은 손님이면 한 칩으로.
-    // group key 우선순위: alias > phone(4자리 이상) > key. 그룹 안에서 label
-    // 있는 entry 대표 (주문화면 주소칸 채우려면 label 필요).
+    // group key 우선순위: alias > phones[0](4자리+) > key.
+    // 2026-05-16: phones array 다중 phone 도입 — 첫 phone 으로 그룹 (휴대폰 우선).
     const groups = new Map();
     for (const e of arr) {
       const aliasKey = (e.alias || '').trim().toLowerCase();
-      const phoneKey = (e.phone || '').replace(/\D/g, '');
+      const firstPhone = Array.isArray(e.phones) && e.phones.length > 0
+        ? String(e.phones[0]).replace(/\D/g, '')
+        : (e.phone || '').replace(/\D/g, '');
       const groupKey = aliasKey
         ? `alias:${aliasKey}`
-        : phoneKey && phoneKey.length >= 4
-        ? `phone:${phoneKey}`
+        : firstPhone && firstPhone.length >= 4
+        ? `phone:${firstPhone}`
         : `key:${e.key}`;
       const existing = groups.get(groupKey);
       if (!existing) {
@@ -111,6 +111,21 @@ export default function AddressChips({ onSelect, max = 8, compact = false, inlin
         if (!existing.label && e.label) existing.label = e.label;
         if (!existing.alias && e.alias) existing.alias = e.alias;
         if (!existing.phone && e.phone) existing.phone = e.phone;
+        // 2026-05-16: phones array 도 union — 같은 손님의 휴대폰+일반전화 모두 보존.
+        const mergedPhones = new Set();
+        const collectPhones = (src) => {
+          if (Array.isArray(src?.phones)) {
+            for (const p of src.phones) {
+              const d = String(p || '').replace(/\D/g, '');
+              if (d) mergedPhones.add(d);
+            }
+          }
+          const single = String(src?.phone || '').replace(/\D/g, '');
+          if (single) mergedPhones.add(single);
+        };
+        collectPhones(existing);
+        collectPhones(e);
+        if (mergedPhones.size > 0) existing.phones = Array.from(mergedPhones);
         // key 도 label 있는 쪽으로 — 클릭 시 주문화면이 정상 주소 받게.
         if (!existing.label && e.label && e.key) existing.key = e.key;
       }
