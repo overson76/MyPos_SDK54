@@ -38,6 +38,7 @@ import {
   isNaviAvailable,
 } from '../utils/geocode';
 import { importAddresses, SEED_BUSINESS_ADDRESSES } from '../utils/seedAddresses';
+import { downloadJson, pickJsonFile } from '../utils/jsonBackup';
 
 const SORT_MODES = [
   { key: 'recent', label: '최근' },
@@ -77,6 +78,92 @@ export default function AddressBookPanel() {
   const [newPhone, setNewPhone] = useState('');
   const [newCustomerRequest, setNewCustomerRequest] = useState('');
   const [showImport, setShowImport] = useState(false);
+  // 백업 / 복원 핸들러 — 2026-05-16 추가.
+  // Export: 현재 addressBook.entries 전체를 JSON 다운로드 (사장님 컴퓨터에 저장).
+  // Import: 파일 선택 → 병합(default) 또는 교체(주의). 사장님 의도 — 데이터 안전 보장.
+  const handleExportBackup = () => {
+    const entries = addressBook?.entries || {};
+    const count = Object.keys(entries).length;
+    if (count === 0) {
+      Alert.alert('백업 안내', '저장된 주소록이 없습니다.');
+      return;
+    }
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const filename = `mypos-addressbook-${dateStr}.json`;
+    const payload = {
+      version: 1,
+      type: 'mypos-addressbook',
+      exportedAt: now.toISOString(),
+      count,
+      entries,
+    };
+    downloadJson(payload, filename);
+  };
+
+  const handleImportBackup = async () => {
+    let parsed;
+    try {
+      parsed = await pickJsonFile();
+    } catch (e) {
+      Alert.alert('가져오기 실패', String(e?.message || e));
+      return;
+    }
+    if (!parsed) return; // 취소
+    // 형식 검증 — version 또는 type 또는 entries object 셋 중 하나는 있어야.
+    const incoming = parsed?.entries && typeof parsed.entries === 'object'
+      ? parsed.entries
+      : null;
+    if (!incoming) {
+      Alert.alert('가져오기 실패', 'JSON 형식이 다릅니다. {entries: {...}} 형태여야 합니다.');
+      return;
+    }
+    const incomingCount = Object.keys(incoming).length;
+    if (incomingCount === 0) {
+      Alert.alert('가져오기 안내', '파일에 주소록 entry 가 없습니다.');
+      return;
+    }
+    const currentCount = Object.keys(addressBook?.entries || {}).length;
+    // 병합/교체 선택 — Alert.alert 3버튼 (취소 / 병합 / 교체)
+    const askMode = (cb) => {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const choice = window.prompt(
+          `📥 백업 가져오기\n\n현재 ${currentCount}건 · 가져올 파일 ${incomingCount}건\n\n[병합] = 기존 + 새 (중복 key 는 새 파일 우선)\n[교체] = 기존 전부 삭제 후 새 파일만 (위험)\n\n"merge" 또는 "replace" 입력 (취소는 빈 칸):`,
+          'merge'
+        );
+        cb(choice === 'merge' || choice === 'replace' ? choice : null);
+        return;
+      }
+      Alert.alert(
+        '📥 백업 가져오기',
+        `현재 ${currentCount}건 · 가져올 ${incomingCount}건`,
+        [
+          { text: '취소', style: 'cancel', onPress: () => cb(null) },
+          { text: '병합', onPress: () => cb('merge') },
+          { text: '교체 (위험)', style: 'destructive', onPress: () => cb('replace') },
+        ]
+      );
+    };
+    askMode((mode) => {
+      if (!mode) return;
+      setAddressBook((prev) => {
+        const baseEntries = mode === 'replace' ? {} : (prev?.entries || {});
+        return {
+          ...prev,
+          entries: { ...baseEntries, ...incoming },
+        };
+      });
+      const finalCount =
+        mode === 'replace'
+          ? incomingCount
+          : Object.keys({ ...(addressBook?.entries || {}), ...incoming }).length;
+      Alert.alert(
+        '✅ 복원 완료',
+        `${mode === 'replace' ? '교체' : '병합'} 완료 — 주소록 ${finalCount}건`
+      );
+    });
+  };
 
   const storeCoord = useMemo(() => {
     if (typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number') {
@@ -336,9 +423,23 @@ export default function AddressBookPanel() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.btn, styles.btnSecondary]}
+            onPress={handleExportBackup}
+            accessibilityLabel="현재 주소록을 JSON 파일로 백업 다운로드"
+          >
+            <Text style={styles.btnSecondaryText}>📤 백업</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary]}
+            onPress={handleImportBackup}
+            accessibilityLabel="JSON 백업 파일에서 주소록 복원"
+          >
+            <Text style={styles.btnSecondaryText}>📥 복원</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary]}
             onPress={() => setShowImport(true)}
           >
-            <Text style={styles.btnSecondaryText}>📥 임포트</Text>
+            <Text style={styles.btnSecondaryText}>📦 75개 시드</Text>
           </TouchableOpacity>
         </View>
       </View>
