@@ -23,7 +23,6 @@ import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
-import DeliveryRouteCard from '../components/DeliveryRouteCard';
 import {
   getCustomerRequest,
   findAddressEntry,
@@ -409,11 +408,9 @@ export default function KitchenScreen() {
         <View style={styles.versionBar}>
           <Text style={styles.versionText}>v3 · 변경감지 활성</Text>
         </View>
-        <DeliveryRouteCard
-          activeOrders={activeOrders}
-          storeInfo={storeInfo}
-          addressBook={addressBook}
-        />
+      {/* DeliveryRouteCard 는 2026-05-16 부터 TableScreen 의 [배달지도] 옆
+          [🛵 배달경로] 버튼 → 모달로 이동 — 주방 화면 단순화 + 사장님이
+          테이블 화면에서 동선 미리 결정. */}
       {activeOrders.map((o, idx) => {
         const color = tableTypeColors[o.table.type] || '#6b7280';
         const total = computeItemsTotal(o.items);

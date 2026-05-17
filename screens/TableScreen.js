@@ -29,6 +29,7 @@ import { normalizeAddressKey } from '../utils/orderHelpers';
 import { formatShort12h } from '../utils/timeUtil';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
 import DeliveryMapModal from '../components/DeliveryMapModal';
+import DeliveryRouteCard from '../components/DeliveryRouteCard';
 
 export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [subTab, setSubTab] = useState('기본홀');
@@ -83,6 +84,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [mapInfo, setMapInfo] = useState(null);
+  const [routeOptOpen, setRouteOptOpen] = useState(false);
   // 모든 화면을 한 화면에 Fit — 항상 5 × 4 그리드로 표시
   const isCompact = width < 1200 || height < 700;
   const cols = 5;
@@ -114,6 +116,24 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   } = useOrders();
   const { storeInfo } = useStore();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
+
+  // 배달 경로 최적화 후보 — table.type='delivery' + deliveryAddress 채워진 자리.
+  // DeliveryRouteCard 가 안에서 addressBook entry 매칭 + 좌표 추출 처리하므로
+  // 여기선 단순히 활성 배달 자리만 추림. (KitchenScreen 에서 이동, 2026-05-16)
+  const activeDeliveriesForRoute = useMemo(() => {
+    return tables
+      .filter((t) => t.type === 'delivery')
+      .map((t) => {
+        const o = getOrder(t.id);
+        if (!o?.deliveryAddress) return null;
+        return {
+          tableId: t.id,
+          table: t,
+          deliveryAddress: o.deliveryAddress,
+        };
+      })
+      .filter(Boolean);
+  }, [tables, orders, getOrder]);
 
   // 전체 배달 지도 — 좌표 있는 배달 테이블을 한 화면에 모두 표시.
   const openAllDeliveryMap = () => {
@@ -856,6 +876,15 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               <Text style={styles.allMapBtnText}>🗺️ 배달지도</Text>
             </TouchableOpacity>
           ) : null}
+          {/* 배달 경로 최적화 — 활성 배달 2건 이상일 때만 (2026-05-16: KitchenScreen 에서 이동) */}
+          {activeDeliveriesForRoute.length >= 2 ? (
+            <TouchableOpacity
+              style={styles.routeOptBtn}
+              onPress={() => setRouteOptOpen(true)}
+            >
+              <Text style={styles.routeOptBtnText}>🛵 배달경로</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.settingBtn}>
             <Text style={styles.settingIcon}>⚙</Text>
           </TouchableOpacity>
@@ -1336,6 +1365,35 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         storeCoord={mapInfo?.storeCoord}
         deliveries={mapInfo?.deliveries || []}
       />
+
+      {/* 배달 경로 최적화 모달 — 2026-05-16 KitchenScreen 에서 이동.
+          DeliveryRouteCard 컴포넌트 그대로 모달 sheet 안에 마운트.
+          AddressBookModal 의 안전 패턴 적용 (Pressable backdrop + sheet onPress 차단). */}
+      {routeOptOpen && (
+        <View style={styles.routeOverlay} pointerEvents="auto">
+          <Pressable
+            style={styles.routeBackdrop}
+            onPress={() => setRouteOptOpen(false)}
+          >
+            <Pressable style={styles.routeSheet} onPress={() => {}}>
+              <View style={styles.routeHeader}>
+                <Text style={styles.routeHeaderTitle}>🛵 배달 경로 최적화</Text>
+                <TouchableOpacity
+                  onPress={() => setRouteOptOpen(false)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.routeHeaderClose}>닫기</Text>
+                </TouchableOpacity>
+              </View>
+              <DeliveryRouteCard
+                activeOrders={activeDeliveriesForRoute}
+                storeInfo={storeInfo}
+                addressBook={addressBook}
+              />
+            </Pressable>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }

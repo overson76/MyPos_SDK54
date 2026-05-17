@@ -58,6 +58,59 @@ export default function makeStyles(scale = 1) {
   },
   allMapBtnText: { fontSize: fp(8), color: '#f9fafb', fontWeight: '700' },
 
+  // 배달 경로 최적화 버튼 — 배달지도 옆 (2026-05-16 KitchenScreen 에서 이동).
+  routeOptBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#ea580c',
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  routeOptBtnText: { fontSize: fp(8), color: '#fff', fontWeight: '800' },
+
+  // 모달 — AddressBookModal 안전 패턴 (Pressable backdrop + sheet onPress 차단).
+  routeOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  routeBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  routeSheet: {
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '90%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 12,
+  },
+  routeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  routeHeaderTitle: {
+    fontSize: fp(14),
+    fontWeight: '900',
+    color: '#9a3412',
+  },
+  routeHeaderClose: {
+    fontSize: fp(11),
+    color: '#6b7280',
+    fontWeight: '700',
+  },
+
   hintBar: {
     paddingVertical: 8,
     paddingHorizontal: 16,
