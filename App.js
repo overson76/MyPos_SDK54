@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -36,6 +36,8 @@ import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
+// 2026-05-21: CID 자동 단골(15초 후 자동 배달 슬롯 생성) 제거 — 사장님이 메뉴 담고
+// "주문" 누를 때 OrderTypePicker 로 배달/포장/예약 직접 선택하는 흐름으로 통합.
 // 1.0.28: UpdateBanner 제거 — 자동업데이트 quitAndInstall silent 실패가 반복돼서
 // "다운로드 완료" 배너가 사장님 화면에 spam 처럼 떠있고 클릭해도 작동 안 함.
 // 새 버전은 사장님이 GitHub Releases 에서 직접 다운로드 (관리자 → 시스템 → 🔗 버튼).
@@ -228,43 +230,34 @@ function MainApp() {
   const { storeInfo } = useStore();
   const storeId = storeInfo?.storeId || null;
   // 1.0.47: CID "주문받기" 클릭 시 발신번호/주소/별칭을 PENDING 에 미리 박음.
-  // 사장님이 메뉴 추가 → "주문" 누르면 submitPendingAsDelivery 가 그 정보를 배달 슬롯으로 옮김.
-  const { setDeliveryAddress, setDeliveryContact, submitPendingAsDelivery } = useOrders();
+  // 2026-05-21: 사장님이 메뉴 추가 → "주문" 누르면 OrderTypePicker 로 배달/포장/예약 선택 →
+  // submitPendingAsType 가 그 정보를 해당 종류의 슬롯으로 옮김. (옛 자동 배달 흐름 제거)
+  const {
+    setDeliveryAddress,
+    setDeliveryContact,
+    subscribeConfirmed,
+  } = useOrders();
 
   // CID — Electron PC 에서 SIP 착신 → Firebase 기록 (다른 기기도 동시 수신)
   useCidHandler(storeId);
   // 모든 기기: Firebase 착신 이벤트 수신 → 팝업 표시
-  const incomingCall = useIncomingCall(storeId);
+  // dismiss: 주문 확정 시 즉시 알림 사라지게 — 15초 대기 안 함
+  const { call: incomingCall, dismiss: dismissIncomingCall } = useIncomingCall(storeId);
 
-  // 1.0.48: 단골 자동 배달 — 15초 안에 "주문받기" 안 누르면 매장 PC 가 자동으로 빈 배달 슬롯 생성.
-  //   - 조건 1: 매장 PC (Electron) 만 처리 — 폰/태블릿 자동 처리 X (충돌 방지).
-  //   - 조건 2: 단골 (alias 있거나 address 있고 isNewNumber 아님). 신규 phone-only 는 자동 등록 X.
-  //   - 결과: 배달 슬롯에 cart 비어있음 → 주방(KitchenScreen) 미등록. 사장님이 메뉴 추가 + "주문"
-  //     누를 때 비로소 confirmOrder → 주방 등록.
-  //   - 같은 incomingCall 두 번 처리 방지 위해 ts 기반 dedupe.
-  const autoDeliveryProcessedRef = useRef(null);
+  // CID 알림은 평소 15초 후 자동 사라짐. 사장님이 메뉴 선택하고 "주문" 누른 순간엔
+  // 이미 손님 정보 다 받은 상태 — 알림 막대가 화면 위에 남아있을 이유 없음.
+  // confirmOrder 가 호출되는 모든 경로(테이블/배달/예약/포장)에 자동 적용.
   useEffect(() => {
-    if (!incomingCall) return;
-    if (typeof window === 'undefined' || !window.mypos?.isElectron) return;
-    const callTs = incomingCall.ts?.toMillis?.() || incomingCall.ts || 0;
-    if (!callTs) return;
-    if (autoDeliveryProcessedRef.current === callTs) return;
-    // 단골 판정: alias 있거나 (address 있고 신규 아님)
-    const isRegular = !!incomingCall.alias || (!!incomingCall.address && !incomingCall.isNewNumber);
-    if (!isRegular) return;
-    const timer = setTimeout(() => {
-      // 15초 후에도 같은 incomingCall 이면 자동 처리. 사용자가 "주문받기" 누르면 그 흐름에서
-      // ref 가 업데이트되어 이 timer 도착 시점에는 중복 가드.
-      if (autoDeliveryProcessedRef.current === callTs) return;
-      autoDeliveryProcessedRef.current = callTs;
-      submitPendingAsDelivery({
-        deliveryAddress: incomingCall.address,
-        deliveryPhone: incomingCall.phoneNumber,
-        deliveryAlias: incomingCall.alias,
-      });
-    }, 15_000);
-    return () => clearTimeout(timer);
-  }, [incomingCall, submitPendingAsDelivery]);
+    if (typeof subscribeConfirmed !== 'function') return undefined;
+    const unsub = subscribeConfirmed(() => {
+      dismissIncomingCall();
+    });
+    return () => unsub && unsub();
+  }, [subscribeConfirmed, dismissIncomingCall]);
+
+  // 2026-05-21: 옛 1.0.48 단골 자동 배달 effect 제거됨 — 전화 주문이 *배달* 뿐만 아니라
+  // *포장/예약* 도 있어서 사장님이 메뉴 담고 "주문" 누를 때 OrderTypePicker 로 직접 선택하는
+  // 흐름이 더 정확. 자동 배달 default 는 포장/예약 손님을 잘못된 배달 슬롯에 박는 위험이 있음.
   // 최근 선택된 테이블 id — TableScreen 복귀시 하이라이트용
   const [lastSelectedTableId, setLastSelectedTableId] = useState(null);
   // 주문 탭에서 '주문' 클릭 후 테이블 선택 시 자동 확정하기 위한 의도 플래그
@@ -329,14 +322,12 @@ function MainApp() {
       {/* 착신 팝업 — 전화 오면 화면 상단에 표시. Electron PC + 폰/iPad 모두 동시. */}
       <IncomingCallBanner
         call={incomingCall}
-        onDismiss={() => {/* 타이머 자동 해제, 별도 동작 불필요 */}}
+        onDismiss={dismissIncomingCall}
         onOrderPress={() => {
           // 1.0.47: "주문받기" 누르면 발신번호/주소/별칭을 PENDING 에 미리 박음.
-          //   - 사장님이 메뉴 추가 후 "주문" 누르면 submitPendingAsDelivery 가 배달 슬롯으로 옮김.
+          //   - 사장님이 메뉴 추가 후 "주문" 누르면 OrderTypePicker 로 배달/포장/예약 선택
+          //     → submitPendingAsType 가 해당 종류 슬롯으로 옮김.
           //   - 주소록 매칭 시 주소도 자동 채움 (useCidHandler 가 미리 lookup).
-          // 1.0.48: 사용자가 명시적으로 누른 경우 자동 배달 effect 중복 발동 차단.
-          const callTs = incomingCall?.ts?.toMillis?.() || incomingCall?.ts || 0;
-          if (callTs) autoDeliveryProcessedRef.current = callTs;
           if (incomingCall?.address) {
             setDeliveryAddress(PENDING_TABLE_ID, incomingCall.address);
           }

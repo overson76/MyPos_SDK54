@@ -396,15 +396,17 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const isPaid = order.paymentStatus === 'paid';
     const deliveryAddr = order.deliveryAddress;
     const isDelivery = t.type === 'delivery';
-    // 1.0.51: 배달 카드 표시 우선순위 (사장님 보고).
+    // 2026-05-21: 전화 주문(배달/예약/포장) 모두 동일 우선순위 라벨.
     //   1순위: 별칭 (order.deliveryAlias 또는 주소록 entry.alias) — 👤
     //   2순위: 전화번호 (order.deliveryPhone 또는 주소록 entry.phone) — ☎
-    //   3순위: 주소 (order.deliveryAddress) — 📍
+    //   3순위: 주소 (order.deliveryAddress) — 📍  ※ 배달만 의미있음
     const deliveryAliasFromOrder = order.deliveryAlias;
     const deliveryPhoneFromOrder = order.deliveryPhone;
     let deliveryAliasFromBook = null;
     let deliveryPhoneFromBook = null;
     let customerRequestFromBook = '';
+    // 주소록 lookup 은 *주소 키* 기반 — 배달 슬롯에서만 (예약/포장은 주소 없는 경우 일반).
+    // 예약/포장 단골은 order.deliveryAlias/Phone 에 박혀있어야 (CID PENDING → submitPendingAsType).
     if (isDelivery && deliveryAddr) {
       const key = normalizeAddressKey(deliveryAddr);
       const entry = key ? addressBook?.entries?.[key] : null;
@@ -414,13 +416,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     }
     const deliveryAlias = deliveryAliasFromOrder || deliveryAliasFromBook;
     const deliveryPhone = deliveryPhoneFromOrder || deliveryPhoneFromBook;
-    let deliveryPrimary;
-    let deliveryIcon;
+    let deliveryPrimary = null;
+    let deliveryIcon = null;
     if (deliveryAlias) {
       deliveryPrimary = deliveryAlias;
       deliveryIcon = '👤';
     } else if (deliveryPhone) {
-      // 표시용 포맷 (010-1234-5678) — 길면 그대로
       const d = String(deliveryPhone).replace(/\D/g, '');
       deliveryPrimary =
         d.length === 11 && d.startsWith('010')
@@ -429,7 +430,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
           : deliveryPhone;
       deliveryIcon = '☎';
-    } else {
+    } else if (isDelivery && deliveryAddr) {
+      // 예약/포장은 주소 없을 수 있음. 주소 fallback 은 배달만.
       deliveryPrimary = deliveryAddr;
       deliveryIcon = '📍';
     }
@@ -588,9 +590,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   )}
                 </View>
               </View>
-              {t.type === 'delivery' && deliveryAddr ? (
+              {/* 배달 카드 — 별칭/전번/주소 라벨 + 지도 버튼 (주소 있을 때만 지도) */}
+              {isDelivery && deliveryPrimary ? (
                 <TouchableOpacity
                   onPress={() => {
+                    if (!deliveryAddr) return;
                     const dk = normalizeAddressKey(deliveryAddr);
                     const de = dk ? addressBook?.entries?.[dk] : null;
                     setMapInfo({
@@ -605,19 +609,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     });
                   }}
                   activeOpacity={0.7}
+                  disabled={!deliveryAddr}
                 >
                   <Text style={styles.deliveryAddr} numberOfLines={1}>
                     {deliveryIcon} {deliveryPrimary}
                     {distanceLabel ? ` · ${distanceLabel}` : ''}
-                    {' 🗺️'}
+                    {deliveryAddr ? ' 🗺️' : ''}
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              {/* 1.0.47: 예약 시각 / 포장 픽업 시각 표기 — 배달 deliveryTime 필드 재사용 */}
-              {(t.type === 'reservation' || t.type === 'takeout') && order.deliveryTime ? (
-                <Text style={styles.deliveryAddr} numberOfLines={1}>
-                  {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
-                </Text>
+              {/* 2026-05-21: 예약/포장 — 별칭/전번 (있으면) + 시각 표기.
+                  CID PENDING → submitPendingAsType 흐름으로 박힌 alias/phone 이 라이더가 아닌
+                  *사장님 식별* 용으로 표시됨. */}
+              {(t.type === 'reservation' || t.type === 'takeout') ? (
+                <>
+                  {deliveryPrimary ? (
+                    <Text style={styles.deliveryAddr} numberOfLines={1}>
+                      {deliveryIcon} {deliveryPrimary}
+                    </Text>
+                  ) : null}
+                  {order.deliveryTime ? (
+                    <Text style={styles.deliveryAddr} numberOfLines={1}>
+                      {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
               {customerRequestFromBook ? (
                 <Text style={styles.deliveryRequest} numberOfLines={1}>

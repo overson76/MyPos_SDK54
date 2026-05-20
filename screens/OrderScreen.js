@@ -25,6 +25,7 @@ import {
 import { getCustomerRequest } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
+import OrderTypePicker from '../components/OrderTypePicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import TableSourcePicker from '../components/TableSourcePicker';
@@ -174,6 +175,7 @@ export default function OrderScreen({
     migratePendingCart,
     clearPendingCart,
     submitPendingAsDelivery,
+    submitPendingAsType,
     addressBook,
     addAddress,
     getGroupFor,
@@ -197,6 +199,9 @@ export default function OrderScreen({
   // 선택 기억 — 같은 손님 연속 추가가 보통이라 자동 적용 + 변경 가능.
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerMembers, setGroupPickerMembers] = useState([]);
+  // 2026-05-21: PENDING + cart + "주문" 누름 시 → 배달/포장/예약 3옵션 모달.
+  // 사장님이 선택한 type 으로 자동 슬롯 배당 + PENDING 의 phone/alias/address transfer + confirm.
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [pendingMenuItem, setPendingMenuItem] = useState(null);
   const [pendingMenuSlotId, setPendingMenuSlotId] = useState(null);
   const [pendingMenuHasLarge, setPendingMenuHasLarge] = useState(false);
@@ -1953,33 +1958,13 @@ export default function OrderScreen({
                     disabled={!isPending && cart.length === 0}
                     onPress={() => {
                       if (isPending) {
-                        // 1.0.47: 미선택 + cart 있음 + "주문" → 빈 배달 슬롯 자동 배당 + 확정.
-                        // PENDING 에 미리 박힌 주소/전화/별칭(CID 흐름)이 있으면 같이 옮김.
+                        // 2026-05-21: 미선택 + cart 있음 + "주문" → 배달/포장/예약 3옵션 모달.
+                        //   사장님 직접 선택 후 submitPendingAsType 가 type 별 빈 슬롯 자동 배당
+                        //   + PENDING 의 phone/alias/address transfer + confirm.
+                        // 옛 1.0.47 자동 배달은 제거 — 전화 주문이 배달뿐만이 아니라 포장/예약도
+                        // 있어서 사장님이 직접 선택하는 흐름이 더 정확.
                         if (cart.length > 0) {
-                          const targetId = submitPendingAsDelivery({
-                            deliveryAddress: order?.deliveryAddress,
-                            deliveryPhone: order?.deliveryPhone,
-                            deliveryAlias: order?.deliveryAlias,
-                          });
-                          if (targetId) {
-                            const targetTable = {
-                              id: targetId,
-                              label: `배달${targetId.slice(1)}`,
-                              type: 'delivery',
-                            };
-                            playOrderSound();
-                            speakOrder({
-                              table: targetTable,
-                              order: { ...order, items: cart },
-                              menuItems,
-                              optionsList: options,
-                            });
-                            // migrate 가 dispatch 비동기라 다음 마이크로태스크에 확정.
-                            setTimeout(() => {
-                              confirmOrder(targetId);
-                              onBack?.();
-                            }, 0);
-                          }
+                          setTypePickerOpen(true);
                           return;
                         }
                         // cart 비어있으면 단순 테이블 탭 이동.
@@ -2304,6 +2289,43 @@ export default function OrderScreen({
         <MenuQuickEditModal
           addAt={menuAddTarget}
           onClose={() => setMenuAddTarget(null)}
+        />
+      ) : null}
+
+      {/* 2026-05-21: PENDING + cart + "주문" 누름 시 배달/포장/예약 3옵션 모달.
+          사장님 선택 → submitPendingAsType → 자동 슬롯 배당 + PENDING 정보 transfer + confirm. */}
+      {typePickerOpen ? (
+        <OrderTypePicker
+          total={total}
+          callerLabel={
+            order?.deliveryAlias ||
+            order?.deliveryPhone ||
+            order?.deliveryAddress ||
+            null
+          }
+          onClose={() => setTypePickerOpen(false)}
+          onSelect={(type) => {
+            setTypePickerOpen(false);
+            const targetId = submitPendingAsType(type, {
+              deliveryAddress: order?.deliveryAddress,
+              deliveryPhone: order?.deliveryPhone,
+              deliveryAlias: order?.deliveryAlias,
+            });
+            if (!targetId) return;
+            const targetTable = resolveAnyTable(targetId) || { id: targetId, label: targetId, type };
+            playOrderSound();
+            speakOrder({
+              table: targetTable,
+              order: { ...order, items: cart },
+              menuItems,
+              optionsList: options,
+            });
+            // migrate 가 dispatch 비동기라 다음 마이크로태스크에 확정.
+            setTimeout(() => {
+              confirmOrder(targetId);
+              onBack?.();
+            }, 0);
+          }}
         />
       ) : null}
 
