@@ -24,11 +24,17 @@ export function computeItemsTotal(items) {
 // paymentMethod: 결제수단 코드 ('cash' | 'card' | 'transfer' | 'localCurrency').
 //   미선택 / 옛 데이터는 null. utils/payment.js 가 'unspecified'(미분류) 로 집계.
 //   회계 / CSV 익스포트 / 결제수단별 매출 분석에 사용.
+//
+// deliveryAlias / deliveryPhone / deliveryPhones: 배달 손님 식별.
+//   재출력 시 영수증/표기에 별칭 > 전번 > 주소 우선순위 적용용. 옛 entry 는 모두 빈값 → 주소만.
 export function buildHistoryEntry({
   tableId,
   items,
   options,
   deliveryAddress,
+  deliveryAlias,
+  deliveryPhone,
+  deliveryPhones,
   deliveryTime,
   paymentStatus,
   paymentMethod,
@@ -41,6 +47,9 @@ export function buildHistoryEntry({
     items: (items || []).map((i) => ({ ...i })),
     options: [...(options || [])],
     deliveryAddress: deliveryAddress || '',
+    deliveryAlias: deliveryAlias || '',
+    deliveryPhone: deliveryPhone || '',
+    deliveryPhones: Array.isArray(deliveryPhones) ? [...deliveryPhones] : null,
     deliveryTime: deliveryTime || '',
     paymentStatus,
     paymentMethod: paymentMethod || null,

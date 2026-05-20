@@ -6,6 +6,7 @@ import {
   normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
+import { resolveDeliveryIdentity } from './addressBookLookup';
 
 // 배달 테이블 자동 정리: 조리완료 후 일정 시간 지나면 테이블에서 제거 (후불 완료 처리와 동일).
 //   - 주소 미입력: 5분 (기본). 사장님 익숙한 패턴.
@@ -61,6 +62,10 @@ export function useAutoClearDelivery({
         const ex = ords[tid];
         if (!ex) continue;
         const total = computeItemsTotal(ex.items);
+        const ident = resolveDeliveryIdentity(addressBookRef.current, ex.deliveryAddress, {
+          alias: ex.deliveryAlias,
+          phone: ex.deliveryPhone,
+        });
         setRevenue((prevRev) =>
           appendHistory(
             prevRev,
@@ -69,6 +74,9 @@ export function useAutoClearDelivery({
               items: ex.items,
               options: ex.options,
               deliveryAddress: ex.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: ex.deliveryTime,
               paymentStatus: ex.paymentStatus,
               total,

@@ -25,6 +25,7 @@ import {
   normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
+import { resolveDeliveryIdentity } from './addressBookLookup';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
 import { setNotifyAddressBook } from './notify';
@@ -215,6 +216,13 @@ export function OrderProvider({ children }) {
       const existing = orders[targetId];
       if (existing && (existing.items || []).length > 0) {
         const total = computeItemsTotal(existing.items);
+        // 별칭 > 전번 > 주소 우선순위를 재출력/표기 모두에 일관 적용하기 위해
+        // history entry 에 식별자 같이 박음. 주문 객체에 명시 저장된 값 우선,
+        // 없으면 주소록 lookup. 옛 history 는 빈값 → 주소만.
+        const ident = resolveDeliveryIdentity(addressBook, existing.deliveryAddress, {
+          alias: existing.deliveryAlias,
+          phone: existing.deliveryPhone,
+        });
         setRevenue((prev) =>
           appendHistory(
             prev,
@@ -223,6 +231,9 @@ export function OrderProvider({ children }) {
               items: existing.items,
               options: existing.options,
               deliveryAddress: existing.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
               paymentStatus: existing.paymentStatus,
               paymentMethod: paymentMethod || existing.paymentMethod || null,
@@ -283,6 +294,10 @@ export function OrderProvider({ children }) {
       );
       if (matchedItems.length > 0) {
         const total = computeItemsTotal(matchedItems);
+        const ident = resolveDeliveryIdentity(addressBook, existing.deliveryAddress, {
+          alias: existing.deliveryAlias,
+          phone: existing.deliveryPhone,
+        });
         setRevenue((prev) =>
           appendHistory(
             prev,
@@ -291,6 +306,9 @@ export function OrderProvider({ children }) {
               items: matchedItems,
               options: existing.options,
               deliveryAddress: existing.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
               paymentStatus: 'paid',
               paymentMethod,

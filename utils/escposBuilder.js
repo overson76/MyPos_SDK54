@@ -333,13 +333,24 @@ export function buildReceiptBytes(receipt, textEncoder) {
 //   tableLabel: string,
 //   isDelivery: boolean,
 //   deliveryAddress?: string,
+//   customerAlias?: string,   // 사장님 정책: 별칭 > 전번 > 주소. 라이더/주방이 손님 식별
+//   customerPhone?: string,
 //   rows: Array<{ item, kind: 'added'|'changed'|'unchanged'|'removed', previousQty? }>,
 //   kinds: Array<'added'|'changed'|'all'|'delivery'>,
 //   slippedAt?: number,
 // }
 // item 에 optionLabels?: string[] 를 미리 resolve 해서 전달해야 함 (hook 못 씀).
 export function buildOrderSlipText(slip) {
-  const { tableLabel = '', isDelivery, deliveryAddress, rows = [], kinds = ['all'], slippedAt } = slip;
+  const {
+    tableLabel = '',
+    isDelivery,
+    deliveryAddress,
+    customerAlias,
+    customerPhone,
+    rows = [],
+    kinds = ['all'],
+    slippedAt,
+  } = slip;
   const kindSet = new Set(kinds);
   const showAll = kindSet.has('all');
   const showDelivery = kindSet.has('delivery') && isDelivery && !!deliveryAddress;
@@ -362,6 +373,11 @@ export function buildOrderSlipText(slip) {
 
   if (showDelivery) {
     lines.push(divider('-'));
+    // 별칭 > 전번 > 주소 — 셋 다 있으면 모두 출력 (라이더/주방이 손님 식별 + 연락 + 배달).
+    const aliasText = (customerAlias || '').trim();
+    if (aliasText) lines.push('별칭: ' + aliasText);
+    const phoneText = (customerPhone || '').trim();
+    if (phoneText) lines.push('손님: ' + formatPhone(phoneText));
     lines.push('배달지: ' + deliveryAddress);
   }
 
