@@ -32,6 +32,12 @@ if ! grep -q "EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSy" .env 2>/dev/null; then
   fail ".env 의 EXPO_PUBLIC_FIREBASE_API_KEY 가 비어있거나 형식이 이상합니다."
 fi
 
+# 2026-05-21 추가: 카카오 키 사전 확인. 빈 키로 배포되면 매장 좌표 변환/배달 거리/
+# 회수 정렬/주소록 좌표 등 모든 지도 기능 OFF.
+if ! grep -qE "^EXPO_PUBLIC_KAKAO_REST_KEY=.{10,}$" .env 2>/dev/null; then
+  fail ".env 의 EXPO_PUBLIC_KAKAO_REST_KEY 가 비어있거나 너무 짧습니다 (정상 ~32자)."
+fi
+
 note "1/4 dist/ + Metro 캐시 클리어"
 rm -rf dist node_modules/.cache
 ok "클리어 완료"
@@ -55,6 +61,19 @@ if [ "${MATCHED:-0}" -eq 0 ]; then
   배포 중단."
 fi
 ok "API 키 inline 확인 (${MATCHED} 개 JS 청크에서 매칭)"
+
+# 2026-05-21 추가: 카카오 키 inline 확인. .env 값 일부를 빌드 산출물과 대조.
+KAKAO_PREFIX=$(awk -F= '/^EXPO_PUBLIC_KAKAO_REST_KEY/{print substr($2,1,8); exit}' .env)
+if [ -n "$KAKAO_PREFIX" ]; then
+  KAKAO_HITS=$(grep -l "$KAKAO_PREFIX" "$JS_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${KAKAO_HITS:-0}" -eq 0 ]; then
+    fail "카카오 키가 빌드 산출물에 inline 안 됨. 가능한 원인:
+  - utils/geocode.js 의 module 최상위 const 패턴 잔재 (lazy getter 로 변경 필요)
+  - 다른 파일에 process.env 우회 패턴 (const env = process.env)
+  배포 중단."
+  fi
+  ok "카카오 키 inline 확인 (${KAKAO_HITS} 개 JS 청크에서 매칭)"
+fi
 
 # PWA 자산이 public/ 에서 dist/ 로 복사됐는지 확인.
 # Expo SDK 50+ 는 public/ 자동 복사하지만 빌드 설정 변경 / SDK 업그레이드 시 깨질 수 있으므로

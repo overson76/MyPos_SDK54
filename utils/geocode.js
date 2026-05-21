@@ -2,19 +2,24 @@
 // 정책: 네트워크/키 누락은 조용히 null 반환 — 앱 흐름 절대 중단하지 않음.
 // 좌표 단위: lat=위도(y), lng=경도(x). 카카오는 x/y 순으로 응답.
 
-const KAKAO_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_KEY || '';
+// 2026-05-21 fix: getKakaoKey() 를 *함수 lazy* 로 변경. 옛 코드는 module 최상위 const 라
+// babel-preset-expo 의 EXPO_PUBLIC_* inline transformer 가 production 빌드에서 치환을
+// 누락 → 라이브 URL 에서 "카카오 KEY 미설정 → 좌표 변환 OFF" 경고 + 모든 카카오 호출
+// 무력화 (배달 거리/주소록 변환/회수 정렬 등). Firebase 패턴(utils/firebase.web.js)
+// 처럼 *호출 시점에 process.env.X 직접 참조* 가 inline 안전. CLAUDE.md "함정 2" 변종.
+const getKakaoKey = () => process.env.EXPO_PUBLIC_KAKAO_REST_KEY || '';
 const BASE = 'https://dapi.kakao.com';
 const EARTH_RADIUS_KM = 6371;
 
 export function isGeocodingAvailable() {
-  return KAKAO_KEY.length > 0;
+  return getKakaoKey().length > 0;
 }
 
 // 주소 또는 키워드 한 줄 → { lat, lng, formatted } | null
 // 1차: address.json (정확한 도로명/지번). 2차: keyword.json (가게명/자유 키워드).
 // formatted: 카카오가 인식한 표준 주소/장소명 — 사용자에게 변환 결과 미리보기 표시용.
 export async function geocodeAddress(address) {
-  if (!KAKAO_KEY) return null;
+  if (!getKakaoKey()) return null;
   const trimmed = String(address ?? '').trim();
   if (!trimmed) return null;
 
@@ -45,7 +50,7 @@ async function callKakao(path, query) {
   try {
     const url = `${BASE}${path}?query=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
-      headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
+      headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
     });
     if (!res.ok) return null;
     return await res.json();
@@ -100,13 +105,13 @@ export function formatDistance(km) {
 const NAVI_BASE = 'https://apis-navi.kakaomobility.com';
 
 export function isNaviAvailable() {
-  return KAKAO_KEY.length > 0;
+  return getKakaoKey().length > 0;
 }
 
 // origin, destination: { lat, lng }
 // 반환: { distanceM, durationSec } | null
 export async function getDrivingDistance(origin, destination) {
-  if (!KAKAO_KEY) return null;
+  if (!getKakaoKey()) return null;
   if (!isCoord(origin) || !isCoord(destination)) return null;
 
   const params = new URLSearchParams({
@@ -119,7 +124,7 @@ export async function getDrivingDistance(origin, destination) {
 
   try {
     const res = await fetch(`${NAVI_BASE}/v1/directions?${params.toString()}`, {
-      headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
+      headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -161,7 +166,7 @@ export function formatDuration(sec) {
 // imgW/imgH: 요청 이미지 픽셀 크기 (카카오 최대 640×640).
 // 실제 화면 표시는 <Image resizeMode="cover"> 로 더 크게 확대 가능.
 export function buildStaticMapUrl({ storeCoord, deliveryCoord, imgW = 640, imgH = 640 }) {
-  if (!KAKAO_KEY) return null;
+  if (!getKakaoKey()) return null;
   if (!isCoord(storeCoord) || !isCoord(deliveryCoord)) return null;
 
   const cLat = (storeCoord.lat + deliveryCoord.lat) / 2;
@@ -176,5 +181,5 @@ export function buildStaticMapUrl({ storeCoord, deliveryCoord, imgW = 640, imgH 
   const m1 = encodeURIComponent(`s16,c0xFF4444,t1/${storeCoord.lng},${storeCoord.lat}`);
   const m2 = encodeURIComponent(`s16,c0x4488FF,t2/${deliveryCoord.lng},${deliveryCoord.lat}`);
 
-  return `https://spi.maps.kakao.com/maps/staticmap?appkey=${KAKAO_KEY}&center=${cLng},${cLat}&level=${level}&size=${w}x${h}&markers=${m1}&markers=${m2}`;
+  return `https://spi.maps.kakao.com/maps/staticmap?appkey=${getKakaoKey()}&center=${cLng},${cLat}&level=${level}&size=${w}x${h}&markers=${m1}&markers=${m2}`;
 }
