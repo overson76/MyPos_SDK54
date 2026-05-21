@@ -2268,13 +2268,15 @@ export default function OrderScreen({
             }
 
             setPaymentPicker(null);
-            // 선불 = 결제만 (테이블 유지). 후불 = 결제 + 테이블 비우기 + 뒤로.
+            // 2026-05-21 사장님 룰: 선불도 결제 직후 테이블 탭으로 자동 복귀.
+            // 옛 코드는 선불 후 주문 탭에 남아서 직원이 수동 탭 이동 번거로움.
+            // 후불은 clearTable 까지 호출 (테이블 비움), 선불은 markPaid 만 (결제완료 배지 유지).
             if (mode === 'prepaid') {
               markPaid(id, picked);
             } else {
               clearTable(id, picked);
-              onBack?.();
             }
+            onBack?.();
             // 자동 출력 — receipt 데이터로 비동기 호출. 실패해도 결제 흐름엔 영향 X.
             if (receiptData) {
               printReceipt(receiptData).catch(() => {});
