@@ -68,8 +68,15 @@ export function OrderProvider({ children }) {
     orders,
     dispatch,
   });
-  const { groups, setGroups, getGroupFor, dissolveGroup, createGroup } =
-    useGroups({ orders, dispatch });
+  const {
+    groups,
+    setGroups,
+    getGroupFor,
+    dissolveGroup,
+    createGroup,
+    getGroupMode,
+    setGroupMode,
+  } = useGroups({ orders, dispatch });
   const { revenue, setRevenue } = useRevenue();
   const {
     addressBook,
@@ -787,8 +794,10 @@ export function OrderProvider({ children }) {
       createGroup,
       dissolveGroup,
       getGroupFor,
+      getGroupMode,
+      setGroupMode,
     };
-  }, [orders, splits, revenue, groups, addressBook]);
+  }, [orders, splits, revenue, groups, addressBook, getGroupMode, setGroupMode]);
 
   return (
     <OrderContext.Provider value={value}>{children}</OrderContext.Provider>
@@ -825,6 +834,7 @@ const ORDERS_FALLBACK = {
   migratePendingCart: noop, clearPendingCart: noop, submitPendingAsDelivery: () => null,
   submitPendingAsType: () => null,
   createGroup: noop, dissolveGroup: noop, getGroupFor: () => null,
+  getGroupMode: () => 'shared', setGroupMode: noop,
 };
 
 export function useOrders() {

@@ -22,6 +22,7 @@ import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
+import GroupModePicker from '../components/GroupModePicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
@@ -39,6 +40,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [moveMessage, setMoveMessage] = useState('');
   const [groupMode, setGroupMode] = useState(false);
   const [groupSelection, setGroupSelection] = useState([]);
+  // 2026-05-21: 단체 묶기 모드 진입 시 선택된 결제/메뉴 모드 — 'shared' | 'split'
+  // 사장님이 '단체' 버튼 누르면 GroupModePicker 모달 → 선택 → 이 state 에 저장 →
+  // createGroup 호출 시 이 mode 가 전달됨. 한 번의 단체 묶기 동안 mode 유지.
+  const [pendingGroupMode, setPendingGroupMode] = useState('shared');
+  const [groupModePickerOpen, setGroupModePickerOpen] = useState(false);
   // 하이라이트 깜빡임 + 배달 경과시간 주기적 리렌더
   const [blinkOn, setBlinkOn] = useState(true);
   // highlightTableId 변경 시 3초간만 깜빡이고 자동 소멸 — 영구 깜빡임 눈 피로 회피.
@@ -253,10 +259,10 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         setGroupSelection((prev) => prev.filter((x) => x !== tableObj.id));
         return;
       }
-      // 두 번째 선택 시 추가 버튼 클릭 없이 즉시 단체 생성
+      // 두 번째 선택 시 추가 버튼 클릭 없이 즉시 단체 생성 (pendingGroupMode 적용)
       const nextSel = [...groupSelection, tableObj.id];
       if (nextSel.length >= 2) {
-        createGroup?.(nextSel);
+        createGroup?.(nextSel, pendingGroupMode);
         exitAllModes();
       } else {
         setGroupSelection(nextSel);
@@ -291,20 +297,29 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       exitAllModes();
       return;
     }
-    // 단체로 묶인 테이블 중 아무거나 클릭 → 리더의 주문으로 이동, 라벨은 병합 표시
+    // 2026-05-21 사장님 룰: 단체 묶인 슬롯 클릭 — mode 별 분기
+    //   shared (통합): leader 의 주문으로 이동 (옛 동작, 모든 멤버 같이 작업)
+    //   split  (분리): 클릭한 슬롯 그대로 진입 (각자 자기 주문)
     const group = getGroupFor?.(tableObj.id);
     if (group) {
-      const leader = tables.find((tb) => tb.id === group.leaderId);
-      if (leader) {
-        onSelectTable?.({
-          ...leader,
-          id: group.leaderId,
-          label: buildGroupLabel(group.memberIds),
-          isGroup: true,
-          memberIds: group.memberIds,
-        });
-        return;
+      const groupMode = group.mode || 'shared';
+      if (groupMode === 'shared') {
+        const leader = tables.find((tb) => tb.id === group.leaderId);
+        if (leader) {
+          onSelectTable?.({
+            ...leader,
+            id: group.leaderId,
+            label: buildGroupLabel(group.memberIds),
+            isGroup: true,
+            memberIds: group.memberIds,
+            groupMode,
+          });
+          return;
+        }
       }
+      // split 모드 — 클릭한 슬롯 그대로 (각자 메뉴/결제)
+      onSelectTable?.({ ...tableObj, inGroup: true, groupMode });
+      return;
     }
     onSelectTable?.(tableObj);
   };
@@ -327,16 +342,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     }
     if (action === '단체') {
       if (groupMode) {
-        // 단체 모드 종료 — 2개 이상 선택되어 있으면 단체 생성
+        // 단체 모드 종료 — 2개 이상 선택되어 있으면 단체 생성 (pendingGroupMode 적용)
         if (groupSelection.length >= 2) {
-          createGroup?.(groupSelection);
+          createGroup?.(groupSelection, pendingGroupMode);
         }
         exitAllModes();
       } else {
+        // 2026-05-21 사장님 룰: 단체 진입 시 [통합][분리] 모달 먼저 띄움.
+        // 사장님 선택 → handleGroupModeSelect 가 setGroupMode(true) + pendingGroupMode 저장.
         exitAllModes();
-        setGroupMode(true);
-        setGroupSelection([]);
-        setMoveMessage('단체로 묶을 테이블을 선택 후 단체 버튼을 다시 누르세요 (2개 이상)');
+        setGroupModePickerOpen(true);
       }
       return;
     }
@@ -344,36 +359,18 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
 
   const renderTile = (t, { isSplitPart = false } = {}) => {
     const borderColor = tableTypeColors[t.type];
-    // 단체 — 이 테이블이 속한 단체 정보
+    // 단체 — 이 테이블이 속한 단체 정보 (mode: 'shared' | 'split')
     const group = getGroupFor?.(t.id);
     const isGrouped = !!group;
-    // 그룹 멤버는 주문 정보를 리더의 tableId 로부터 읽는다
-    const readTableId = isGrouped ? group.leaderId : t.id;
-    const orderRaw = getOrder(readTableId);
-
-    // 2026-05-21 사장님 룰: 단체 묶음 후 5/6 따로 담은 메뉴는 *각자 슬롯* 에만 표시.
-    //   옛 코드는 양쪽 슬롯이 leader 의 전체 order 를 표시 → 같은 합산 노출 버그.
-    //   "🔗 통합" 으로 담은 메뉴는 sourceTableId === leaderId → leader 슬롯에 표시.
-    //   sourceTableId 없는 옛 메뉴는 leader 에 박힌 것으로 간주 (legacy 호환).
-    const filterMine = (i) => {
-      if (!isGrouped) return true;
-      const src = i.sourceTableId || group.leaderId;
-      return src === t.id;
-    };
-    const order = isGrouped
-      ? {
-          ...orderRaw,
-          items: (orderRaw.items || []).filter(filterMine),
-          cartItems: (orderRaw.cartItems || []).filter(filterMine),
-          confirmedItems: (orderRaw.confirmedItems || []).filter(filterMine),
-        }
-      : orderRaw;
-    const total = isGrouped
-      ? computeItemsTotal(order.items)
-      : getOrderTotal(readTableId);
-    const qty = isGrouped
-      ? (order.items || []).reduce((s, i) => s + (i.qty || 0), 0)
-      : getOrderQty(readTableId);
+    const groupMode = group?.mode || 'shared';
+    // 2026-05-21 사장님 룰:
+    //   - shared 모드 (통합): leader 의 order 를 양쪽 슬롯에서 동일하게 표시 (옛 동작)
+    //   - split  모드 (분리): 각 슬롯이 자기 state 의 order — 메뉴/금액 각자 분리
+    const readTableId =
+      isGrouped && groupMode === 'shared' ? group.leaderId : t.id;
+    const order = getOrder(readTableId);
+    const total = getOrderTotal(readTableId);
+    const qty = getOrderQty(readTableId);
     const hasOrder = (order.confirmedItems || []).length > 0;
     // 주문중 = 장바구니에 담긴 것이 있고 아직 주방(items)에 커밋 안 된 상태
     const cartOnly =
@@ -1407,6 +1404,24 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           }}
         />
       ) : null}
+
+      {/* 2026-05-21: 단체 묶기 시 [통합][분리] 모드 선택 모달 */}
+      <GroupModePicker
+        open={groupModePickerOpen}
+        memberLabels={[]}
+        onSelect={(mode) => {
+          setGroupModePickerOpen(false);
+          setPendingGroupMode(mode);
+          setGroupMode(true);
+          setGroupSelection([]);
+          setMoveMessage(
+            mode === 'shared'
+              ? '🔗 통합 모드 — 단체로 묶을 테이블을 2개 이상 선택'
+              : '✂️ 분리 모드 — 단체로 묶을 테이블을 2개 이상 선택'
+          );
+        }}
+        onClose={() => setGroupModePickerOpen(false)}
+      />
 
       {/* 1.0.37: 단체 묶음 테이블 결제 — 합산/분리 선택 모달 */}
       <GroupPaymentSplitPicker

@@ -448,14 +448,9 @@ export default function OrderScreen({
 
   const handleMenuPress = (item) => {
     if (!tableId) return;
-    const group = getGroupFor?.(tableId);
-    if (group && group.memberIds && group.memberIds.length > 1) {
-      // 단체 — sourceTable 선택 모달. 마지막 선택은 ★ 강조.
-      setPendingMenuItem(item);
-      setGroupPickerMembers(group.memberIds);
-      setGroupPickerOpen(true);
-      return;
-    }
+    // 2026-05-21 사장님 룰: "어느 손님?" 팝업 제거 — 단체 모드 (shared/split)
+    // 가 단체 묶기 시점에 이미 결정됨. shared 면 leader 슬롯에 자동, split 이면
+    // 클릭한 멤버 슬롯에 자동. TableSourcePicker 호출 제거.
     applyMenuAdd(item, null);
   };
 
@@ -2128,9 +2123,17 @@ export default function OrderScreen({
                     ]}
                     disabled={!hasCommittedOrder || isPending}
                     onPress={() => {
-                      // 1.0.37: 단체 묶음이면 합산/분리 선택 모달 먼저
+                      // 1.0.37: 단체 묶음 시 합산/분리 선택 모달.
+                      // 2026-05-21 사장님 룰: split (분리) 모드는 *애초에* 각자 결제 →
+                      // 합산/분리 모달 건너뛰고 즉시 결제 picker. shared (통합) 모드만
+                      // 필요 시 분리 결제 가능 (GroupPaymentSplitPicker 그대로).
                       const group = getGroupFor?.(tableId);
-                      if (group && group.memberIds && group.memberIds.length > 1) {
+                      const isSharedGroup =
+                        group &&
+                        group.memberIds &&
+                        group.memberIds.length > 1 &&
+                        (group.mode || 'shared') === 'shared';
+                      if (isSharedGroup) {
                         const ord = getOrder(tableId);
                         const subs = computeSubtotalsBySource(
                           ord?.items || [],
@@ -2360,21 +2363,8 @@ export default function OrderScreen({
         />
       ) : null}
 
-      {/* 1.0.36: 단체 묶음 후 메뉴 추가 시 어느 손님인지 묻는 모달
-          2026-05-21: leaderId 추가 — "🔗 통합" 옵션 표시용 */}
-      <TableSourcePicker
-        open={groupPickerOpen}
-        members={groupPickerMembers}
-        leaderId={getGroupFor?.(tableId)?.leaderId || null}
-        lastSourceId={
-          (() => {
-            const group = getGroupFor?.(tableId);
-            return group?.leaderId ? lastSourceByGroup[group.leaderId] : null;
-          })()
-        }
-        onSelect={handleGroupSourceSelect}
-        onClose={handleGroupSourceCancel}
-      />
+      {/* 2026-05-21: TableSourcePicker 제거 — 사장님 룰 "어느 손님 팝업 필요없음".
+          단체 모드 (shared/split) 가 단체 묶기 시점에 결정됨. */}
     </View>
   );
 }
