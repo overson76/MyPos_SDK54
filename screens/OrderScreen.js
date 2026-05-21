@@ -2358,10 +2358,12 @@ export default function OrderScreen({
         />
       ) : null}
 
-      {/* 1.0.36: 단체 묶음 후 메뉴 추가 시 어느 손님인지 묻는 모달 */}
+      {/* 1.0.36: 단체 묶음 후 메뉴 추가 시 어느 손님인지 묻는 모달
+          2026-05-21: leaderId 추가 — "🔗 통합" 옵션 표시용 */}
       <TableSourcePicker
         open={groupPickerOpen}
         members={groupPickerMembers}
+        leaderId={getGroupFor?.(tableId)?.leaderId || null}
         lastSourceId={
           (() => {
             const group = getGroupFor?.(tableId);

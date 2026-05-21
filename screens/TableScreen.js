@@ -24,7 +24,7 @@ import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
-import { normalizeAddressKey } from '../utils/orderHelpers';
+import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
 import { formatShort12h } from '../utils/timeUtil';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
@@ -349,9 +349,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const isGrouped = !!group;
     // 그룹 멤버는 주문 정보를 리더의 tableId 로부터 읽는다
     const readTableId = isGrouped ? group.leaderId : t.id;
-    const order = getOrder(readTableId);
-    const total = getOrderTotal(readTableId);
-    const qty = getOrderQty(readTableId);
+    const orderRaw = getOrder(readTableId);
+
+    // 2026-05-21 사장님 룰: 단체 묶음 후 5/6 따로 담은 메뉴는 *각자 슬롯* 에만 표시.
+    //   옛 코드는 양쪽 슬롯이 leader 의 전체 order 를 표시 → 같은 합산 노출 버그.
+    //   "🔗 통합" 으로 담은 메뉴는 sourceTableId === leaderId → leader 슬롯에 표시.
+    //   sourceTableId 없는 옛 메뉴는 leader 에 박힌 것으로 간주 (legacy 호환).
+    const filterMine = (i) => {
+      if (!isGrouped) return true;
+      const src = i.sourceTableId || group.leaderId;
+      return src === t.id;
+    };
+    const order = isGrouped
+      ? {
+          ...orderRaw,
+          items: (orderRaw.items || []).filter(filterMine),
+          cartItems: (orderRaw.cartItems || []).filter(filterMine),
+          confirmedItems: (orderRaw.confirmedItems || []).filter(filterMine),
+        }
+      : orderRaw;
+    const total = isGrouped
+      ? computeItemsTotal(order.items)
+      : getOrderTotal(readTableId);
+    const qty = isGrouped
+      ? (order.items || []).reduce((s, i) => s + (i.qty || 0), 0)
+      : getOrderQty(readTableId);
     const hasOrder = (order.confirmedItems || []).length > 0;
     // 주문중 = 장바구니에 담긴 것이 있고 아직 주방(items)에 커밋 안 된 상태
     const cartOnly =
