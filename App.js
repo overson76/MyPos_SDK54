@@ -35,6 +35,8 @@ import { checkForUpdates } from './utils/otaUpdates';
 import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
+import OrderTypePicker from './components/OrderTypePicker';
+import { resolveAnyTable } from './utils/tableData';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
 // 2026-05-21: CID 자동 단골(15초 후 자동 배달 슬롯 생성) 제거 — 사장님이 메뉴 담고
 // "주문" 누를 때 OrderTypePicker 로 배달/포장/예약 직접 선택하는 흐름으로 통합.
@@ -236,7 +238,12 @@ function MainApp() {
     setDeliveryAddress,
     setDeliveryContact,
     subscribeConfirmed,
+    submitPendingAsType,
   } = useOrders();
+  // 2026-05-21: CID "주문받기" 클릭 시 띄울 OrderTypePicker — App 레벨에서 관리.
+  // 알림은 즉시 dismiss + picker 띄움 + 사장님 선택 시 빈 슬롯에 발신자 정보만 박고 "주문대기".
+  const [callTypePickerOpen, setCallTypePickerOpen] = useState(false);
+  const [callTypePickerData, setCallTypePickerData] = useState(null); // dismiss 후에도 alias/phone 보존
 
   // CID — Electron PC 에서 SIP 착신 → Firebase 기록 (다른 기기도 동시 수신)
   useCidHandler(storeId);
@@ -244,7 +251,7 @@ function MainApp() {
   // dismiss: 주문 확정 시 즉시 알림 사라지게 — 15초 대기 안 함
   const { call: incomingCall, dismiss: dismissIncomingCall } = useIncomingCall(storeId);
 
-  // CID 알림은 평소 15초 후 자동 사라짐. 사장님이 메뉴 선택하고 "주문" 누른 순간엔
+  // CID 알림은 평소 10초 후 자동 사라짐. 사장님이 메뉴 선택하고 "주문" 누른 순간엔
   // 이미 손님 정보 다 받은 상태 — 알림 막대가 화면 위에 남아있을 이유 없음.
   // confirmOrder 가 호출되는 모든 경로(테이블/배달/예약/포장)에 자동 적용.
   useEffect(() => {
@@ -254,6 +261,27 @@ function MainApp() {
     });
     return () => unsub && unsub();
   }, [subscribeConfirmed, dismissIncomingCall]);
+
+  // 2026-05-21 사장님 룰: 발신자 노출 10초 유지. 10초 안에 "주문받기" 클릭 없으면
+  //   자동으로 빈 배달 슬롯에 발신자 정보를 박아 "주문대기" 상태로 남김. 직원이
+  //   배달탭 보고 어떤 종류(배달/포장/예약)인지 파악 후 메뉴를 담는 흐름.
+  //   incomingCall 새로 들어올 때마다 timer 시작. dismiss/orderPress 시 cleanup.
+  useEffect(() => {
+    if (!incomingCall) return undefined;
+    if (typeof submitPendingAsType !== 'function') return undefined;
+    const timer = setTimeout(() => {
+      // 자동 stash — 빈 d 슬롯에 발신자 정보만 박음. PENDING cart 없으니 메뉴는
+      // 비어있고 (items=0, cartItems=0), deliveryPhone/alias/address 만 채워짐.
+      // TableScreen 이 그 상태를 "🕐 주문대기" 배지로 렌더.
+      submitPendingAsType('delivery', {
+        deliveryAddress: incomingCall.address || null,
+        deliveryPhone: incomingCall.phoneNumber || null,
+        deliveryAlias: incomingCall.alias || null,
+      });
+      dismissIncomingCall();
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [incomingCall, submitPendingAsType, dismissIncomingCall]);
 
   // 2026-05-21: 옛 1.0.48 단골 자동 배달 effect 제거됨 — 전화 주문이 *배달* 뿐만 아니라
   // *포장/예약* 도 있어서 사장님이 메뉴 담고 "주문" 누를 때 OrderTypePicker 로 직접 선택하는
@@ -334,20 +362,46 @@ function MainApp() {
         call={incomingCall}
         onDismiss={dismissIncomingCall}
         onOrderPress={() => {
-          // 1.0.47: "주문받기" 누르면 발신번호/주소/별칭을 PENDING 에 미리 박음.
-          //   - 사장님이 메뉴 추가 후 "주문" 누르면 OrderTypePicker 로 배달/포장/예약 선택
-          //     → submitPendingAsType 가 해당 종류 슬롯으로 옮김.
-          //   - 주소록 매칭 시 주소도 자동 채움 (useCidHandler 가 미리 lookup).
-          if (incomingCall?.address) {
-            setDeliveryAddress(PENDING_TABLE_ID, incomingCall.address);
-          }
-          setDeliveryContact(PENDING_TABLE_ID, {
-            phone: incomingCall?.phoneNumber || null,
+          // 2026-05-21 사장님 룰: "주문받기" → 알림 즉시 dismiss + OrderTypePicker 띄움.
+          //   사장님이 배달/포장/예약 선택 → 빈 슬롯에 발신자 정보만 박혀 "주문대기" 상태로
+          //   남겨둠 (자동 진입 X — 직원이 나중에 그 슬롯 확인 후 메뉴 담음).
+          //   dismiss 전에 callData 를 별도 state 에 보존 — alias/phone 잃지 않게.
+          setCallTypePickerData({
+            address: incomingCall?.address || null,
+            phoneNumber: incomingCall?.phoneNumber || null,
             alias: incomingCall?.alias || null,
           });
-          handleTabPress('주문');
+          dismissIncomingCall();
+          setCallTypePickerOpen(true);
         }}
       />
+      {/* 2026-05-21: 주문받기 클릭 직후 띄우는 OrderTypePicker — App 레벨 (어느 탭에서든 보임) */}
+      {callTypePickerOpen ? (
+        <OrderTypePicker
+          callerLabel={
+            callTypePickerData?.alias ||
+            callTypePickerData?.phoneNumber ||
+            callTypePickerData?.address ||
+            null
+          }
+          onClose={() => {
+            setCallTypePickerOpen(false);
+            setCallTypePickerData(null);
+          }}
+          onSelect={(type) => {
+            const data = callTypePickerData;
+            setCallTypePickerOpen(false);
+            setCallTypePickerData(null);
+            if (!data) return;
+            // 슬롯에 발신자 정보만 박고 "주문대기" 상태로 남김 (자동 진입 X)
+            submitPendingAsType(type, {
+              deliveryAddress: data.address || null,
+              deliveryPhone: data.phoneNumber || null,
+              deliveryAlias: data.alias || null,
+            });
+          }}
+        />
+      ) : null}
       {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
           배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>

@@ -1030,14 +1030,18 @@ export default function OrderScreen({
             tType === 'reservation' ? '6:30' : tType === 'takeout' ? '5:15' : '4:20';
           return (
             <View style={styles.headerAddressWrap}>
-              {tType === 'delivery' && (
+              {/* 2026-05-21 사장님 룰: 배달탭 진입 흐름과 통일 — 포장/예약 슬롯에서도
+                  주소 입력 칸 + 발신자 라벨 + 주소록 모달 표시. 매장 홀(t01 등)은 제외. */}
+              {needsTime && (
                 <>
-                  <Text style={styles.deliveryLabel}>📍</Text>
+                  <Text style={styles.deliveryLabel}>
+                    {tType === 'delivery' ? '📍' : tType === 'takeout' ? '🛍' : '📅'}
+                  </Text>
                   <TextInput
                     style={[styles.deliveryInput, styles.deliveryInputCompact]}
                     value={order.deliveryAddress || ''}
                     onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
-                    placeholder="주소"
+                    placeholder={tType === 'delivery' ? '주소' : '주소 (선택)'}
                     placeholderTextColor="#9ca3af"
                     returnKeyType="done"
                     onSubmitEditing={() => Keyboard.dismiss()}
@@ -1145,7 +1149,10 @@ export default function OrderScreen({
         })()}
       </View>
 
-      {table?.type === 'delivery' && (
+      {/* 2026-05-21: 포장/예약도 주소록 모달 표시 (사장님 룰 — 배달탭 진입과 동일 흐름) */}
+      {(table?.type === 'delivery' ||
+        table?.type === 'takeout' ||
+        table?.type === 'reservation') && (
         <AddressBookModal
           visible={addressBookOpen}
           onClose={() => setAddressBookOpen(false)}
@@ -1891,8 +1898,16 @@ export default function OrderScreen({
                 ]}
                 numberOfLines={1}
               >
+                {/* 2026-05-21 사장님 룰: PENDING + 발신자 정보 있으면 "미선택" 대신
+                    별칭/전번/주소 우선순위로 라벨 표시 — 메뉴 담는 중에도 누구 주문인지 식별. */}
                 {isPending
-                  ? '미선택'
+                  ? (order?.deliveryAlias
+                      ? `👤 ${order.deliveryAlias}`
+                      : order?.deliveryPhone
+                      ? `☎ ${order.deliveryPhone}`
+                      : order?.deliveryAddress
+                      ? `📍 ${order.deliveryAddress}`
+                      : '미선택')
                   : table?.isGroup
                   ? `👥 ${table.label}`
                   : table?.label || ''}

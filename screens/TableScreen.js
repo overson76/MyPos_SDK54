@@ -357,6 +357,15 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const cartOnly =
       (order.cartItems || []).length > 0 &&
       (order.items || []).length === 0;
+    // 2026-05-21 사장님 룰: 발신자 정보만 있고 메뉴는 아직 안 담긴 상태 = "주문대기".
+    // CID 자동 stash (10초 후) 또는 "주문받기" → OrderTypePicker → 슬롯 선택 흐름에서
+    // 발신자 정보만 박힌 빈 슬롯. 직원이 클릭하면 OrderScreen 으로 진입 → 메뉴 담음.
+    const isPendingCall =
+      !hasOrder &&
+      !cartOnly &&
+      (!!order.deliveryAlias ||
+        !!order.deliveryPhone ||
+        !!order.deliveryAddress);
     // 단체 모드에서 선택된 테이블 — 시각적 강조
     const isGroupSelected = groupMode && groupSelection.includes(t.id);
     // 단체 라벨: 묶인 테이블 번호들을 '+' 로 연결
@@ -785,6 +794,21 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               >
                 {displayLabel}
               </Text>
+            </View>
+          ) : isPendingCall ? (
+            <View style={styles.tilePendingCallWrap}>
+              <Text style={styles.tilePendingCallBadge}>🕐 주문대기</Text>
+              <Text
+                style={isSplitPart ? styles.tileLabelTiny : styles.tileLabel}
+                numberOfLines={1}
+              >
+                {displayLabel}
+              </Text>
+              {deliveryPrimary ? (
+                <Text style={styles.tilePendingCallLabel} numberOfLines={1}>
+                  {deliveryIcon} {deliveryPrimary}
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View style={styles.tileEmptyWrap}>

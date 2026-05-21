@@ -4,6 +4,7 @@ import { useOrders } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
 import { resolveAnyTable, tableTypeColors } from '../utils/tableData';
 import { paymentMethodLabel } from '../utils/payment';
+import { localDateString } from '../utils/orderHelpers';
 
 const TAB_PAID = 'paid';
 const TAB_READY = 'ready';
@@ -68,19 +69,33 @@ export default function UndoScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // 결제완료 목록 — reverted 제외, clearedAt 최신순
-  const paidEntries = useMemo(() => {
-    const list = (revenue?.history || []).filter((h) => !h.reverted);
-    return list.slice().sort((a, b) => (b.clearedAt || 0) - (a.clearedAt || 0));
-  }, [revenue]);
+  // 2026-05-21 사장님 룰: 결제/조리완료 되돌리기 둘 다 *오늘 것만* 표시.
+  // 옛 데이터는 revenue.history 에 영구 보관되지만 화면은 1일 단위 — 누적된 옛
+  // 항목이 직원 시야를 흐리는 불필요한 정보 차단. 어제 결제는 어차피 되돌리는
+  // 경우 거의 없고, 정말 필요하면 관리자 → 수익현황에서 별도 확인.
+  const todayKey = useMemo(() => localDateString(nowTick), [nowTick]);
 
-  // 조리완료 목록 — status==='ready' 인 살아있는 테이블, readyAt 최신순
+  // 결제완료 목록 — reverted 제외, 오늘(clearedAt) 만, 최신순
+  const paidEntries = useMemo(() => {
+    const list = (revenue?.history || []).filter(
+      (h) => !h.reverted && localDateString(h.clearedAt) === todayKey
+    );
+    return list.slice().sort((a, b) => (b.clearedAt || 0) - (a.clearedAt || 0));
+  }, [revenue, todayKey]);
+
+  // 조리완료 목록 — status==='ready' + 오늘(readyAt) + 살아있는 테이블, 최신순
   const readyOrders = useMemo(() => {
     return Object.entries(orders)
       .map(([tableId, o]) => ({ tableId, table: resolveTable(tableId), ...o }))
-      .filter((o) => o.table && o.status === 'ready' && o.readyAt)
+      .filter(
+        (o) =>
+          o.table &&
+          o.status === 'ready' &&
+          o.readyAt &&
+          localDateString(o.readyAt) === todayKey
+      )
       .sort((a, b) => (b.readyAt || 0) - (a.readyAt || 0));
-  }, [orders]);
+  }, [orders, todayKey]);
 
   const handleRevertPaid = (entry) => {
     const itemNames = (entry.items || []).map((i) => i.name).join(', ');
