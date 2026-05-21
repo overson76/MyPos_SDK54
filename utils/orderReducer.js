@@ -405,12 +405,22 @@ export function orderReducer(state, action) {
         const allCooked =
           nextItems.length > 0 &&
           nextItems.every((i) => (i.cookState || 'pending') === 'cooked');
+        // 2026-05-21 fix: 모든 슬롯이 cooked 가 된 *바로 그 순간* readyAt 도 자동 set.
+        // 사장님 룰: 배달은 조리완료와 동시에 배달회수에 자동 등록되어야 함.
+        // 옛 코드는 status='ready' 만 갱신하고 readyAt 은 별도 markReady 버튼이 필요 →
+        // 사장님이 각 슬롯 cooked 토글만 하고 별도 버튼 누르지 않으면 회수 목록 텅.
+        const wasNotReady = !existing.readyAt;
         return {
           ...state,
           [tableId]: {
             ...existing,
             items: nextItems,
             status: allCooked ? 'ready' : 'preparing',
+            readyAt: allCooked
+              ? wasNotReady
+                ? Date.now()
+                : existing.readyAt
+              : null,
           },
         };
       }
@@ -441,12 +451,19 @@ export function orderReducer(state, action) {
 
       const allCooked =
         nextItems.length > 0 && nextItems.every(slotIsAllCooked);
+      // 2026-05-21 fix (위 !hasBoth 블록과 동일): allCooked 가 되는 *순간* readyAt 자동 set.
+      const wasNotReady2 = !existing.readyAt;
       return {
         ...state,
         [tableId]: {
           ...existing,
           items: nextItems,
           status: allCooked ? 'ready' : 'preparing',
+          readyAt: allCooked
+            ? wasNotReady2
+              ? Date.now()
+              : existing.readyAt
+            : null,
         },
       };
     }
@@ -582,7 +599,12 @@ export function orderReducer(state, action) {
         [tableId]: {
           ...existing,
           items: merged,
-          cartItems: merged.map((i) => ({ ...i })),
+          // 2026-05-21 fix: 확정 직후 cartItems 를 빈 배열로 초기화.
+          // 옛 코드 (cartItems: merged.map(...)) 는 cart 와 items 가 동일해져서
+          // 슬롯 재진입 시 OrderScreen 의 `cart = cartItems ?? items` 가 옛 메뉴를
+          // 그대로 보여줘 사장님이 "입력중 ↔ 주문상태" 자동 토글로 인지하는 버그 유발.
+          // 추가 주문/변경은 cart 가 비어있는 상태에서 새 메뉴만 담아 다시 confirm.
+          cartItems: [],
           confirmedItems: isFirstConfirm
             ? merged.map((i) => ({ ...i }))
             : existing.confirmedItems,

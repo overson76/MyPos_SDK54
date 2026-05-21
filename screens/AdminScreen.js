@@ -37,7 +37,8 @@ import { clearPin, setPin as savePin, verifyPin } from '../utils/pinLock';
 import { reportError } from '../utils/sentry';
 import { useResponsive } from '../utils/useResponsive';
 import Constants from 'expo-constants';
-import { BUILD_NUMBER } from '../utils/buildInfo';
+import { APP_VERSION, BUILD_NUMBER } from '../utils/buildInfo';
+import { fetchLatestVersion, compareVersions } from '../utils/latestVersion';
 import {
   isElectronUpdateAvailable,
   applyElectronUpdateNow,
@@ -105,6 +106,28 @@ function SystemSettingsView() {
   // OTA(폰 앱) 업데이트 상태 — 네이티브 환경에서만 표시.
   const [otaStatus, setOtaStatus] = useState(null); // null | 'checking' | 'downloading' | 'downloaded' | 'upToDate' | 'error'
   const [otaBusy, setOtaBusy] = useState(false);
+
+  // "최신버전" — GitHub Releases 의 latest tag. 모든 기기 동일 호출.
+  // 마운트 1회 fetch + 사장님이 "다시 확인" 눌렀을 때 재호출.
+  const [latestVersion, setLatestVersion] = useState(null);
+  const [latestLoading, setLatestLoading] = useState(true);
+  const refreshLatestVersion = async () => {
+    setLatestLoading(true);
+    const v = await fetchLatestVersion();
+    setLatestVersion(v);
+    setLatestLoading(false);
+  };
+  useEffect(() => {
+    let cancelled = false;
+    fetchLatestVersion().then((v) => {
+      if (cancelled) return;
+      setLatestVersion(v);
+      setLatestLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // CID 진단 — 1.0.44 부터 LG U+ Centrex Webhook 모드.
   //   webhook 서버 상태 + IP 워치독 + LG U+ API 등록 결과를 한 화면에.
@@ -612,19 +635,43 @@ function SystemSettingsView() {
         </>
       ) : null}
 
-      {/* === 버전 정보 — 모든 기기에서 동일 버전인지 한눈에 확인 === */}
+      {/* === 버전 정보 — 모든 기기에서 동일 버전인지 한눈에 확인 ===
+           "현재버전" 은 빌드 시점 박힌 APP_VERSION (utils/buildInfo.js).
+           "최신버전" 은 GitHub Releases 의 latest tag — 마운트 시 fetch + 새로고침 버튼. */}
       <View style={sysStyles.versionBox}>
-        <Text style={sysStyles.versionText}>
-          📱 MyPos v{Constants.expoConfig?.version || '1.0.0'}
-          {' ('}
-          {Constants.nativeBuildVersion || BUILD_NUMBER}
-          {')  '}
-          {Platform.OS === 'web'
+        <Text style={sysStyles.versionPlatform}>
+          📱 MyPos · {Platform.OS === 'web'
             ? (isElectron() ? '🖥️ PC 카운터' : '🌐 웹')
             : Platform.OS === 'ios'
             ? '🍎 iPhone/iPad'
             : '🤖 Android'}
         </Text>
+        <Text style={sysStyles.versionLine}>
+          현재버전 v{APP_VERSION} ({Constants.nativeBuildVersion || BUILD_NUMBER})
+        </Text>
+        <Text style={sysStyles.versionLine}>
+          최신버전 {latestLoading
+            ? '확인 중…'
+            : latestVersion
+            ? `v${latestVersion}`
+            : '확인 불가'}
+          {!latestLoading && latestVersion
+            ? compareVersions(APP_VERSION, latestVersion) === 0
+              ? '  ✅ 최신'
+              : compareVersions(APP_VERSION, latestVersion) < 0
+              ? '  ⚠️ 새 버전 있음'
+              : '  🧪 개발 빌드'
+            : ''}
+        </Text>
+        <TouchableOpacity
+          style={sysStyles.versionRefreshBtn}
+          onPress={refreshLatestVersion}
+          disabled={latestLoading}
+        >
+          <Text style={sysStyles.versionRefreshText}>
+            {latestLoading ? '확인 중…' : '🔄 다시 확인'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* (1.0.24: PinManageModal 은 AdminSettingsView 로 이동) */}
@@ -851,10 +898,37 @@ function makeSysStyles(scale = 1) {
       alignItems: 'center',
       paddingVertical: 20,
       marginTop: 12,
+      gap: 4,
     },
     versionText: {
       fontSize: fp(12),
       color: '#9CA3AF',
+      fontWeight: '600',
+    },
+    versionPlatform: {
+      fontSize: fp(12),
+      color: '#9CA3AF',
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    versionLine: {
+      fontSize: fp(13),
+      color: '#374151',
+      fontWeight: '600',
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    versionRefreshBtn: {
+      marginTop: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      backgroundColor: '#f9fafb',
+    },
+    versionRefreshText: {
+      fontSize: fp(12),
+      color: '#374151',
       fontWeight: '600',
     },
     diagBox: {

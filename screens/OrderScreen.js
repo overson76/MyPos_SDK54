@@ -59,6 +59,8 @@ export default function OrderScreen({
   onRequestOrderWithTable,
   autoConfirmIntent,
   clearAutoConfirmIntent,
+  setSelectedTable,
+  goToTableWithSelection,
 }) {
   // 컴포넌트 전체에서 사용하는 web 여부 — JSX 평가 시점 ReferenceError 방지를 위해
   // 함수 상단에 한 번 정의. 26a620a 가 line 817 에서 !isWeb 사용 추가했는데
@@ -2293,7 +2295,11 @@ export default function OrderScreen({
       ) : null}
 
       {/* 2026-05-21: PENDING + cart + "주문" 누름 시 배달/포장/예약 3옵션 모달.
-          사장님 선택 → submitPendingAsType → 자동 슬롯 배당 + PENDING 정보 transfer + confirm. */}
+          사장님 선택 → submitPendingAsType → 슬롯 배당 + PENDING 정보 transfer →
+          그 슬롯 OrderScreen 으로 navigate (테이블 탭 활성화).
+          사장님이 *배달탭에서 배달1 클릭 진입 흐름과 동일* 한 화면에서 주소/메뉴 검토 후
+          직접 "주문" 한 번 더 누르면 confirm — 자동 confirm 제거로 잘못된 주소로 확정되는
+          사고 차단 (사장님 요청 2026-05-21). */}
       {typePickerOpen ? (
         <OrderTypePicker
           total={total}
@@ -2312,7 +2318,16 @@ export default function OrderScreen({
               deliveryAlias: order?.deliveryAlias,
             });
             if (!targetId) return;
-            const targetTable = resolveAnyTable(targetId) || { id: targetId, label: targetId, type };
+            const targetTable =
+              resolveAnyTable(targetId) || { id: targetId, label: targetId, type };
+            // 새 슬롯 선택 + 테이블 탭으로 전환을 *한 번에* — 배달탭 진입과 동일 화면.
+            // goToTableWithSelection 은 tableResetSignal 증가시키지 않아 selectedTable
+            // 가 안전하게 유지됨 (handleTabPress 의 reset effect 회피).
+            if (typeof goToTableWithSelection === 'function') {
+              goToTableWithSelection(targetTable);
+              return;
+            }
+            // fallback (legacy) — 기존 자동 confirm 흐름.
             playOrderSound();
             speakOrder({
               table: targetTable,
@@ -2320,7 +2335,6 @@ export default function OrderScreen({
               menuItems,
               optionsList: options,
             });
-            // migrate 가 dispatch 비동기라 다음 마이크로태스크에 확정.
             setTimeout(() => {
               confirmOrder(targetId);
               onBack?.();

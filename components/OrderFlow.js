@@ -23,6 +23,7 @@ export default function OrderFlow({
         onBack={() => setSelectedTable?.(null)}
         autoConfirmIntent={autoConfirmIntent}
         clearAutoConfirmIntent={clearAutoConfirmIntent}
+        setSelectedTable={setSelectedTable}
       />
     );
   }

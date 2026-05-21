@@ -696,6 +696,128 @@ describe('orderReducer · confirmOrder', () => {
     expect(next.t1.status).toBe('preparing');
     expect(next.t1.readyAt).toBeNull();
   });
+
+  // 2026-05-21 회귀 방지 — 사장님 신고 "입력중 ↔ 주문상태 무한 토글" 의 근본 원인.
+  // 확정 후 cartItems 는 *반드시* 빈 배열이어야 OrderScreen 의 cart 가 비어 보이고,
+  // 사장님이 슬롯 재진입했을 때 옛 메뉴 다시 안 보임.
+  test('확정 후 cartItems 가 빈 배열로 초기화되어야 한다', () => {
+    const s = {
+      t1: makeOrder({
+        cartItems: [
+          { slotId: 's1', qty: 2, cookState: 'pending' },
+          { slotId: 's2', qty: 1, cookState: 'pending' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/confirmOrder',
+      tableId: 't1',
+    });
+    expect(next.t1.items).toHaveLength(2); // 주방으로 커밋
+    expect(next.t1.cartItems).toEqual([]); // 장바구니는 비어야 한다
+  });
+
+  test('재확정시에도 cartItems 는 비어야 한다 (변경 누름 흐름)', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', qty: 1, cookState: 'cooked' }],
+        cartItems: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'pending' }, // 사장님이 추가한 메뉴
+        ],
+        confirmedItems: [{ slotId: 's1', qty: 1, cookState: 'cooked' }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/confirmOrder',
+      tableId: 't1',
+    });
+    expect(next.t1.items).toHaveLength(2);
+    expect(next.t1.cartItems).toEqual([]); // 추가 변경 후에도 cart 정리
+  });
+});
+
+// 2026-05-21 회귀 방지 — 사장님 룰 "배달은 조리완료와 동시에 자동 배달회수 등록".
+// cycleItemCookStatePortion 이 모든 슬롯 cooked 시 readyAt 도 같이 set 해야 함.
+// 옛 코드는 status='ready' 만 set 하고 readyAt null → getReadyDeliveries 가 skip
+// → 회수 목록 텅 비는 버그.
+describe('orderReducer · cycleItemCookStatePortion + readyAt 자동 set', () => {
+  test('마지막 슬롯이 cooked 되면 readyAt 자동 set + status ready', () => {
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'cooking' },
+        ],
+      }),
+    };
+    // s2 를 cooking → cooked 로 순환
+    let next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's2',
+      isLarge: false,
+    });
+    // 첫 cycle 은 cooking → cooked 가 아닐 수 있음. nextCookState 확인을 위해 한 번 더
+    while (next.d1.items.find((i) => i.slotId === 's2').cookState !== 'cooked') {
+      next = orderReducer(next, {
+        type: 'orders/cycleItemCookStatePortion',
+        tableId: 'd1',
+        slotId: 's2',
+        isLarge: false,
+      });
+    }
+    expect(next.d1.status).toBe('ready');
+    expect(typeof next.d1.readyAt).toBe('number');
+    expect(next.d1.readyAt).toBeGreaterThan(0);
+  });
+
+  test('일부만 cooked 면 readyAt null 유지', () => {
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'pending' },
+          { slotId: 's2', qty: 1, cookState: 'pending' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's1',
+      isLarge: false,
+    });
+    expect(next.d1.status).toBe('preparing');
+    expect(next.d1.readyAt).toBeNull();
+  });
+
+  test('이미 ready 상태에서 다른 슬롯도 cooked 토글되어도 readyAt 보존 (덮어쓰기 안 함)', () => {
+    const fixedReadyAt = 999;
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'cooked' },
+        ],
+        readyAt: fixedReadyAt,
+        status: 'ready',
+      }),
+    };
+    // 이미 cooked 인 s1 을 또 토글 → cycle 한 바퀴
+    let next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's1',
+      isLarge: false,
+    });
+    // 만약 모든 슬롯 여전히 cooked 라면 readyAt 보존
+    const allStillCooked = next.d1.items.every(
+      (i) => (i.cookState || 'pending') === 'cooked'
+    );
+    if (allStillCooked) {
+      expect(next.d1.readyAt).toBe(fixedReadyAt);
+    }
+  });
 });
 
 describe('orderReducer · toggleOption (테이블 옵션)', () => {

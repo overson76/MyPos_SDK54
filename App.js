@@ -317,6 +317,16 @@ function MainApp() {
     setActiveTab('테이블');
   };
 
+  // 2026-05-21: OrderTypePicker → 배달/포장/예약 선택 시 호출. 새 슬롯 선택 + 테이블 탭 전환
+  // 을 *한 번에* 처리. handleTabPress 와 달리 tableResetSignal 증가시키지 않음 — OrderFlow
+  // 의 reset effect 가 selectedTable 을 null 로 되돌리는 사고 방지 (배달탭 진입과 동일 흐름).
+  const goToTableWithSelection = (table) => {
+    if (table) setLastSelectedTableId(table.id);
+    setSelectedTable(table);
+    setAutoConfirmIntent(false); // 자동 확정 의도 초기화 — 사장님이 직접 "주문" 다시 누름
+    setActiveTab('테이블');
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
       {/* 착신 팝업 — 전화 오면 화면 상단에 표시. Electron PC + 폰/iPad 모두 동시. */}
@@ -401,6 +411,7 @@ function MainApp() {
                 setSelectedTable={chooseTable}
                 onGoToTables={() => handleTabPress('테이블')}
                 onRequestOrderWithTable={requestOrderViaTable}
+                goToTableWithSelection={goToTableWithSelection}
               />
             </View>
             <View
