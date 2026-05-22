@@ -131,9 +131,16 @@ export function computeDeliveryReturns({
       { alias, phone: entry?.phone, label: g.address },
       { phoneStyle: 'full' }
     );
+    // 1.0.55: 미등록 주소(pendingAddress=true) entry 는 좌표 신뢰 X — unknown 으로 분류.
+    // 사장님 신고 (2026-05-22): pendingAddress entry 에 옛 좌표 잔재가 박혀있는 경우
+    // 200km 떨어진 잘못된 marker 가 지도에 박혀 fitBounds 가 전국 단위로 확장 → 정상
+    // marker 들이 작게 뭉쳐 보이고 동선/시간 계산도 꼬임. 미등록 entry 는 좌표 검증
+    // 안 된 상태이므로 unknown 섹션(지도 제외) 으로 강제.
+    const trustCoord = entry && entry.pendingAddress !== true &&
+      typeof entry.lat === 'number' && typeof entry.lng === 'number';
     let distanceM = null;
     let isDrivingDistance = false;
-    if (validStoreCoord && entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
+    if (validStoreCoord && trustCoord) {
       const cachedDriving =
         typeof entry.drivingM === 'number' &&
         entry.drivingFromLat === storeCoord.lat &&
@@ -153,10 +160,7 @@ export function computeDeliveryReturns({
       label,
       distanceM,
       isDrivingDistance,
-      coord:
-        entry && typeof entry.lat === 'number' && typeof entry.lng === 'number'
-          ? { lat: entry.lat, lng: entry.lng }
-          : null,
+      coord: trustCoord ? { lat: entry.lat, lng: entry.lng } : null,
       menuSummary: g.menuSummary,
       totalDishes,
       entryIds: g.entryIds,

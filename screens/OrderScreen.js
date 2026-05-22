@@ -421,7 +421,15 @@ export default function OrderScreen({
   ]);
 
   // 장바구니 = 편집중 내역. items = 이미 주방/테이블에 확정 커밋된 내역.
-  const cart = order.cartItems ?? order.items ?? [];
+  // 1.0.55: 확정된 슬롯 재진입 시 사장님이 옛 메뉴를 보고 수정 가능해야 함.
+  // 어제(2026-05-21) fix 가 confirmOrder 직후 cartItems=[] 강제 → 사장님 신고
+  // "테이블 메뉴 변경하려고 들어가면 카트가 비어있어 수정 불가". 처방:
+  //   - cartItems 가 *비어있지 않으면* (=사장님 수정중) cartItems 사용
+  //   - cartItems 가 *비어있으면* (=확정 직후 또는 재진입) items 사용
+  //   - 어제 fix 의 reducer 변경(cartItems: [])은 유지 — 무한 토글 fix 의 근거는 그대로
+  const cart = (order.cartItems && order.cartItems.length > 0)
+    ? order.cartItems
+    : (order.items ?? []);
   const committedItems = order.items ?? [];
   const total = getCartTotal(tableId);
   const totalQty = getCartQty(tableId);
