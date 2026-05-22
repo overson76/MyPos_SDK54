@@ -52,6 +52,11 @@ import {
   parseVoiceOrder,
 } from '../utils/voice';
 import { reportError } from '../utils/sentry';
+import {
+  loadMemoTemplates,
+  appendChipToMemo,
+  isChipActive,
+} from '../utils/memoTemplates';
 
 export default function OrderScreen({
   table,
@@ -78,6 +83,8 @@ export default function OrderScreen({
   const [pendingAutoConfirm, setPendingAutoConfirm] = useState(false);
   // 메모 입력 프롬프트 — { slotId, value }
   const [memoPrompt, setMemoPrompt] = useState(null);
+  // 자주 쓰는 메모 칩 — 관리자에서 편집 가능. 모달 열릴 때 reload (사장님이 방금 수정했을 수 있음).
+  const [memoTemplates, setMemoTemplates] = useState([]);
   // 배달/예약/포장 시간 휠 모달 (1.0.54: 숫자 키패드 입력 → iOS 알람 스타일 휠)
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   // 옵션 편집 모달 표시
@@ -702,6 +709,18 @@ export default function OrderScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table?.id]);
 
+  // 메모 모달 열릴 때마다 템플릿 reload — 관리자에서 방금 수정했을 수 있음.
+  useEffect(() => {
+    if (!memoPrompt) return;
+    let alive = true;
+    loadMemoTemplates().then((list) => {
+      if (alive) setMemoTemplates(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [memoPrompt?.slotId]);
+
   // 자동 확정: pendingAutoConfirm 가 set 되고 cart 가 (마이그레이션 후) 채워진 시점에 한 번 실행.
   useEffect(() => {
     if (!pendingAutoConfirm) return;
@@ -883,6 +902,47 @@ export default function OrderScreen({
                   <Text style={styles.sizeModalCloseText}>✕</Text>
                 </TouchableOpacity>
                 <Text style={styles.sizeModalLine1}>{targetItem.name} 메모</Text>
+                {/* 자주 쓰는 메모 칩 — 누르면 입력창에 추가/제거(토글). 관리자에서 편집. */}
+                {memoTemplates.length > 0 ? (
+                  <>
+                    <View style={styles.memoChipsWrap}>
+                      {memoTemplates.map((chip, idx) => {
+                        const active = isChipActive(memoPrompt.value, chip);
+                        return (
+                          <TouchableOpacity
+                            key={`${chip}-${idx}`}
+                            style={[
+                              styles.memoChip,
+                              active && styles.memoChipActive,
+                            ]}
+                            onPress={() => {
+                              setMemoPrompt((p) =>
+                                p
+                                  ? {
+                                      ...p,
+                                      value: appendChipToMemo(p.value, chip),
+                                    }
+                                  : p
+                              );
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.memoChipText,
+                                active && styles.memoChipTextActive,
+                              ]}
+                            >
+                              {chip}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.memoChipsHint}>
+                      누르면 추가 / 다시 누르면 제거
+                    </Text>
+                  </>
+                ) : null}
                 {/* 확인/비우기 버튼을 TextInput 위에 배치 — iOS 키보드가 올라와도 항상 보임 */}
                 <View style={styles.memoModalRow}>
                   <TouchableOpacity

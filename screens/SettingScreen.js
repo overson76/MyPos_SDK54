@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import { useOrders } from '../utils/OrderContext';
+import MemoTemplatesEditor from '../components/MemoTemplatesEditor';
 
 // 웹: <input type=file> + FileReader → data URL
 // 네이티브: expo-image-picker (Android 13+ photo picker / iOS PhotoKit) → base64 data URL
@@ -536,6 +537,8 @@ export default function SettingScreen() {
             </View>
           );
         })}
+        {/* 자주 쓰는 메모 칩 편집 — 주문 메모 모달에 노출됨 */}
+        <MemoTemplatesEditor />
       </ScrollView>
     </View>
   );

@@ -424,6 +424,40 @@ export default function makeStyles(scale = 1) {
     borderColor: '#d1d5db',
   },
   memoClearBtnText: { color: '#374151', fontSize: fp(13), fontWeight: '700' },
+  // 메모 템플릿 칩 — 자주 쓰는 문구 원클릭 (관리자에서 편집)
+  memoChipsWrap: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  memoChipsHint: {
+    fontSize: fp(11),
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  memoChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  memoChipActive: {
+    backgroundColor: '#dbeafe', // blue-100
+    borderColor: '#3b82f6', // blue-500
+  },
+  memoChipText: {
+    color: '#374151',
+    fontSize: fp(12),
+    fontWeight: '600',
+  },
+  memoChipTextActive: {
+    color: '#1d4ed8', // blue-700
+  },
   // 옵션 편집 모달
   optionsEditCard: {
     width: '100%',
