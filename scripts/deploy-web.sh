@@ -92,6 +92,12 @@ fi
 ok "PWA 자산 5종 확인 (manifest + sw.js + icons)"
 
 note "4/4 wrangler deploy → Cloudflare 라이브 URL 갱신"
+# 2026-05-22: wrangler 4.93.x 의 hash 비교 버그 회피 처방.
+# wrangler 가 가끔 "No updated asset files" 라고 잘못 판단해서 새 index.html / JS 번들을
+# 안 올리는 사고 발생 (사고: 1.0.53 → 1.0.54 deploy 때 검은 화면). 매장 PC 영업 사고.
+# 매 deploy 마다 timestamp 만 박힌 작은 파일 한 개 dist 에 추가 → wrangler 가 항상 새 파일
+# 1개 발견 → manifest 전체 다시 평가하면서 누락된 자산도 같이 업로드함.
+date +%s > "dist/.deploy-bust"
 npx wrangler deploy
 
 echo ""
