@@ -217,9 +217,13 @@ export default function AuthScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           {mode === MODE.HOME && (
             <HomeView
               onCreate={() => setMode(MODE.CREATE)}

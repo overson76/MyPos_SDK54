@@ -164,6 +164,31 @@ export default function makeStyles(scale = 1) {
   ampmText: { fontSize: fp(12), fontWeight: '700', color: '#991b1b' },
   ampmTextActive: { color: '#fff' },
 
+  // 시간 휠 트리거 버튼 — AM/PM 토글 + TextInput 통합 (1.0.54)
+  deliveryTimePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 4,
+  },
+  deliveryTimePickerIcon: { fontSize: fp(13) },
+  deliveryTimePickerValue: {
+    fontSize: fp(13),
+    fontWeight: '800',
+    color: '#dc2626',
+    minWidth: 70,
+  },
+  deliveryTimePickerPlaceholder: {
+    color: '#9ca3af',
+    fontWeight: '600',
+  },
+
   body: { flex: 1, flexDirection: 'row', minHeight: 0 },
   bodyStacked: { flexDirection: 'column' },
   menuSide: { flex: 1, minHeight: 0, minWidth: 0 },

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Alert,
   ImageBackground,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -210,7 +211,15 @@ export default function SettingScreen() {
       {/* 메뉴 추가 모달 */}
       {addModal && (
         <Modal transparent animationType="fade" visible>
-          <View style={styles.modalBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalBackdrop}
+          >
+            <ScrollView
+              contentContainerStyle={styles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
             <View style={styles.modalCard}>
               <TouchableOpacity
                 style={styles.modalClose}
@@ -326,7 +335,8 @@ export default function SettingScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </Modal>
       )}
 
@@ -361,7 +371,11 @@ export default function SettingScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         {/* (1.0.22: '배달 주소 자동 기억' 토글은 관리자 → 설정 탭으로 이동) */}
         {orderedItems.map((item) => {
           const catIdx = getItemFlatIdx(item.category, item.id);
@@ -727,6 +741,13 @@ function makeStyles(scale = 1) {
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+  },
+  // 1.0.54: 키보드 가림 처방 — ScrollView 컨텐트 정렬
+  modalScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
   },
   modalCard: {
     width: '100%',

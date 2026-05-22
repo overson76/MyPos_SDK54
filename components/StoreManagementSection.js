@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -582,6 +583,10 @@ function StoreAddressModal({ storeInfo, onClose, onDone }) {
   return (
     <View style={modalStyles.overlay} pointerEvents="auto">
       <Pressable style={modalStyles.backdrop} onPress={onClose}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={modalStyles.keyboardAvoidWrap}
+        >
         <Pressable style={[modalStyles.card, { width: 420 }]} onPress={() => {}}>
           <View style={modalStyles.header}>
             <Text style={modalStyles.headerTitle}>매장 주소 설정</Text>
@@ -648,6 +653,7 @@ function StoreAddressModal({ storeInfo, onClose, onDone }) {
             </TouchableOpacity>
           </View>
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </View>
   );
@@ -928,6 +934,12 @@ const modalStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  keyboardAvoidWrap: {
+    width: '100%',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   card: {
     width: 320,

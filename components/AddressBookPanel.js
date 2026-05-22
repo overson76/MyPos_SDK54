@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -413,7 +414,10 @@ export default function AddressBookPanel() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       {/* ── 상단 툴바 ────────────────────────────────────── */}
       <View style={[styles.toolbar, isNarrow && styles.toolbarNarrow]}>
         <View style={styles.searchBox}>
@@ -597,7 +601,12 @@ export default function AddressBookPanel() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           {items.map((it) => {
             const isEditing = editingKey === it.key;
             const distText =
@@ -824,7 +833,7 @@ export default function AddressBookPanel() {
           </Pressable>
         </View>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

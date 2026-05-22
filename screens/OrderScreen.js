@@ -30,6 +30,7 @@ import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import TableSourcePicker from '../components/TableSourcePicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
+import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
@@ -77,6 +78,8 @@ export default function OrderScreen({
   const [pendingAutoConfirm, setPendingAutoConfirm] = useState(false);
   // 메모 입력 프롬프트 — { slotId, value }
   const [memoPrompt, setMemoPrompt] = useState(null);
+  // 배달/예약/포장 시간 휠 모달 (1.0.54: 숫자 키패드 입력 → iOS 알람 스타일 휠)
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   // 옵션 편집 모달 표시
   const [optionsEditOpen, setOptionsEditOpen] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
@@ -1092,53 +1095,30 @@ export default function OrderScreen({
                   )}
                 </>
               )}
-              <Text style={styles.deliveryLabelTight}>🕐</Text>
-              <View style={styles.ampmGroup}>
-                <TouchableOpacity
-                  style={[
-                    styles.ampmBtn,
-                    !order.deliveryTimeIsPM && styles.ampmBtnActive,
-                  ]}
-                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, false)}
-                >
-                  <Text
-                    style={[
-                      styles.ampmText,
-                      !order.deliveryTimeIsPM && styles.ampmTextActive,
-                    ]}
-                  >
-                    오전
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.ampmBtn,
-                    (order.deliveryTimeIsPM ?? true) && styles.ampmBtnActive,
-                  ]}
-                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, true)}
-                >
-                  <Text
-                    style={[
-                      styles.ampmText,
-                      (order.deliveryTimeIsPM ?? true) && styles.ampmTextActive,
-                    ]}
-                  >
-                    오후
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={[styles.deliveryTimeInput, styles.deliveryTimeInputCompact]}
-                value={order.deliveryTime || ''}
-                onChangeText={(v) => tableId && setDeliveryTime(tableId, v)}
-                placeholder={timePlaceholder}
-                placeholderTextColor="#9ca3af"
-                maxLength={5}
-                keyboardType="numeric"
-                returnKeyType="done"
-                onSubmitEditing={() => Keyboard.dismiss()}
-                blurOnSubmit
-              />
+              <TouchableOpacity
+                style={styles.deliveryTimePickerBtn}
+                onPress={() => tableId && setTimePickerOpen(true)}
+                activeOpacity={0.8}
+                accessibilityLabel="배달 시간 선택"
+              >
+                <Text style={styles.deliveryTimePickerIcon}>🕐</Text>
+                {(() => {
+                  const parsed = parseDeliveryTime(
+                    order?.deliveryTime,
+                    order?.deliveryTimeIsPM ?? true,
+                  );
+                  return (
+                    <Text
+                      style={[
+                        styles.deliveryTimePickerValue,
+                        !parsed && styles.deliveryTimePickerPlaceholder,
+                      ]}
+                    >
+                      {parsed ? formatShort12h(parsed) : '시간 선택'}
+                    </Text>
+                  );
+                })()}
+              </TouchableOpacity>
             </View>
           );
         })()}
@@ -2365,6 +2345,21 @@ export default function OrderScreen({
 
       {/* 2026-05-21: TableSourcePicker 제거 — 사장님 룰 "어느 손님 팝업 필요없음".
           단체 모드 (shared/split) 가 단체 묶기 시점에 결정됨. */}
+
+      {/* 1.0.54: 배달/예약/포장 시간 휠 모달 — iOS 알람 스타일 위/아래 쓸기로 선택 */}
+      <TimeWheelPicker
+        visible={timePickerOpen}
+        initialText={order?.deliveryTime}
+        initialIsPM={order?.deliveryTimeIsPM ?? true}
+        onConfirm={({ text, isPM }) => {
+          if (tableId) {
+            setDeliveryTime(tableId, text);
+            setDeliveryTimeIsPM(tableId, isPM);
+          }
+          setTimePickerOpen(false);
+        }}
+        onCancel={() => setTimePickerOpen(false)}
+      />
     </View>
   );
 }
