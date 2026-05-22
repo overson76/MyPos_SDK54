@@ -143,6 +143,29 @@
 3. `docs/sessions/README.md` 없으면 자동 생성, 있으면 "세션 목록" 표에 한 줄 추가
 4. `git add + commit + push` — 워크트리면 main 머지 포함. **푸시 단계 빼먹지 말 것** (커밋만 하고 끝내면 다른 PC 가 못 받아감).
 
+### "종료" 명령 자동 동작 — 풀세트 (모든 기기 정상 작동까지)
+
+사장님이 **"종료"** 라고 하면 위 "세션 정리" 4단계의 **상위 집합** 실행. 단순 git sync 가 아니라 **사장님이 만지는 모든 기기 (매장 카운터 PC / 매장 폰 웹 / 사장님 PC / 폰 네이티브 / Electron .exe) 가 새 코드로 정상 동작하는 상태까지** 보장.
+
+#### 8단계 (앞 4단계는 "세션 정리" 와 동일)
+
+1. 오늘 다룬 이슈/작업 + 추천 세션 이름
+2. `docs/sessions/YYYY-MM-DD-<주제>.md` 생성
+3. `docs/sessions/README.md` 갱신
+4. `git pull --rebase` (충돌 발견 시 사장님 알림 + abort) → `git add + commit + push` (워크트리면 main 머지 포함)
+5. **`npm test`** — 1개라도 실패하면 다음 단계 abort, 사장님 보고
+6. **`npm run deploy:web`** — Cloudflare 라이브 URL 즉시 갱신. 매장 카운터 PC + 사장님 폰 웹 + PWA 모두 새 코드. (스크립트가 firebase API key inline 자동 검증.)
+7. **`eas update --branch production --message "<주제>"`** — 네이티브 폰(iOS/Android) OTA. **단, native 변경 감지 시 skip + 사장님 안내** ("새 EAS 빌드 필요").
+   - native 변경 감지 기준: `app.json` plugins / runtimeVersion / version, `package.json` 의 native dep (expo-*, react-native-*, @sentry/react-native 등), `ios/` `android/` 폴더, `metro.config.js` 의 native 분기.
+8. **`npx electron-builder --config electron/builder.config.js --publish always`** — Electron .exe GitHub Releases 자동 업로드, 매장 PC 자동 업데이트. **단, `package.json` 의 version 이 직전 release 와 같으면 skip + 사장님 안내** ("version 올려야 publish 가능"). `GH_TOKEN` 미설정 시도 skip + 안내.
+
+#### 안전 정책
+
+- **각 단계 실패 시 다음 자동 진행 X** — 사장님 보고 후 결정. 운영 중 매장에 망가진 코드 배포되는 사고 방지.
+- **단계 5–8 은 사장님이 명시적으로 "종료" 라고 했을 때만**. 일반 "세션 종료" / "모두 저장" 은 4단계로 끝.
+- **장소(PC) 무관 동일** — 맥북이든 윈도우든 같은 8단계. 단 EAS / Electron publish 는 환경변수(EXPO_TOKEN, GH_TOKEN) 가 있는 PC 에서만 가능 → 없으면 skip + 안내.
+- **deploy:web 의 grep 검증** 은 절대 우회 X (firebase API key inline 누락 사고 방지).
+
 ### 저장 위치 패턴
 
 | 종류 | 위치 |
