@@ -369,12 +369,21 @@ export function orderReducer(state, action) {
       const allCooked =
         nextItems.length > 0 &&
         nextItems.every((i) => (i.cookState || 'pending') === 'cooked');
+      // 2026-05-22 fix: cycleItemCookStatePortion 과 동일 처방 적용.
+      // 사장님 룰 "배달은 조리완료와 동시에 배달회수에 자동 등록" — 어제(2026-05-21)
+      // 처방이 *Portion 버전*(대/보통 있는 메뉴) 에만 박혔던 잠복 버그. portion 없는
+      // 일반 메뉴(팥칼국수 등) 조리완료 토글 시 readyAt 안 박혀 회수 진행중 차수 누락.
+      // getReadyDeliveries 가 readyAt 만 필터 → 사장님 화면 텅.
+      const wasNotReady = !existing.readyAt;
       return {
         ...state,
         [tableId]: {
           ...existing,
           items: nextItems,
           status: allCooked ? 'ready' : 'preparing',
+          readyAt: allCooked
+            ? (wasNotReady ? Date.now() : existing.readyAt)
+            : existing.readyAt,
         },
       };
     }
