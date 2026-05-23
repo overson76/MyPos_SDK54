@@ -84,3 +84,37 @@ eas update --branch production --message "카트/CID fix"  # 폰 OTA
 
 - 29b5f17 `fix(order): 카트 fallback 부작용 — "변경 누르면 리셋 / -키 0까지 안 빠짐" 근본 처방`
 - d244c44 `fix(cid): 전화번호 정규화 — entry 가 +82 형식 저장 시 매칭 누락 차단`
+- 65dfe09 `docs(sessions): 2026-05-23 2부 세션 노트`
+- ae6a21b `fix(order): hydrate effect 를 useLayoutEffect 로 — 진입 시 깜빡임 제거`
+
+## 추가 진행 (사장님 신고 → 보강 → 배포 → 회수 정책 Q&A)
+
+### 사장님 추가 신고
+> "기존 동지 2개였던 테이블 → 밀면 클릭 → 카트에서 동지 사라지고 밀면만 올라감 (만두도 동일)"
+
+진단: 사장님이 본 화면 = **옛 라이브 빌드** (29b5f17/d244c44 가 main 까지 박혔지만 `deploy:web` 안 했으므로 PC 카운터 + Safari 폰의 라이브 URL = 옛 빌드 그대로).
+
+### 추가 보강 (ae6a21b)
+- `useEffect` → `useLayoutEffect` — 진입 첫 paint *전* 에 `hydrateCartFromItems` dispatch 되어 깜빡임 완전 제거.
+- reducer 의 `cartFromExisting` fallback 유지 (사장님이 *진입 즉시* 메뉴 클릭해도 items 카피 + 새 메뉴 보장 — 이중 안전망).
+
+### 배포 완료
+| 명령 | 결과 |
+|---|---|
+| `npm run deploy:web` | version `68bd2946-ffe3-4427-95cf-d8b101b9adb7` — PC + Safari 폰 즉시 갱신 |
+| `eas update --branch production` | update group `07fadbda-3e37-4b7b-b522-91fe15778e28` (runtime 1.0.2, iOS + Android) — 빌드 13 이상 깔린 폰 OTA |
+
+### 사장님 후속 Q&A — 배달 회수 차수 자동 리셋?
+**Q**: 출력하여 마감 안 해도 다음날 리셋되나?
+**A**: **자정 자동 리셋 X — 24시간 슬라이딩 윈도우** ([utils/deliveryReturns.js:97-100](../../utils/deliveryReturns.js)).
+- `sinceMs=null` (finalize 안 된 진행중 차수) → `withinHours=24` default → 지난 24시간 결제완료/조리완료 배달만 진행중 차수에 표시
+- 24시간 지난 entry 는 *자동 사라짐* — **출력 안 하고 24시간 넘기면 회수 화면에서 진입점 잃음** (history 에는 영구 있지만)
+- 매장 일요일 휴무 영향: 토요일 영업 종료(20시) → 월요일 진입 시 38시간 경과 → 토요일 회수 후보 자동 소멸. 출력 마감 권장.
+
+## 최종 상태
+
+- main HEAD: **ae6a21b**
+- jest: 477/477 통과
+- PC + Safari 폰: deploy 완료
+- 네이티브 폰: OTA publish 완료
+- 사장님 검증 결과: 보고 대기
