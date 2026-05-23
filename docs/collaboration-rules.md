@@ -302,6 +302,59 @@
 - 다룬 이슈 짧게 나열 + 추천 세션 이름 제공
 - "세션 정리" 명령 받으면 위 6번 자동 동작 실행
 
+### 비밀값 / 환경 셋업 — NAS 공유 (윈도우 ↔ 맥북)
+
+`.env` (Firebase / 카카오 / Azure TTS 키) 와 EAS 로그인 토큰은 `.gitignore` 로 깃에서 빠진다 — 의도된 동작 (비밀값 외부 노출 방지). 두 PC 가 같은 비밀값을 보도록 NAS(Network Attached Storage, 사장님 본인 저장소) 를 단일 진실 소스(single source of truth)로 사용한다.
+
+#### 구조
+
+```
+<NAS 마운트 경로>/secrets/mypos/
+  ├─ .env              ← 두 PC 의 프로젝트 루트 .env 와 동기화
+  ├─ expo-state.json   ← 두 PC 의 ~/.expo/state.json 과 동기화 (EAS 로그인)
+  └─ README.txt        ← 첫 동기화 시 자동 생성
+```
+
+#### 신규 PC 셋업 절차
+
+1. NAS 의 `secrets/mypos/` 폴더를 PC 에 마운트 (네트워크 드라이브 / SMB / AFP).
+2. 환경변수 `MYPOS_NAS_SECRETS` 에 그 경로 등록.
+   - 윈도우: `setx MYPOS_NAS_SECRETS "Z:\secrets\mypos"` 후 PowerShell 재시작
+   - 맥북: `~/.zshrc` 에 `export MYPOS_NAS_SECRETS="/Volumes/secrets/mypos"` 추가 후 `source ~/.zshrc`
+3. `git clone <repo>` + `npm install`
+4. `npm run secrets:sync` → NAS 의 `.env` / EAS state 자동 pull
+5. `npm start` 또는 `npm run deploy:web` — 이후 자동 sync
+
+#### 자동 동기화 트리거
+
+| 명령 | 동작 |
+|---|---|
+| `npm start` | prestart hook 으로 자동 sync (NAS ↔ 로컬 mtime 비교) |
+| `npm run deploy:web` | deploy-web.sh 0/4 단계에서 자동 sync (배포 직전 NAS 최신 반영) |
+| `npm run secrets:sync` | 수동 양방향 sync |
+| `npm run secrets:push` | 로컬 → NAS 강제 push (키 회전 직후 즉시 다른 PC 반영하고 싶을 때) |
+
+#### 키 회전 (Kakao / Firebase / Azure 키 갱신) 워크플로우
+
+1. 발급 콘솔(카카오/Firebase/Azure) 에서 새 키 발급
+2. 어느 한 PC 의 로컬 `.env` 수정
+3. `npm run secrets:push` — NAS 즉시 갱신
+4. 다른 PC 는 다음 `npm start` 또는 `npm run secrets:sync` 시 자동 pull
+
+#### 안전 정책 (영업 안 멎게)
+
+- NAS 미마운트 / 환경변수 미설정 → **silent skip**. 로컬 `.env` 만 있어도 모든 명령 정상.
+- mtime 차이 1초 이내 + 내용 다름 → 안전상 skip (사용자가 명시적 push/sync 결정)
+- NAS 가 더 최신이라 로컬 덮어쓸 때 → `.env.bak.<timestamp>` 백업 자동 생성
+- NAS 는 절대 깃에 안 올라감 (NAS 폴더 자체가 리포 밖)
+
+#### 트러블슈팅
+
+- **"NAS 미설정 — skip" 메시지**: 환경변수 안 박혔거나 마운트 끊김. 위 셋업 2번 다시 확인.
+- **카카오 / Firebase 키 없다는 에러**: NAS 의 `.env` 가 비어있거나 sync 안 됨. `npm run secrets:sync` 수동 실행 후 출력 확인.
+- **EAS "토큰 없음"**: `eas login` 후 `npm run secrets:push` 한 번 — 다른 PC 가 다음 sync 때 받음.
+- **NAS 외부 노출 위험**: Synology QuickConnect / QNAP myQNAPcloud 등 외부 접근 활성화돼 있고 NAS 관리자 비번이 약하면 비밀값 유출. 강력한 비번 + 2FA 필수.
+
 ---
 
 ## 11. 메모리 시스템 운영 원칙

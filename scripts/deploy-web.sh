@@ -23,6 +23,12 @@ note()  { echo -e "${YEL}▶ $*${CLR}"; }
 ok()    { echo -e "${GRN}✓ $*${CLR}"; }
 fail()  { echo -e "${RED}✗ $*${CLR}" >&2; exit 1; }
 
+# NAS 비밀값 사전 동기화 — NAS 의 최신 .env 를 로컬로 pull (있을 때만, 없으면 silent skip).
+# 두 PC (윈도우 / 맥북) 가 NAS 공유 폴더 통해 같은 비밀값을 보도록.
+# NAS 끊겨도 deploy 가 죽지 않게 || true 로 fail-safe — 로컬 .env 만 있어도 정상 진행.
+note "0/4 NAS 비밀값 동기화 (있으면 최신화)"
+node scripts/sync-secrets.js || true
+
 # .env 존재 확인 (없으면 즉시 abort — 이게 함정 2 의 가장 흔한 원인)
 if [ ! -f ".env" ]; then
   fail ".env 파일이 없습니다. EXPO_PUBLIC_FIREBASE_* 키를 채운 .env 를 프로젝트 루트에 두세요. (.env.example 참고)"
