@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ImageBackground,
@@ -441,10 +441,16 @@ export default function OrderScreen({
   // = items 카피로 동기화 (옛 line-437 fallback 의 부작용 fix 의 후속 처치).
   // ref 가드로 *tableId 별 1회만* 호출 — 사장님이 - 키로 비운 직후 자동 복원되지
   // 않게. deps 에 length 박아 *Firestore listener 가 뒤늦게 채운* 케이스도 cover.
+  //
+  // useLayoutEffect 사용 이유: 진입 첫 render 시점 cartItems=[] 상태가 *paint 전에*
+  // hydrate dispatch 로 cartItems=items 카피 되어 *render 2 가 paint 되도록*. 사장님
+  // 입장 깜빡임 X — 진입 즉시 카트에 기존 주문(items) 보임. 사장님 보고
+  // "동지 사라지고 밀면만 올라감" 의 *추가 안전망*. (이미 reducer 의 cartFromExisting
+  // fallback 이 addItem 시점에도 items 카피 보장 — 이중 안전망.)
   const lastHydratedTableRef = useRef(null);
   const cartLen = (order.cartItems || []).length;
   const itemsLen = (order.items || []).length;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!tableId) {
       lastHydratedTableRef.current = null;
       return;
