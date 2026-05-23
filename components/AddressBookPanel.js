@@ -70,10 +70,10 @@ export default function AddressBookPanel() {
   const [editingKey, setEditingKey] = useState(null);
   const [editLabelText, setEditLabelText] = useState('');
   const [editAlias, setEditAlias] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  // 2026-05-16: 같은 손님이 휴대폰 + 일반전화 2개 가능 — 2개 입력란.
-  // confirmEdit 에서 [editPhone, editPhone2] 를 phones array 로 저장.
-  const [editPhone2, setEditPhone2] = useState('');
+  // 2026-05-23 (1.0.52): 한 배달지에 여러 가족·동료가 다른 번호로 주문 거는 케이스
+  // (사장님 보고). editPhones 배열로 제한 없이 추가 가능. 빈 칸은 confirmEdit 에서
+  // 자동 필터. 최소 1칸은 항상 노출. "+ 전화번호 추가" 버튼으로 새 칸 추가.
+  const [editPhones, setEditPhones] = useState(['']);
   const [editCustomerRequest, setEditCustomerRequest] = useState('');
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState('');
@@ -288,12 +288,12 @@ export default function AddressBookPanel() {
     setEditingKey(it.key);
     setEditLabelText(it.pendingAddress ? '' : it.label || '');
     setEditAlias(it.alias || '');
-    // phones array (신) 우선 + 옛 phone 단일 fallback. 두 입력란 채움.
+    // phones array (신) 우선 + 옛 phone 단일 fallback. 동적 입력란에 채움.
+    // 비어있어도 항상 1칸 유지 — 사용자가 새 번호 입력할 자리.
     const phones = Array.isArray(it.phones)
       ? it.phones.filter(Boolean)
       : (it.phone ? [it.phone] : []);
-    setEditPhone(phones[0] ? formatPhoneDisplay(phones[0]) : '');
-    setEditPhone2(phones[1] ? formatPhoneDisplay(phones[1]) : '');
+    setEditPhones(phones.length > 0 ? phones.map(formatPhoneDisplay) : ['']);
     setEditCustomerRequest(it.customerRequest || '');
   };
 
@@ -324,12 +324,14 @@ export default function AddressBookPanel() {
           (trimmedNewLabel && e.label === trimmedNewLabel)
       );
       if (!candidate) return prev;
-      const d1 = (editPhone || '').replace(/\D/g, '');
-      const d2 = (editPhone2 || '').replace(/\D/g, '');
-      // phones array — 중복/빈 제외. 첫 phone 은 옛 phone 필드에도 sync.
+      // phones array — 빈/중복 제외. 첫 phone 은 옛 phone 필드에도 sync.
       const phones = [];
-      if (d1) phones.push(d1);
-      if (d2 && d2 !== d1) phones.push(d2);
+      for (const raw of editPhones) {
+        const d = String(raw || '').replace(/\D/g, '');
+        if (!d) continue;
+        if (phones.includes(d)) continue;
+        phones.push(d);
+      }
       const trimmedAlias = editAlias.trim();
       const trimmedRequest = (editCustomerRequest || '').trim().slice(0, 100);
       const updated = { ...candidate };
@@ -644,29 +646,55 @@ export default function AddressBookPanel() {
                         maxLength={20}
                       />
                     </View>
+                    {editPhones.map((p, idx) => (
+                      <View key={`ph-${idx}`} style={styles.addRow}>
+                        <Text style={styles.fieldLabel}>
+                          {`전화 ${idx + 1}`}
+                        </Text>
+                        <TextInput
+                          style={styles.addInput}
+                          value={p}
+                          onChangeText={(v) =>
+                            setEditPhones((prev) => {
+                              const next = [...prev];
+                              next[idx] = v;
+                              return next;
+                            })
+                          }
+                          placeholder={
+                            idx === 0
+                              ? '예) 010-1234-5678'
+                              : '예) 051-200-1234 (선택)'
+                          }
+                          placeholderTextColor="#9ca3af"
+                          keyboardType="phone-pad"
+                          maxLength={14}
+                        />
+                        {editPhones.length > 1 && (
+                          <TouchableOpacity
+                            style={styles.phoneRemoveBtn}
+                            onPress={() =>
+                              setEditPhones((prev) =>
+                                prev.filter((_, i) => i !== idx)
+                              )
+                            }
+                            accessibilityLabel={`전화 ${idx + 1} 삭제`}
+                          >
+                            <Text style={styles.phoneRemoveText}>✕</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
                     <View style={styles.addRow}>
-                      <Text style={styles.fieldLabel}>전화 ①</Text>
-                      <TextInput
-                        style={styles.addInput}
-                        value={editPhone}
-                        onChangeText={setEditPhone}
-                        placeholder="예) 010-1234-5678 (휴대폰)"
-                        placeholderTextColor="#9ca3af"
-                        keyboardType="phone-pad"
-                        maxLength={14}
-                      />
-                    </View>
-                    <View style={styles.addRow}>
-                      <Text style={styles.fieldLabel}>전화 ②</Text>
-                      <TextInput
-                        style={styles.addInput}
-                        value={editPhone2}
-                        onChangeText={setEditPhone2}
-                        placeholder="예) 051-200-1234 (일반전화, 선택)"
-                        placeholderTextColor="#9ca3af"
-                        keyboardType="phone-pad"
-                        maxLength={14}
-                      />
+                      <Text style={styles.fieldLabel}> </Text>
+                      <TouchableOpacity
+                        style={styles.phoneAddBtn}
+                        onPress={() =>
+                          setEditPhones((prev) => [...prev, ''])
+                        }
+                      >
+                        <Text style={styles.phoneAddText}>+ 전화번호 추가</Text>
+                      </TouchableOpacity>
                     </View>
                     <View style={styles.addRow}>
                       <Text style={styles.fieldLabel}>단골요청</Text>
@@ -977,6 +1005,34 @@ function makeStyles(scale = 1) {
     addConfirmText: { color: '#fff', fontSize: fp(12), fontWeight: '800' },
     addCancelBtn: { paddingHorizontal: 10, paddingVertical: 6 },
     addCancelText: { color: '#9ca3af', fontSize: fp(12), fontWeight: '700' },
+
+    // 1.0.52: 다중 전화번호 입력 — 추가/삭제 버튼.
+    phoneAddBtn: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#2563eb',
+      borderStyle: 'dashed',
+      backgroundColor: '#eff6ff',
+    },
+    phoneAddText: {
+      fontSize: fp(11),
+      color: '#2563eb',
+      fontWeight: '700',
+    },
+    phoneRemoveBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+      backgroundColor: '#fee2e2',
+    },
+    phoneRemoveText: {
+      fontSize: fp(12),
+      color: '#dc2626',
+      fontWeight: '900',
+    },
 
     empty: { padding: 40, alignItems: 'center', gap: 8 },
     emptyText: { fontSize: fp(14), color: '#6b7280', fontWeight: '700' },

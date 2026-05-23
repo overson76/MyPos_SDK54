@@ -696,6 +696,51 @@ describe('orderReducer · confirmOrder', () => {
     expect(next.t1.status).toBe('preparing');
     expect(next.t1.readyAt).toBeNull();
   });
+
+  // 1.0.52 안전 가드 + fallback — cart 가 빈 채로 confirmOrder 호출돼도
+  // cartFromExisting fallback 으로 items 카피가 base 가 되어 items 그대로 보존.
+  test('cart=[] & items 비어있지 않으면 items 보존 (의도치 않은 삭제 차단)', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', qty: 1, cookState: 'pending' }],
+        cartItems: [],
+        confirmedItems: [{ slotId: 's1', qty: 1, cookState: 'pending' }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/confirmOrder',
+      tableId: 't1',
+    });
+    expect(next.t1.items).toHaveLength(1);
+    expect(next.t1.items[0].slotId).toBe('s1');
+    // cartItems 도 items 카피로 동기화됨
+    expect(next.t1.cartItems).toHaveLength(1);
+    expect(next.t1.cartItems[0].slotId).toBe('s1');
+  });
+});
+
+describe('orderReducer · cartFromExisting fallback (1.0.52)', () => {
+  // cart 가 빈 배열이어도 items 카피로 fallback → 새 메뉴 추가 시 기존 items 위에 추가.
+  test('cart=[] 상태에서 addItem 하면 items 카피 + 새 슬롯이 cart 가 됨', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', id: 'm0', qty: 1, cookState: 'pending' }],
+        cartItems: [],
+        confirmedItems: [{ slotId: 's1', id: 'm0', qty: 1, cookState: 'pending' }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/addItem',
+      tableId: 't1',
+      menuItem: menu,
+    });
+    // cart 에 기존 s1 보존 + 새 메뉴(m1) 슬롯 = 총 2
+    expect(next.t1.cartItems.length).toBe(2);
+    const hasS1 = next.t1.cartItems.some((i) => i.slotId === 's1');
+    const hasNewMenu = next.t1.cartItems.some((i) => i.id === 'm1');
+    expect(hasS1).toBe(true);
+    expect(hasNewMenu).toBe(true);
+  });
 });
 
 describe('orderReducer · toggleOption (테이블 옵션)', () => {

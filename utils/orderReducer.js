@@ -46,11 +46,14 @@ function nextCookState(cur) {
     : 'pending';
 }
 
+// 1.0.52: cart 가 빈 배열인 경우(메뉴를 cart 에서 모두 빼버린 직후, 또는
+// 옛 영속 데이터의 cartItems=[]) 에도 items 카피로 fallback. 그렇지 않으면
+// 그 상태에서 새 메뉴 추가 시 cart=[새메뉴] 만 되고, "변경" 확정 시 items 가
+// 통째 교체되어 기존 확정 주문이 사라지는 버그(1.0.51 보고).
 function cartFromExisting(existing) {
-  return (
-    existing?.cartItems ??
-    (existing?.items ? existing.items.map((i) => ({ ...i })) : [])
-  );
+  const cart = existing?.cartItems;
+  if (Array.isArray(cart) && cart.length > 0) return cart;
+  return existing?.items ? existing.items.map((i) => ({ ...i })) : [];
 }
 
 export function orderReducer(state, action) {
@@ -561,6 +564,12 @@ export function orderReducer(state, action) {
       const existing = state[tableId];
       if (!existing) return state;
       const cart = cartFromExisting(existing);
+      // 1.0.52: 안전 가드 — cart 가 비어있는데 items 가 있으면 confirm 무시.
+      // OrderScreen 의 변경 버튼 disabled 조건으로 이미 막혀있지만, 자동 확정 흐름
+      // (예: pendingAutoConfirm) 이나 외부 호출 시 의도치 않은 통째 삭제 방지.
+      if (cart.length === 0 && (existing.items || []).length > 0) {
+        return state;
+      }
       const merged = cart.map((c) => {
         const old = (existing.items || []).find((i) => i.slotId === c.slotId);
         if (old) {
