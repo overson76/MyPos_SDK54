@@ -6,13 +6,19 @@ import {
   normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
+import { resolveDeliveryIdentity } from './addressBookLookup';
 
-// 배달 테이블 자동 정리: 조리완료 후 일정 시간 지나면 테이블에서 제거 (후불 완료 처리와 동일).
-//   - 주소 미입력: 5분 (기본). 사장님 익숙한 패턴.
-//   - 주소 입력 + 카카오 driving duration 있음: **그 시간만큼 + 5분 버퍼** 대기 (1.0.52).
-//     → 손님 도착 예상 시간까지 슬롯 유지. 도착 후 자동 사라짐.
-//   - 최대 90분 cap (가까운 주문이라도 너무 짧게 사라지지 않게, 먼 주문도 너무 오래 유지 안 되게).
-// 매출 기록 + 배달 주소록 카운트 + 당일 완료 마크까지 한꺼번에 처리.
+// 배달 테이블 자동 처리 — 사장님 룰 "자체 배달 = 조리완료 = 결제완료 동등".
+//
+// 1.0.55 (2026-05-22): 두 단계 분리.
+//   ① 즉시 — readyAt 박힘 직후 자동 markPaid + history append (매출 즉시 반영).
+//      paymentMethod 기본 'cash' (현금/계좌이체 매장 룰). 사장님이 미리 선택한
+//      method 가 있으면 유지 (PaymentMethodPicker 우선).
+//   ② 지연 — driving duration + 5분 (또는 5분 기본) 후 슬롯 제거.
+//      이미 ① 에서 history append 됐으면 여기선 history skip, 슬롯만 정리.
+//
+// 사장님 신고 (영업 중): 결제 완료 안 받았어도 회수 / 매출 / 영수증 자동 출력
+// 같은 결제 의존 동작이 다 작동해야. 자체 배달은 출발 = 결제 확정과 동등.
 export function useAutoClearDelivery({
   orders,
   dispatch,
@@ -24,6 +30,51 @@ export function useAutoClearDelivery({
   ordersRef.current = orders;
   const addressBookRef = useRef(addressBook);
   addressBookRef.current = addressBook;
+
+  // ① 즉시 markPaid + history append — 사장님 룰 "조리완료 = 결제완료".
+  // orders 변할 때마다 트리거. paid 됐거나 ready 아닌 슬롯은 skip → 무한 루프 X.
+  useEffect(() => {
+    for (const [tableId, order] of Object.entries(orders || {})) {
+      if (!order) continue;
+      if (order.status !== 'ready') continue;
+      if (!order.readyAt) continue;
+      if (order.paymentStatus === 'paid') continue; // 이미 결제됨 (사장님 수동 또는 본 effect 옛 발동)
+      const table = resolveTableForAlert(tableId);
+      if (!table || table.type !== 'delivery') continue;
+      if (!order.items || order.items.length === 0) continue;
+      // 사장님 매장 룰: 배달 = 현금 또는 계좌이체. 디폴트 'cash'.
+      // PaymentMethodPicker 가 미리 박은 method 있으면 그걸 유지.
+      const paymentMethod = order.paymentMethod || 'cash';
+      dispatch({ type: 'orders/markPaid', tableId, paymentMethod });
+      const total = computeItemsTotal(order.items);
+      const ident = resolveDeliveryIdentity(
+        addressBookRef.current,
+        order.deliveryAddress,
+        { alias: order.deliveryAlias, phone: order.deliveryPhone }
+      );
+      setRevenue((prev) =>
+        appendHistory(
+          prev,
+          buildHistoryEntry({
+            tableId,
+            items: order.items,
+            options: order.options,
+            deliveryAddress: order.deliveryAddress,
+            deliveryAlias: ident.alias,
+            deliveryPhone: ident.phone,
+            deliveryPhones: ident.phones,
+            deliveryTime: order.deliveryTime,
+            paymentStatus: 'paid',
+            paymentMethod,
+            total,
+            extraFields: { autoPaidOnReady: true },
+          })
+        )
+      );
+      if (order.deliveryAddress) bumpAddress(order.deliveryAddress);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   useEffect(() => {
     const FIVE_MIN = 5 * 60 * 1000;
@@ -60,7 +111,14 @@ export function useAutoClearDelivery({
       for (const tid of toClear) {
         const ex = ords[tid];
         if (!ex) continue;
+        // 1.0.55: ① 즉시 effect 가 이미 markPaid + history append 한 슬롯은 skip.
+        // paymentStatus='paid' 면 history 에 이미 entry 있음 — 중복 방지. 슬롯만 정리.
+        if (ex.paymentStatus === 'paid') continue;
         const total = computeItemsTotal(ex.items);
+        const ident = resolveDeliveryIdentity(addressBookRef.current, ex.deliveryAddress, {
+          alias: ex.deliveryAlias,
+          phone: ex.deliveryPhone,
+        });
         setRevenue((prevRev) =>
           appendHistory(
             prevRev,
@@ -69,6 +127,9 @@ export function useAutoClearDelivery({
               items: ex.items,
               options: ex.options,
               deliveryAddress: ex.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: ex.deliveryTime,
               paymentStatus: ex.paymentStatus,
               total,

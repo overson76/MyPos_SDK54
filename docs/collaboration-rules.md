@@ -143,6 +143,29 @@
 3. `docs/sessions/README.md` 없으면 자동 생성, 있으면 "세션 목록" 표에 한 줄 추가
 4. `git add + commit + push` — 워크트리면 main 머지 포함. **푸시 단계 빼먹지 말 것** (커밋만 하고 끝내면 다른 PC 가 못 받아감).
 
+### "종료" 명령 자동 동작 — 풀세트 (모든 기기 정상 작동까지)
+
+사장님이 **"종료"** 라고 하면 위 "세션 정리" 4단계의 **상위 집합** 실행. 단순 git sync 가 아니라 **사장님이 만지는 모든 기기 (매장 카운터 PC / 매장 폰 웹 / 사장님 PC / 폰 네이티브 / Electron .exe) 가 새 코드로 정상 동작하는 상태까지** 보장.
+
+#### 8단계 (앞 4단계는 "세션 정리" 와 동일)
+
+1. 오늘 다룬 이슈/작업 + 추천 세션 이름
+2. `docs/sessions/YYYY-MM-DD-<주제>.md` 생성
+3. `docs/sessions/README.md` 갱신
+4. `git pull --rebase` (충돌 발견 시 사장님 알림 + abort) → `git add + commit + push` (워크트리면 main 머지 포함)
+5. **`npm test`** — 1개라도 실패하면 다음 단계 abort, 사장님 보고
+6. **`npm run deploy:web`** — Cloudflare 라이브 URL 즉시 갱신. 매장 카운터 PC + 사장님 폰 웹 + PWA 모두 새 코드. (스크립트가 firebase API key inline 자동 검증.)
+7. **`eas update --branch production --message "<주제>"`** — 네이티브 폰(iOS/Android) OTA. **단, native 변경 감지 시 skip + 사장님 안내** ("새 EAS 빌드 필요").
+   - native 변경 감지 기준: `app.json` plugins / runtimeVersion / version, `package.json` 의 native dep (expo-*, react-native-*, @sentry/react-native 등), `ios/` `android/` 폴더, `metro.config.js` 의 native 분기.
+8. **`npx electron-builder --config electron/builder.config.js --publish always`** — Electron .exe GitHub Releases 자동 업로드, 매장 PC 자동 업데이트. **단, `package.json` 의 version 이 직전 release 와 같으면 skip + 사장님 안내** ("version 올려야 publish 가능"). `GH_TOKEN` 미설정 시도 skip + 안내.
+
+#### 안전 정책
+
+- **각 단계 실패 시 다음 자동 진행 X** — 사장님 보고 후 결정. 운영 중 매장에 망가진 코드 배포되는 사고 방지.
+- **단계 5–8 은 사장님이 명시적으로 "종료" 라고 했을 때만**. 일반 "세션 종료" / "모두 저장" 은 4단계로 끝.
+- **장소(PC) 무관 동일** — 맥북이든 윈도우든 같은 8단계. 단 EAS / Electron publish 는 환경변수(EXPO_TOKEN, GH_TOKEN) 가 있는 PC 에서만 가능 → 없으면 skip + 안내.
+- **deploy:web 의 grep 검증** 은 절대 우회 X (firebase API key inline 누락 사고 방지).
+
 ### 저장 위치 패턴
 
 | 종류 | 위치 |
@@ -278,6 +301,59 @@
 
 - 다룬 이슈 짧게 나열 + 추천 세션 이름 제공
 - "세션 정리" 명령 받으면 위 6번 자동 동작 실행
+
+### 비밀값 / 환경 셋업 — NAS 공유 (윈도우 ↔ 맥북)
+
+`.env` (Firebase / 카카오 / Azure TTS 키) 와 EAS 로그인 토큰은 `.gitignore` 로 깃에서 빠진다 — 의도된 동작 (비밀값 외부 노출 방지). 두 PC 가 같은 비밀값을 보도록 NAS(Network Attached Storage, 사장님 본인 저장소) 를 단일 진실 소스(single source of truth)로 사용한다.
+
+#### 구조
+
+```
+<NAS 마운트 경로>/secrets/mypos/
+  ├─ .env              ← 두 PC 의 프로젝트 루트 .env 와 동기화
+  ├─ expo-state.json   ← 두 PC 의 ~/.expo/state.json 과 동기화 (EAS 로그인)
+  └─ README.txt        ← 첫 동기화 시 자동 생성
+```
+
+#### 신규 PC 셋업 절차
+
+1. NAS 의 `secrets/mypos/` 폴더를 PC 에 마운트 (네트워크 드라이브 / SMB / AFP).
+2. 환경변수 `MYPOS_NAS_SECRETS` 에 그 경로 등록.
+   - 윈도우: `setx MYPOS_NAS_SECRETS "Z:\secrets\mypos"` 후 PowerShell 재시작
+   - 맥북: `~/.zshrc` 에 `export MYPOS_NAS_SECRETS="/Volumes/secrets/mypos"` 추가 후 `source ~/.zshrc`
+3. `git clone <repo>` + `npm install`
+4. `npm run secrets:sync` → NAS 의 `.env` / EAS state 자동 pull
+5. `npm start` 또는 `npm run deploy:web` — 이후 자동 sync
+
+#### 자동 동기화 트리거
+
+| 명령 | 동작 |
+|---|---|
+| `npm start` | prestart hook 으로 자동 sync (NAS ↔ 로컬 mtime 비교) |
+| `npm run deploy:web` | deploy-web.sh 0/4 단계에서 자동 sync (배포 직전 NAS 최신 반영) |
+| `npm run secrets:sync` | 수동 양방향 sync |
+| `npm run secrets:push` | 로컬 → NAS 강제 push (키 회전 직후 즉시 다른 PC 반영하고 싶을 때) |
+
+#### 키 회전 (Kakao / Firebase / Azure 키 갱신) 워크플로우
+
+1. 발급 콘솔(카카오/Firebase/Azure) 에서 새 키 발급
+2. 어느 한 PC 의 로컬 `.env` 수정
+3. `npm run secrets:push` — NAS 즉시 갱신
+4. 다른 PC 는 다음 `npm start` 또는 `npm run secrets:sync` 시 자동 pull
+
+#### 안전 정책 (영업 안 멎게)
+
+- NAS 미마운트 / 환경변수 미설정 → **silent skip**. 로컬 `.env` 만 있어도 모든 명령 정상.
+- mtime 차이 1초 이내 + 내용 다름 → 안전상 skip (사용자가 명시적 push/sync 결정)
+- NAS 가 더 최신이라 로컬 덮어쓸 때 → `.env.bak.<timestamp>` 백업 자동 생성
+- NAS 는 절대 깃에 안 올라감 (NAS 폴더 자체가 리포 밖)
+
+#### 트러블슈팅
+
+- **"NAS 미설정 — skip" 메시지**: 환경변수 안 박혔거나 마운트 끊김. 위 셋업 2번 다시 확인.
+- **카카오 / Firebase 키 없다는 에러**: NAS 의 `.env` 가 비어있거나 sync 안 됨. `npm run secrets:sync` 수동 실행 후 출력 확인.
+- **EAS "토큰 없음"**: `eas login` 후 `npm run secrets:push` 한 번 — 다른 PC 가 다음 sync 때 받음.
+- **NAS 외부 노출 위험**: Synology QuickConnect / QNAP myQNAPcloud 등 외부 접근 활성화돼 있고 NAS 관리자 비번이 약하면 비밀값 유출. 강력한 비번 + 2FA 필수.
 
 ---
 

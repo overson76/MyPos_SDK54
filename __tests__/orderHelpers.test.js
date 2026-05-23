@@ -13,6 +13,8 @@ import {
   findHistoryEntry,
   groupItemsBySource,
   computeSubtotalsBySource,
+  findEmptyDeliverySlot,
+  findEmptySlotForType,
 } from '../utils/orderHelpers';
 
 describe('capHistory', () => {
@@ -434,5 +436,65 @@ describe('findHistoryEntry', () => {
   test('history 가 falsy 면 null', () => {
     expect(findHistoryEntry(undefined, 'a')).toBe(null);
     expect(findHistoryEntry(null, 'a')).toBe(null);
+  });
+});
+
+// 2026-05-21: findEmptySlotForType 일반화 — 배달/예약/포장 모두 정적 슬롯 + 동적 확장.
+describe('findEmptySlotForType', () => {
+  const used = (n) => ({ items: [{ id: 'a' }], cartItems: [] });
+
+  test('delivery — 비어있으면 d1', () => {
+    expect(findEmptySlotForType({}, 'delivery')).toBe('d1');
+  });
+
+  test('delivery — d1~d3 차있으면 d4', () => {
+    const orders = { d1: used(), d2: used(), d3: used() };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d4');
+  });
+
+  test('delivery — d1~d5 모두 차있으면 d6 동적 확장', () => {
+    const orders = {
+      d1: used(), d2: used(), d3: used(), d4: used(), d5: used(),
+    };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d6');
+  });
+
+  test('reservation — 비어있으면 y1', () => {
+    expect(findEmptySlotForType({}, 'reservation')).toBe('y1');
+  });
+
+  test('reservation — y1 차있으면 y2', () => {
+    expect(findEmptySlotForType({ y1: used() }, 'reservation')).toBe('y2');
+  });
+
+  test('reservation — y1, y2 차있으면 y3 동적 확장', () => {
+    expect(
+      findEmptySlotForType({ y1: used(), y2: used() }, 'reservation')
+    ).toBe('y3');
+  });
+
+  test('takeout — 비어있으면 p1', () => {
+    expect(findEmptySlotForType({}, 'takeout')).toBe('p1');
+  });
+
+  test('takeout — p1, p2 차있으면 p3 동적 확장', () => {
+    expect(
+      findEmptySlotForType({ p1: used(), p2: used() }, 'takeout')
+    ).toBe('p3');
+  });
+
+  test('알 수 없는 type → null', () => {
+    expect(findEmptySlotForType({}, 'unknown')).toBeNull();
+    expect(findEmptySlotForType({}, undefined)).toBeNull();
+  });
+
+  test('분할 자식(d1#1) 차있으면 d1 도 점유로 인식', () => {
+    const orders = { 'd1#1': { items: [{ id: 'x' }], cartItems: [] } };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d2');
+  });
+
+  test('findEmptyDeliverySlot wrapper 는 findEmptySlotForType("delivery") 와 동일', () => {
+    expect(findEmptyDeliverySlot({})).toBe('d1');
+    expect(findEmptyDeliverySlot({ d1: used() })).toBe('d2');
   });
 });

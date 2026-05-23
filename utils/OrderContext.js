@@ -19,12 +19,14 @@ import {
   computeSubtotalsBySource,
   detectDynamicSlotPrefix,
   findEmptyDeliverySlot,
+  findEmptySlotForType,
   findHistoryEntry,
   groupItemsBySource,
   markHistoryReverted,
   normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
+import { resolveDeliveryIdentity } from './addressBookLookup';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
 import { setNotifyAddressBook } from './notify';
@@ -66,8 +68,15 @@ export function OrderProvider({ children }) {
     orders,
     dispatch,
   });
-  const { groups, setGroups, getGroupFor, dissolveGroup, createGroup } =
-    useGroups({ orders, dispatch });
+  const {
+    groups,
+    setGroups,
+    getGroupFor,
+    dissolveGroup,
+    createGroup,
+    getGroupMode,
+    setGroupMode,
+  } = useGroups({ orders, dispatch });
   const { revenue, setRevenue } = useRevenue();
   const {
     addressBook,
@@ -215,6 +224,13 @@ export function OrderProvider({ children }) {
       const existing = orders[targetId];
       if (existing && (existing.items || []).length > 0) {
         const total = computeItemsTotal(existing.items);
+        // 별칭 > 전번 > 주소 우선순위를 재출력/표기 모두에 일관 적용하기 위해
+        // history entry 에 식별자 같이 박음. 주문 객체에 명시 저장된 값 우선,
+        // 없으면 주소록 lookup. 옛 history 는 빈값 → 주소만.
+        const ident = resolveDeliveryIdentity(addressBook, existing.deliveryAddress, {
+          alias: existing.deliveryAlias,
+          phone: existing.deliveryPhone,
+        });
         setRevenue((prev) =>
           appendHistory(
             prev,
@@ -223,6 +239,9 @@ export function OrderProvider({ children }) {
               items: existing.items,
               options: existing.options,
               deliveryAddress: existing.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
               paymentStatus: existing.paymentStatus,
               paymentMethod: paymentMethod || existing.paymentMethod || null,
@@ -283,6 +302,10 @@ export function OrderProvider({ children }) {
       );
       if (matchedItems.length > 0) {
         const total = computeItemsTotal(matchedItems);
+        const ident = resolveDeliveryIdentity(addressBook, existing.deliveryAddress, {
+          alias: existing.deliveryAlias,
+          phone: existing.deliveryPhone,
+        });
         setRevenue((prev) =>
           appendHistory(
             prev,
@@ -291,6 +314,9 @@ export function OrderProvider({ children }) {
               items: matchedItems,
               options: existing.options,
               deliveryAddress: existing.deliveryAddress,
+              deliveryAlias: ident.alias,
+              deliveryPhone: ident.phone,
+              deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
               paymentStatus: 'paid',
               paymentMethod,
@@ -661,18 +687,18 @@ export function OrderProvider({ children }) {
       dispatch({ type: 'orders/clearPendingCart' });
     };
 
-    // 1.0.47: PENDING 장바구니 → 빈 배달 슬롯 자동 배당 + 주소/전화/별칭 박기.
-    // 두 흐름 통합:
-    //   - 미선택 + cart + "주문" 버튼 누름 (cart migrate)
-    //   - CID "주문받기" (cart 없이 빈 슬롯만 + 주소/전화 미리 박음)
-    // findEmptyDeliverySlot 은 d1..d5 순서로 빈 슬롯 찾고, 모두 차있으면 d6, d7 동적 확장.
+    // 1.0.47 → 2026-05-21: PENDING 장바구니 → 빈 슬롯 자동 배당 + 주소/전화/별칭 박기.
+    //   type: 'delivery' | 'reservation' | 'takeout' — 사장님이 OrderTypePicker 모달에서 선택.
+    //   d1..d5 / y1..y2 / p1..p2 정적 순서대로 빈 슬롯, 모두 차있으면 동적 확장.
     // 반환: 배당된 슬롯 ID (caller 가 setSelectedTable 호출해서 그 테이블로 진입)
-    const submitPendingAsDelivery = (opts = {}) => {
+    const submitPendingAsType = (type, opts = {}) => {
       const { deliveryAddress, deliveryPhone, deliveryAlias } = opts;
-      const targetId = findEmptyDeliverySlot(orders);
-      // 1단계: PENDING cart 있으면 배달 슬롯으로 migrate. 없으면 빈 슬롯 그대로.
+      const targetId = findEmptySlotForType(orders, type);
+      if (!targetId) return null;
+      // 1단계: PENDING cart 있으면 슬롯으로 migrate. 없으면 빈 슬롯 그대로.
       dispatch({ type: 'orders/migratePendingCart', toTableId: targetId });
       // 2단계: 주소 박기 — setDeliveryAddress 헬퍼 재사용 (sanitize 포함)
+      //   배달만 의미있지만 예약/포장도 들어와도 모델에 박힘 (영수증/카드 표시는 type 분기로 처리)
       if (deliveryAddress) {
         const safeAddress = sanitizeDeliveryAddress(deliveryAddress);
         dispatch({
@@ -681,7 +707,7 @@ export function OrderProvider({ children }) {
           safeAddress,
         });
       }
-      // 3단계: phone / alias 박기 — reducer 가 자체 sanitize
+      // 3단계: phone / alias 박기 — 모든 type 에 의미있음 (단골 식별)
       if (deliveryPhone || deliveryAlias) {
         dispatch({
           type: 'orders/setDeliveryContact',
@@ -690,13 +716,18 @@ export function OrderProvider({ children }) {
           alias: deliveryAlias || null,
         });
       }
-      addBreadcrumb('order.submitPendingAsDelivery', {
+      addBreadcrumb('order.submitPendingAsType', {
+        type,
         targetId,
         hasAddress: !!deliveryAddress,
         hasPhone: !!deliveryPhone,
       });
       return targetId;
     };
+
+    // 1.0.47 호환 wrapper — 옛 호출처(테스트/외부) 안전. 신규는 submitPendingAsType 사용.
+    const submitPendingAsDelivery = (opts = {}) =>
+      submitPendingAsType('delivery', opts);
 
     return {
       orders,
@@ -758,12 +789,15 @@ export function OrderProvider({ children }) {
       migratePendingCart,
       clearPendingCart,
       submitPendingAsDelivery,
+      submitPendingAsType,
       groups,
       createGroup,
       dissolveGroup,
       getGroupFor,
+      getGroupMode,
+      setGroupMode,
     };
-  }, [orders, splits, revenue, groups, addressBook]);
+  }, [orders, splits, revenue, groups, addressBook, getGroupMode, setGroupMode]);
 
   return (
     <OrderContext.Provider value={value}>{children}</OrderContext.Provider>
@@ -798,7 +832,9 @@ const ORDERS_FALLBACK = {
   getCartTotal: () => 0, getCartQty: () => 0,
   getReadyDeliveries: () => [],
   migratePendingCart: noop, clearPendingCart: noop, submitPendingAsDelivery: () => null,
+  submitPendingAsType: () => null,
   createGroup: noop, dissolveGroup: noop, getGroupFor: () => null,
+  getGroupMode: () => 'shared', setGroupMode: noop,
 };
 
 export function useOrders() {

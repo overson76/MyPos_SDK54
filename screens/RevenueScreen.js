@@ -18,6 +18,7 @@ import {
 } from '../utils/payment';
 import { downloadCsv } from '../utils/csvDownload';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+import { formatDeliveryLabel } from '../utils/addressBookLookup';
 
 function formatDateTime(ts) {
   if (!ts) return '';
@@ -65,6 +66,9 @@ export default function RevenueScreen() {
           .filter(Boolean),
       }));
       const tbl = resolveAnyTable(entry.tableId);
+      // 별칭/전번은 buildHistoryEntry 가 박아둔 값 사용. 옛 history 는 비어있어서 자연 fallback.
+      // orderType 도 같이 — delivery 면 영수증 빌더가 큰 글씨 본문으로 출력.
+      const isDeliveryEntry = !!entry.deliveryAddress;
       const result = await printReceipt({
         storeName: storeInfo?.name || 'MyPos',
         storePhone: storeInfo?.phone || '',
@@ -78,6 +82,9 @@ export default function RevenueScreen() {
         paymentMethod: entry.paymentMethod,
         paymentStatus: entry.paymentStatus,
         deliveryAddress: entry.deliveryAddress,
+        customerAlias: entry.deliveryAlias || '',
+        customerPhone: entry.deliveryPhone || '',
+        orderType: isDeliveryEntry ? 'delivery' : 'regular',
         printedAt: Date.now(),
       });
       if (!result.ok && typeof window !== 'undefined') {
@@ -410,9 +417,30 @@ export default function RevenueScreen() {
                   </Text>
                 ))}
               </View>
-              {h.deliveryAddress ? (
-                <Text style={styles.historyAddr}>📍 {h.deliveryAddress}</Text>
-              ) : null}
+              {h.deliveryAddress ? (() => {
+                // 별칭 > 전번 > 주소 우선순위 (사장님 정책). 별칭/전번이 있으면 주소는
+                // 한 줄 아래에 작게 보조 표시 — 회계 확인 시 둘 다 보임.
+                const primary = formatDeliveryLabel(
+                  {
+                    alias: h.deliveryAlias,
+                    phone: h.deliveryPhone,
+                    phones: h.deliveryPhones,
+                    label: h.deliveryAddress,
+                  },
+                  { phoneStyle: 'full' }
+                );
+                const showAddrSub = primary && primary !== h.deliveryAddress;
+                return (
+                  <>
+                    <Text style={styles.historyAddr}>📍 {primary}</Text>
+                    {showAddrSub ? (
+                      <Text style={[styles.historyAddr, { opacity: 0.6, fontSize: 11 }]}>
+                        {h.deliveryAddress}
+                      </Text>
+                    ) : null}
+                  </>
+                );
+              })() : null}
               <View style={styles.historyTotalRow}>
                 {showVat && h.total > 0 && !h.reverted ? (
                   <Text style={styles.historyVat}>

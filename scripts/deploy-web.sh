@@ -23,6 +23,12 @@ note()  { echo -e "${YEL}▶ $*${CLR}"; }
 ok()    { echo -e "${GRN}✓ $*${CLR}"; }
 fail()  { echo -e "${RED}✗ $*${CLR}" >&2; exit 1; }
 
+# NAS 비밀값 사전 동기화 — NAS 의 최신 .env 를 로컬로 pull (있을 때만, 없으면 silent skip).
+# 두 PC (윈도우 / 맥북) 가 NAS 공유 폴더 통해 같은 비밀값을 보도록.
+# NAS 끊겨도 deploy 가 죽지 않게 || true 로 fail-safe — 로컬 .env 만 있어도 정상 진행.
+note "0/4 NAS 비밀값 동기화 (있으면 최신화)"
+node scripts/sync-secrets.js || true
+
 # .env 존재 확인 (없으면 즉시 abort — 이게 함정 2 의 가장 흔한 원인)
 if [ ! -f ".env" ]; then
   fail ".env 파일이 없습니다. EXPO_PUBLIC_FIREBASE_* 키를 채운 .env 를 프로젝트 루트에 두세요. (.env.example 참고)"
@@ -30,6 +36,12 @@ fi
 
 if ! grep -q "EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSy" .env 2>/dev/null; then
   fail ".env 의 EXPO_PUBLIC_FIREBASE_API_KEY 가 비어있거나 형식이 이상합니다."
+fi
+
+# 2026-05-21 추가: 카카오 키 사전 확인. 빈 키로 배포되면 매장 좌표 변환/배달 거리/
+# 회수 정렬/주소록 좌표 등 모든 지도 기능 OFF.
+if ! grep -qE "^EXPO_PUBLIC_KAKAO_REST_KEY=.{10,}$" .env 2>/dev/null; then
+  fail ".env 의 EXPO_PUBLIC_KAKAO_REST_KEY 가 비어있거나 너무 짧습니다 (정상 ~32자)."
 fi
 
 note "1/4 dist/ + Metro 캐시 클리어"
@@ -56,6 +68,19 @@ if [ "${MATCHED:-0}" -eq 0 ]; then
 fi
 ok "API 키 inline 확인 (${MATCHED} 개 JS 청크에서 매칭)"
 
+# 2026-05-21 추가: 카카오 키 inline 확인. .env 값 일부를 빌드 산출물과 대조.
+KAKAO_PREFIX=$(awk -F= '/^EXPO_PUBLIC_KAKAO_REST_KEY/{print substr($2,1,8); exit}' .env)
+if [ -n "$KAKAO_PREFIX" ]; then
+  KAKAO_HITS=$(grep -l "$KAKAO_PREFIX" "$JS_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${KAKAO_HITS:-0}" -eq 0 ]; then
+    fail "카카오 키가 빌드 산출물에 inline 안 됨. 가능한 원인:
+  - utils/geocode.js 의 module 최상위 const 패턴 잔재 (lazy getter 로 변경 필요)
+  - 다른 파일에 process.env 우회 패턴 (const env = process.env)
+  배포 중단."
+  fi
+  ok "카카오 키 inline 확인 (${KAKAO_HITS} 개 JS 청크에서 매칭)"
+fi
+
 # PWA 자산이 public/ 에서 dist/ 로 복사됐는지 확인.
 # Expo SDK 50+ 는 public/ 자동 복사하지만 빌드 설정 변경 / SDK 업그레이드 시 깨질 수 있으므로
 # 한 줄 검증으로 "PWA 설치 안 됨" 같은 silent 사고 사전 차단.
@@ -73,6 +98,12 @@ fi
 ok "PWA 자산 5종 확인 (manifest + sw.js + icons)"
 
 note "4/4 wrangler deploy → Cloudflare 라이브 URL 갱신"
+# 2026-05-22: wrangler 4.93.x 의 hash 비교 버그 회피 처방.
+# wrangler 가 가끔 "No updated asset files" 라고 잘못 판단해서 새 index.html / JS 번들을
+# 안 올리는 사고 발생 (사고: 1.0.53 → 1.0.54 deploy 때 검은 화면). 매장 PC 영업 사고.
+# 매 deploy 마다 timestamp 만 박힌 작은 파일 한 개 dist 에 추가 → wrangler 가 항상 새 파일
+# 1개 발견 → manifest 전체 다시 평가하면서 누락된 자산도 같이 업로드함.
+date +%s > "dist/.deploy-bust"
 npx wrangler deploy
 
 echo ""

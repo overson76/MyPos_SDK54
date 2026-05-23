@@ -24,11 +24,17 @@ export function computeItemsTotal(items) {
 // paymentMethod: 결제수단 코드 ('cash' | 'card' | 'transfer' | 'localCurrency').
 //   미선택 / 옛 데이터는 null. utils/payment.js 가 'unspecified'(미분류) 로 집계.
 //   회계 / CSV 익스포트 / 결제수단별 매출 분석에 사용.
+//
+// deliveryAlias / deliveryPhone / deliveryPhones: 배달 손님 식별.
+//   재출력 시 영수증/표기에 별칭 > 전번 > 주소 우선순위 적용용. 옛 entry 는 모두 빈값 → 주소만.
 export function buildHistoryEntry({
   tableId,
   items,
   options,
   deliveryAddress,
+  deliveryAlias,
+  deliveryPhone,
+  deliveryPhones,
   deliveryTime,
   paymentStatus,
   paymentMethod,
@@ -41,6 +47,9 @@ export function buildHistoryEntry({
     items: (items || []).map((i) => ({ ...i })),
     options: [...(options || [])],
     deliveryAddress: deliveryAddress || '',
+    deliveryAlias: deliveryAlias || '',
+    deliveryPhone: deliveryPhone || '',
+    deliveryPhones: Array.isArray(deliveryPhones) ? [...deliveryPhones] : null,
     deliveryTime: deliveryTime || '',
     paymentStatus,
     paymentMethod: paymentMethod || null,
@@ -143,18 +152,23 @@ export function compactSlotsByPrefix(orders, prefix) {
   return { orders: next, mapping };
 }
 
-// 1.0.47: 빈 배달 슬롯 찾기 — d1~d5 순서로 확인 + 모두 차있으면 다음 동적 슬롯(d6, d7...).
-// "비어있다" = items 와 cartItems 둘 다 없음. 분할(d1#1) 자식 슬롯도 검사 — 분할된 슬롯은 점유로 판정.
-// 사용처:
-//   - 일반 미선택 + cart + "주문" 버튼 클릭 시 자동 배달 슬롯 배당
-//   - CID "주문받기" → 메뉴 → 주문 시 자동 배달 슬롯 배당
-export function findEmptyDeliverySlot(orders) {
+// 2026-05-21: 빈 슬롯 찾기 일반화 — 배달/예약/포장 type 별 prefix + 정적 카운트.
+//   delivery → d1..d5 + 동적 확장 (d6+)
+//   reservation → y1..y2 + 동적 (y3+)
+//   takeout → p1..p2 + 동적 (p3+)
+// "비어있다" = items 와 cartItems 둘 다 없음. 분할(d1#1) 자식 슬롯도 점유로 판정.
+const TYPE_PREFIX = { delivery: 'd', reservation: 'y', takeout: 'p' };
+const TYPE_STATIC_COUNT = { delivery: 5, reservation: 2, takeout: 2 };
+
+export function findEmptySlotForType(orders, type) {
+  const prefix = TYPE_PREFIX[type];
+  if (!prefix) return null;
+  const staticCount = TYPE_STATIC_COUNT[type] || 2;
   const isUsed = (slotId) => {
     const o = orders?.[slotId];
     if (o && ((o.items?.length || 0) > 0 || (o.cartItems?.length || 0) > 0)) {
       return true;
     }
-    // 분할 자식 (예: d1#1, d1#2)
     const splitOccupied = Object.entries(orders || {}).some(
       ([oid, oo]) =>
         oid.startsWith(`${slotId}#`) &&
@@ -162,21 +176,26 @@ export function findEmptyDeliverySlot(orders) {
     );
     return splitOccupied;
   };
-  // d1..d5 우선
-  for (let n = 1; n <= 5; n += 1) {
-    const id = `d${n}`;
+  for (let n = 1; n <= staticCount; n += 1) {
+    const id = `${prefix}${n}`;
     if (!isUsed(id)) return id;
   }
-  // 모두 차있으면 동적 확장 — 현재 점유된 d{n} 중 최대 n+1
-  let maxN = 5;
+  // 모두 차있으면 동적 확장 — 현재 점유된 prefix{n} 중 최대 n+1
+  let maxN = staticCount;
+  const re = new RegExp(`^${prefix}(\\d+)`);
   Object.keys(orders || {}).forEach((k) => {
-    const m = /^d(\d+)/.exec(k);
+    const m = re.exec(k);
     if (m) {
       const n = parseInt(m[1], 10);
       if (!Number.isNaN(n) && n > maxN) maxN = n;
     }
   });
-  return `d${maxN + 1}`;
+  return `${prefix}${maxN + 1}`;
+}
+
+// 1.0.47 호환 wrapper — 배달 한정 호출처용. 신규 호출은 findEmptySlotForType 사용.
+export function findEmptyDeliverySlot(orders) {
+  return findEmptySlotForType(orders, 'delivery');
 }
 
 // 동일한 (id, options, cookState/portion states, sourceTableId)를 가진 슬롯들을 qty/largeQty 합산하여 병합.

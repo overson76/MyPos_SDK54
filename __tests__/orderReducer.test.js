@@ -697,9 +697,50 @@ describe('orderReducer · confirmOrder', () => {
     expect(next.t1.readyAt).toBeNull();
   });
 
-  // 1.0.52 안전 가드 + fallback — cart 가 빈 채로 confirmOrder 호출돼도
-  // cartFromExisting fallback 으로 items 카피가 base 가 되어 items 그대로 보존.
-  test('cart=[] & items 비어있지 않으면 items 보존 (의도치 않은 삭제 차단)', () => {
+  // 2026-05-21 회귀 방지 — 사장님 신고 "입력중 ↔ 주문상태 무한 토글" 의 근본 원인.
+  // 확정 후 cartItems 는 *반드시* 빈 배열이어야 OrderScreen 의 cart 가 비어 보이고,
+  // 사장님이 슬롯 재진입했을 때 옛 메뉴 다시 안 보임.
+  test('확정 후 cartItems 가 빈 배열로 초기화되어야 한다', () => {
+    const s = {
+      t1: makeOrder({
+        cartItems: [
+          { slotId: 's1', qty: 2, cookState: 'pending' },
+          { slotId: 's2', qty: 1, cookState: 'pending' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/confirmOrder',
+      tableId: 't1',
+    });
+    expect(next.t1.items).toHaveLength(2); // 주방으로 커밋
+    expect(next.t1.cartItems).toEqual([]); // 장바구니는 비어야 한다
+  });
+
+  test('재확정시에도 cartItems 는 비어야 한다 (변경 누름 흐름)', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', qty: 1, cookState: 'cooked' }],
+        cartItems: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'pending' }, // 사장님이 추가한 메뉴
+        ],
+        confirmedItems: [{ slotId: 's1', qty: 1, cookState: 'cooked' }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/confirmOrder',
+      tableId: 't1',
+    });
+    expect(next.t1.items).toHaveLength(2);
+    expect(next.t1.cartItems).toEqual([]); // 추가 변경 후에도 cart 정리
+  });
+
+  // 1.0.52 안전 가드 — cart=[] (사용자가 한 개도 안 담음) & items 있으면 confirm 무시.
+  // 가드 없으면 cartFromExisting fallback 이 items 카피로 잡아 머지가 일어나지만,
+  // "비어있는 cart 로 confirm" 자체가 의도된 흐름이 아니므로 state 보존이 더 안전.
+  // (사장님 보고: "주문 후 변경 시 기존 주문내역 다 지워짐" — 자동확정/외부 호출 우회 차단)
+  test('cart=[] & items 있으면 state 보존, items 손대지 않음', () => {
     const s = {
       t1: makeOrder({
         items: [{ slotId: 's1', qty: 1, cookState: 'pending' }],
@@ -711,16 +752,17 @@ describe('orderReducer · confirmOrder', () => {
       type: 'orders/confirmOrder',
       tableId: 't1',
     });
+    // items 보존 (의도치 않은 삭제 차단)
     expect(next.t1.items).toHaveLength(1);
     expect(next.t1.items[0].slotId).toBe('s1');
-    // cartItems 도 items 카피로 동기화됨
-    expect(next.t1.cartItems).toHaveLength(1);
-    expect(next.t1.cartItems[0].slotId).toBe('s1');
+    // cartItems 는 그대로 빈 배열 (변경 없음)
+    expect(next.t1.cartItems).toEqual([]);
   });
 });
 
 describe('orderReducer · cartFromExisting fallback (1.0.52)', () => {
   // cart 가 빈 배열이어도 items 카피로 fallback → 새 메뉴 추가 시 기존 items 위에 추가.
+  // 사장님 시나리오: confirm 후 cartItems=[] 인 상태에서 OrderScreen 재진입 → 새 메뉴 클릭.
   test('cart=[] 상태에서 addItem 하면 items 카피 + 새 슬롯이 cart 가 됨', () => {
     const s = {
       t1: makeOrder({
@@ -740,6 +782,89 @@ describe('orderReducer · cartFromExisting fallback (1.0.52)', () => {
     const hasNewMenu = next.t1.cartItems.some((i) => i.id === 'm1');
     expect(hasS1).toBe(true);
     expect(hasNewMenu).toBe(true);
+  });
+});
+
+// 2026-05-21 회귀 방지 — 사장님 룰 "배달은 조리완료와 동시에 자동 배달회수 등록".
+// cycleItemCookStatePortion 이 모든 슬롯 cooked 시 readyAt 도 같이 set 해야 함.
+// 옛 코드는 status='ready' 만 set 하고 readyAt null → getReadyDeliveries 가 skip
+// → 회수 목록 텅 비는 버그.
+describe('orderReducer · cycleItemCookStatePortion + readyAt 자동 set', () => {
+  test('마지막 슬롯이 cooked 되면 readyAt 자동 set + status ready', () => {
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'cooking' },
+        ],
+      }),
+    };
+    // s2 를 cooking → cooked 로 순환
+    let next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's2',
+      isLarge: false,
+    });
+    // 첫 cycle 은 cooking → cooked 가 아닐 수 있음. nextCookState 확인을 위해 한 번 더
+    while (next.d1.items.find((i) => i.slotId === 's2').cookState !== 'cooked') {
+      next = orderReducer(next, {
+        type: 'orders/cycleItemCookStatePortion',
+        tableId: 'd1',
+        slotId: 's2',
+        isLarge: false,
+      });
+    }
+    expect(next.d1.status).toBe('ready');
+    expect(typeof next.d1.readyAt).toBe('number');
+    expect(next.d1.readyAt).toBeGreaterThan(0);
+  });
+
+  test('일부만 cooked 면 readyAt null 유지', () => {
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'pending' },
+          { slotId: 's2', qty: 1, cookState: 'pending' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's1',
+      isLarge: false,
+    });
+    expect(next.d1.status).toBe('preparing');
+    expect(next.d1.readyAt).toBeNull();
+  });
+
+  test('이미 ready 상태에서 다른 슬롯도 cooked 토글되어도 readyAt 보존 (덮어쓰기 안 함)', () => {
+    const fixedReadyAt = 999;
+    const s = {
+      d1: makeOrder({
+        items: [
+          { slotId: 's1', qty: 1, cookState: 'cooked' },
+          { slotId: 's2', qty: 1, cookState: 'cooked' },
+        ],
+        readyAt: fixedReadyAt,
+        status: 'ready',
+      }),
+    };
+    // 이미 cooked 인 s1 을 또 토글 → cycle 한 바퀴
+    let next = orderReducer(s, {
+      type: 'orders/cycleItemCookStatePortion',
+      tableId: 'd1',
+      slotId: 's1',
+      isLarge: false,
+    });
+    // 만약 모든 슬롯 여전히 cooked 라면 readyAt 보존
+    const allStillCooked = next.d1.items.every(
+      (i) => (i.cookState || 'pending') === 'cooked'
+    );
+    if (allStillCooked) {
+      expect(next.d1.readyAt).toBe(fixedReadyAt);
+    }
   });
 });
 

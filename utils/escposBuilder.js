@@ -133,6 +133,19 @@ function formatDurationShort(sec) {
   return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
 }
 
+// 사장님 배달 라벨 정책: 별칭 > 전번(포맷팅) > 주소 — 가장 우선되는 한 라벨.
+// prefix("배달지 ", "별칭 ", "손님 ") 없이 *순수 식별자* 만 반환.
+// 영수증/주방슬립 모두 이 헬퍼로 통일.
+function resolveDeliveryLabel(r) {
+  const aliasText = (r?.customerAlias || '').trim();
+  if (aliasText) return aliasText;
+  const phoneText = (r?.customerPhone || '').trim();
+  if (phoneText) return formatPhone(phoneText);
+  const addrText = (r?.deliveryAddress || '').trim();
+  if (addrText) return addrText;
+  return '';
+}
+
 // "01012345678" → "010-1234-5678". 7~11자리만 처리, 외엔 그대로.
 function formatPhone(digits) {
   const d = String(digits || '').replace(/\D/g, '');
@@ -221,15 +234,13 @@ export function buildReceiptText(receipt) {
 
   // 1.0.44: orderType 별 본문 메타.
   // 1.0.45: 배달지/별칭도 sizeWide 로 통일 — 본문 모두 가로 두 배 한 크기로 정렬.
+  // 2026-05-21: 사장님 정책 — "배달지 ..." prefix 와 별칭/손님 세 줄 출력 제거.
+  //   별칭 > 전번 > 주소 중 가장 우선되는 *한 줄* 만 prefix 없이 큰 글씨. 라이더/사장님
+  //   식별엔 단일 라벨로 충분. 도로/출발/요청 메타는 그대로 유지.
   if (orderType === 'delivery') {
-    if (r.deliveryAddress) {
-      lines.push(bigLeft(`배달지 ${r.deliveryAddress}`, 'wide'));
-    }
-    if (r.customerAlias) {
-      lines.push(bigLeft(`별칭   ${r.customerAlias}`, 'wide'));
-    }
-    if (r.customerPhone) {
-      lines.push(bigLeft(`손님   ${formatPhone(r.customerPhone)}`, 'wide'));
+    const label = resolveDeliveryLabel(r);
+    if (label) {
+      lines.push(bigLeft(label, 'wide'));
     }
     if (typeof r.drivingDistanceM === 'number') {
       const km = formatDrivingShort(r.drivingDistanceM);
@@ -245,11 +256,16 @@ export function buildReceiptText(receipt) {
       lines.push(bigLeft(`요청   ${r.customerRequest}`, 'wide'));
     }
   } else if (orderType === 'reservation') {
+    // 2026-05-21: 전화 주문 라벨 정책 통일 — 별칭/전번 prefix 없이 한 줄 (있을 때만).
+    const label = resolveDeliveryLabel(r);
+    if (label) lines.push(bigLeft(label, 'wide'));
     const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (sched) {
       lines.push(bigLeft(`예약시각 ${sched}`, 'wide'));
     }
   } else if (orderType === 'takeout') {
+    const label = resolveDeliveryLabel(r);
+    if (label) lines.push(bigLeft(label, 'wide'));
     const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (sched) {
       lines.push(bigLeft(`픽업시각 ${sched}`, 'wide'));
@@ -333,13 +349,24 @@ export function buildReceiptBytes(receipt, textEncoder) {
 //   tableLabel: string,
 //   isDelivery: boolean,
 //   deliveryAddress?: string,
+//   customerAlias?: string,   // 사장님 정책: 별칭 > 전번 > 주소. 라이더/주방이 손님 식별
+//   customerPhone?: string,
 //   rows: Array<{ item, kind: 'added'|'changed'|'unchanged'|'removed', previousQty? }>,
 //   kinds: Array<'added'|'changed'|'all'|'delivery'>,
 //   slippedAt?: number,
 // }
 // item 에 optionLabels?: string[] 를 미리 resolve 해서 전달해야 함 (hook 못 씀).
 export function buildOrderSlipText(slip) {
-  const { tableLabel = '', isDelivery, deliveryAddress, rows = [], kinds = ['all'], slippedAt } = slip;
+  const {
+    tableLabel = '',
+    isDelivery,
+    deliveryAddress,
+    customerAlias,
+    customerPhone,
+    rows = [],
+    kinds = ['all'],
+    slippedAt,
+  } = slip;
   const kindSet = new Set(kinds);
   const showAll = kindSet.has('all');
   const showDelivery = kindSet.has('delivery') && isDelivery && !!deliveryAddress;
@@ -362,7 +389,14 @@ export function buildOrderSlipText(slip) {
 
   if (showDelivery) {
     lines.push(divider('-'));
-    lines.push('배달지: ' + deliveryAddress);
+    // 2026-05-21: 사장님 정책 — "배달지: ..." prefix 와 별칭/손님 세 줄 출력 제거.
+    //   별칭 > 전번 > 주소 중 가장 우선되는 *한 줄* 만 prefix 없이 출력. 단일 라벨로 충분.
+    const label = resolveDeliveryLabel({
+      customerAlias,
+      customerPhone,
+      deliveryAddress,
+    });
+    if (label) lines.push(label);
   }
 
   lines.push(divider('-'));

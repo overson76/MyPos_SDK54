@@ -1,16 +1,19 @@
 // 단체(group) 묶음 후 메뉴 추가 시 — 어느 손님 테이블 메뉴인지 선택받는 모달.
 // 1.0.36: 단체 묶기 후에도 1인/테이블별 결제 분리 가능하게 sourceTableId 추적.
+// 2026-05-21: "🔗 통합" 옵션 추가 (사장님 룰: 5 [통합] 6 형식, 통합은 메뉴/금액 분리 X).
+//   통합 선택 → sourceTableId = leaderId 로 박힘 → leader 슬롯에 표시, 결제 시 묶임.
 //
 // props:
 //   open: boolean — 표시 여부
 //   members: string[] — 단체 멤버 tableId 목록 (groups 의 memberIds)
+//   leaderId: string — 그룹 대표 tableId — "통합" 선택 시 박힐 sourceTableId
 //   lastSourceId: string|null — 이 group 의 마지막 선택 (★ 강조 + 자동 적용 옵션)
 //   onSelect(sourceTableId): 선택 콜백
 //   onClose(): 취소 (메뉴 추가 자체 취소)
 //
 // iOS new architecture 의 <Modal> 호환 회피 — absolute 오버레이 패턴.
 
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { resolveAnyTable } from '../utils/tableData';
 import { useResponsive } from '../utils/useResponsive';
@@ -18,6 +21,7 @@ import { useResponsive } from '../utils/useResponsive';
 export default function TableSourcePicker({
   open,
   members,
+  leaderId,
   lastSourceId,
   onSelect,
   onClose,
@@ -33,28 +37,51 @@ export default function TableSourcePicker({
     return t?.label || tid;
   };
 
+  // "통합" 버튼은 첫 멤버 다음에 끼움 — 사장님 의도 "5 [통합] 6" 형식.
+  // leaderId 가 없으면 통합 옵션 표시 안 함 (legacy 호출 안전).
+  const sharedSourceId = leaderId || members[0];
+  const isSharedSelected = lastSourceId === sharedSourceId;
+
   return (
     <View style={styles.backdrop} pointerEvents="auto">
       <Pressable style={styles.dim} onPress={onClose} />
       <View style={styles.panel}>
         <Text style={styles.title}>어느 손님 메뉴인가요?</Text>
         <Text style={styles.sub}>
-          단체로 묶은 테이블입니다. 결제 시 분리/합산 모두 가능합니다.
+          단체로 묶은 테이블입니다. "🔗 통합" 선택 시 메뉴/결제 분리 없이 한 묶음.
         </Text>
         <View style={styles.btnRow}>
-          {members.map((tid) => {
-            const isLast = tid === lastSourceId;
+          {members.map((tid, idx) => {
+            const isLast = tid === lastSourceId && tid !== sharedSourceId;
             return (
-              <TouchableOpacity
-                key={tid}
-                style={[styles.btn, isLast && styles.btnLast]}
-                onPress={() => onSelect(tid)}
-              >
-                <Text style={[styles.btnLabel, isLast && styles.btnLabelLast]}>
-                  {isLast ? '★ ' : ''}
-                  {tableLabel(tid)}
-                </Text>
-              </TouchableOpacity>
+              <Fragment key={tid}>
+                <TouchableOpacity
+                  style={[styles.btn, isLast && styles.btnLast]}
+                  onPress={() => onSelect(tid)}
+                >
+                  <Text style={[styles.btnLabel, isLast && styles.btnLabelLast]}>
+                    {isLast ? '★ ' : ''}
+                    {tableLabel(tid)}
+                  </Text>
+                </TouchableOpacity>
+                {idx === 0 && leaderId && (
+                  <TouchableOpacity
+                    key="__shared__"
+                    style={[styles.btn, styles.btnShared, isSharedSelected && styles.btnLast]}
+                    onPress={() => onSelect(sharedSourceId)}
+                  >
+                    <Text
+                      style={[
+                        styles.btnLabel,
+                        styles.btnLabelShared,
+                        isSharedSelected && styles.btnLabelLast,
+                      ]}
+                    >
+                      {isSharedSelected ? '★ ' : ''}🔗 통합
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </Fragment>
             );
           })}
         </View>
@@ -128,6 +155,11 @@ function makeStyles(scale = 1) {
       backgroundColor: '#dbeafe',
       borderColor: '#3b82f6',
     },
+    // 통합 옵션 — 보라/녹색 계열로 멤버 버튼과 구분
+    btnShared: {
+      backgroundColor: '#f0fdf4',
+      borderColor: '#10b981',
+    },
     btnLabel: {
       fontSize: s(18),
       fontWeight: '700',
@@ -135,6 +167,9 @@ function makeStyles(scale = 1) {
     },
     btnLabelLast: {
       color: '#1d4ed8',
+    },
+    btnLabelShared: {
+      color: '#047857',
     },
     cancel: {
       marginTop: s(18),

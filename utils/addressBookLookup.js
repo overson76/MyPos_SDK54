@@ -84,6 +84,26 @@ export function listAddressBookEntries(addressBook) {
   return [];
 }
 
+// 배달 손님 식별 — 주소 → 주소록 entry 의 alias/phone/phones 통합 추출.
+// 우선순위: order 객체에 명시 저장된 fallback.alias/phone (orderReducer 가 보존) > 주소록 entry.
+// 매출 history 빌더 / 영수증 재출력 / 라벨 표기 모든 곳이 같은 식별값을 쓰도록.
+export function resolveDeliveryIdentity(addressBook, deliveryAddress, fallback = {}) {
+  const entry = findAddressEntry(addressBook, deliveryAddress);
+  const alias =
+    (fallback.alias || '').trim() ||
+    (entry?.alias || '').trim();
+  const phones = getAllPhones(entry);
+  const primary =
+    (fallback.phone || '').trim() ||
+    phones[0] ||
+    '';
+  return {
+    alias,
+    phone: primary,
+    phones: phones.length > 0 ? phones : null,
+  };
+}
+
 // 배달 손님 라벨 — 사장님 정책: **별칭 > 전번 > 주소** 우선순위.
 // 모든 배달 표시 (자주 칩 / 배달 카드 / 영수증 / 음성) 가 같은 규칙을 따르도록
 // 통합 헬퍼. 사용처마다 phoneStyle/addressMaxLen 으로 미세 조정.

@@ -22,9 +22,10 @@ import { useResponsive } from '../utils/useResponsive';
 import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
+import GroupModePicker from '../components/GroupModePicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
-import { normalizeAddressKey } from '../utils/orderHelpers';
+import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
 import { formatShort12h } from '../utils/timeUtil';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
@@ -39,6 +40,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   const [moveMessage, setMoveMessage] = useState('');
   const [groupMode, setGroupMode] = useState(false);
   const [groupSelection, setGroupSelection] = useState([]);
+  // 2026-05-21: 단체 묶기 모드 진입 시 선택된 결제/메뉴 모드 — 'shared' | 'split'
+  // 사장님이 '단체' 버튼 누르면 GroupModePicker 모달 → 선택 → 이 state 에 저장 →
+  // createGroup 호출 시 이 mode 가 전달됨. 한 번의 단체 묶기 동안 mode 유지.
+  const [pendingGroupMode, setPendingGroupMode] = useState('shared');
+  const [groupModePickerOpen, setGroupModePickerOpen] = useState(false);
   // 하이라이트 깜빡임 + 배달 경과시간 주기적 리렌더
   const [blinkOn, setBlinkOn] = useState(true);
   // highlightTableId 변경 시 3초간만 깜빡이고 자동 소멸 — 영구 깜빡임 눈 피로 회피.
@@ -253,10 +259,10 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         setGroupSelection((prev) => prev.filter((x) => x !== tableObj.id));
         return;
       }
-      // 두 번째 선택 시 추가 버튼 클릭 없이 즉시 단체 생성
+      // 두 번째 선택 시 추가 버튼 클릭 없이 즉시 단체 생성 (pendingGroupMode 적용)
       const nextSel = [...groupSelection, tableObj.id];
       if (nextSel.length >= 2) {
-        createGroup?.(nextSel);
+        createGroup?.(nextSel, pendingGroupMode);
         exitAllModes();
       } else {
         setGroupSelection(nextSel);
@@ -291,20 +297,29 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       exitAllModes();
       return;
     }
-    // 단체로 묶인 테이블 중 아무거나 클릭 → 리더의 주문으로 이동, 라벨은 병합 표시
+    // 2026-05-21 사장님 룰: 단체 묶인 슬롯 클릭 — mode 별 분기
+    //   shared (통합): leader 의 주문으로 이동 (옛 동작, 모든 멤버 같이 작업)
+    //   split  (분리): 클릭한 슬롯 그대로 진입 (각자 자기 주문)
     const group = getGroupFor?.(tableObj.id);
     if (group) {
-      const leader = tables.find((tb) => tb.id === group.leaderId);
-      if (leader) {
-        onSelectTable?.({
-          ...leader,
-          id: group.leaderId,
-          label: buildGroupLabel(group.memberIds),
-          isGroup: true,
-          memberIds: group.memberIds,
-        });
-        return;
+      const groupMode = group.mode || 'shared';
+      if (groupMode === 'shared') {
+        const leader = tables.find((tb) => tb.id === group.leaderId);
+        if (leader) {
+          onSelectTable?.({
+            ...leader,
+            id: group.leaderId,
+            label: buildGroupLabel(group.memberIds),
+            isGroup: true,
+            memberIds: group.memberIds,
+            groupMode,
+          });
+          return;
+        }
       }
+      // split 모드 — 클릭한 슬롯 그대로 (각자 메뉴/결제)
+      onSelectTable?.({ ...tableObj, inGroup: true, groupMode });
+      return;
     }
     onSelectTable?.(tableObj);
   };
@@ -327,16 +342,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     }
     if (action === '단체') {
       if (groupMode) {
-        // 단체 모드 종료 — 2개 이상 선택되어 있으면 단체 생성
+        // 단체 모드 종료 — 2개 이상 선택되어 있으면 단체 생성 (pendingGroupMode 적용)
         if (groupSelection.length >= 2) {
-          createGroup?.(groupSelection);
+          createGroup?.(groupSelection, pendingGroupMode);
         }
         exitAllModes();
       } else {
+        // 2026-05-21 사장님 룰: 단체 진입 시 [통합][분리] 모달 먼저 띄움.
+        // 사장님 선택 → handleGroupModeSelect 가 setGroupMode(true) + pendingGroupMode 저장.
         exitAllModes();
-        setGroupMode(true);
-        setGroupSelection([]);
-        setMoveMessage('단체로 묶을 테이블을 선택 후 단체 버튼을 다시 누르세요 (2개 이상)');
+        setGroupModePickerOpen(true);
       }
       return;
     }
@@ -344,11 +359,15 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
 
   const renderTile = (t, { isSplitPart = false } = {}) => {
     const borderColor = tableTypeColors[t.type];
-    // 단체 — 이 테이블이 속한 단체 정보
+    // 단체 — 이 테이블이 속한 단체 정보 (mode: 'shared' | 'split')
     const group = getGroupFor?.(t.id);
     const isGrouped = !!group;
-    // 그룹 멤버는 주문 정보를 리더의 tableId 로부터 읽는다
-    const readTableId = isGrouped ? group.leaderId : t.id;
+    const groupMode = group?.mode || 'shared';
+    // 2026-05-21 사장님 룰:
+    //   - shared 모드 (통합): leader 의 order 를 양쪽 슬롯에서 동일하게 표시 (옛 동작)
+    //   - split  모드 (분리): 각 슬롯이 자기 state 의 order — 메뉴/금액 각자 분리
+    const readTableId =
+      isGrouped && groupMode === 'shared' ? group.leaderId : t.id;
     const order = getOrder(readTableId);
     const total = getOrderTotal(readTableId);
     const qty = getOrderQty(readTableId);
@@ -357,6 +376,15 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const cartOnly =
       (order.cartItems || []).length > 0 &&
       (order.items || []).length === 0;
+    // 2026-05-21 사장님 룰: 발신자 정보만 있고 메뉴는 아직 안 담긴 상태 = "주문대기".
+    // CID 자동 stash (10초 후) 또는 "주문받기" → OrderTypePicker → 슬롯 선택 흐름에서
+    // 발신자 정보만 박힌 빈 슬롯. 직원이 클릭하면 OrderScreen 으로 진입 → 메뉴 담음.
+    const isPendingCall =
+      !hasOrder &&
+      !cartOnly &&
+      (!!order.deliveryAlias ||
+        !!order.deliveryPhone ||
+        !!order.deliveryAddress);
     // 단체 모드에서 선택된 테이블 — 시각적 강조
     const isGroupSelected = groupMode && groupSelection.includes(t.id);
     // 단체 라벨: 묶인 테이블 번호들을 '+' 로 연결
@@ -396,15 +424,17 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const isPaid = order.paymentStatus === 'paid';
     const deliveryAddr = order.deliveryAddress;
     const isDelivery = t.type === 'delivery';
-    // 1.0.51: 배달 카드 표시 우선순위 (사장님 보고).
+    // 2026-05-21: 전화 주문(배달/예약/포장) 모두 동일 우선순위 라벨.
     //   1순위: 별칭 (order.deliveryAlias 또는 주소록 entry.alias) — 👤
     //   2순위: 전화번호 (order.deliveryPhone 또는 주소록 entry.phone) — ☎
-    //   3순위: 주소 (order.deliveryAddress) — 📍
+    //   3순위: 주소 (order.deliveryAddress) — 📍  ※ 배달만 의미있음
     const deliveryAliasFromOrder = order.deliveryAlias;
     const deliveryPhoneFromOrder = order.deliveryPhone;
     let deliveryAliasFromBook = null;
     let deliveryPhoneFromBook = null;
     let customerRequestFromBook = '';
+    // 주소록 lookup 은 *주소 키* 기반 — 배달 슬롯에서만 (예약/포장은 주소 없는 경우 일반).
+    // 예약/포장 단골은 order.deliveryAlias/Phone 에 박혀있어야 (CID PENDING → submitPendingAsType).
     if (isDelivery && deliveryAddr) {
       const key = normalizeAddressKey(deliveryAddr);
       const entry = key ? addressBook?.entries?.[key] : null;
@@ -414,13 +444,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     }
     const deliveryAlias = deliveryAliasFromOrder || deliveryAliasFromBook;
     const deliveryPhone = deliveryPhoneFromOrder || deliveryPhoneFromBook;
-    let deliveryPrimary;
-    let deliveryIcon;
+    let deliveryPrimary = null;
+    let deliveryIcon = null;
     if (deliveryAlias) {
       deliveryPrimary = deliveryAlias;
       deliveryIcon = '👤';
     } else if (deliveryPhone) {
-      // 표시용 포맷 (010-1234-5678) — 길면 그대로
       const d = String(deliveryPhone).replace(/\D/g, '');
       deliveryPrimary =
         d.length === 11 && d.startsWith('010')
@@ -429,7 +458,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
           : deliveryPhone;
       deliveryIcon = '☎';
-    } else {
+    } else if (isDelivery && deliveryAddr) {
+      // 예약/포장은 주소 없을 수 있음. 주소 fallback 은 배달만.
       deliveryPrimary = deliveryAddr;
       deliveryIcon = '📍';
     }
@@ -588,9 +618,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   )}
                 </View>
               </View>
-              {t.type === 'delivery' && deliveryAddr ? (
+              {/* 배달 카드 — 별칭/전번/주소 라벨 + 지도 버튼 (주소 있을 때만 지도) */}
+              {isDelivery && deliveryPrimary ? (
                 <TouchableOpacity
                   onPress={() => {
+                    if (!deliveryAddr) return;
                     const dk = normalizeAddressKey(deliveryAddr);
                     const de = dk ? addressBook?.entries?.[dk] : null;
                     setMapInfo({
@@ -605,19 +637,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     });
                   }}
                   activeOpacity={0.7}
+                  disabled={!deliveryAddr}
                 >
                   <Text style={styles.deliveryAddr} numberOfLines={1}>
                     {deliveryIcon} {deliveryPrimary}
                     {distanceLabel ? ` · ${distanceLabel}` : ''}
-                    {' 🗺️'}
+                    {deliveryAddr ? ' 🗺️' : ''}
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              {/* 1.0.47: 예약 시각 / 포장 픽업 시각 표기 — 배달 deliveryTime 필드 재사용 */}
-              {(t.type === 'reservation' || t.type === 'takeout') && order.deliveryTime ? (
-                <Text style={styles.deliveryAddr} numberOfLines={1}>
-                  {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
-                </Text>
+              {/* 2026-05-21: 예약/포장 — 별칭/전번 (있으면) + 시각 표기.
+                  CID PENDING → submitPendingAsType 흐름으로 박힌 alias/phone 이 라이더가 아닌
+                  *사장님 식별* 용으로 표시됨. */}
+              {(t.type === 'reservation' || t.type === 'takeout') ? (
+                <>
+                  {deliveryPrimary ? (
+                    <Text style={styles.deliveryAddr} numberOfLines={1}>
+                      {deliveryIcon} {deliveryPrimary}
+                    </Text>
+                  ) : null}
+                  {order.deliveryTime ? (
+                    <Text style={styles.deliveryAddr} numberOfLines={1}>
+                      {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
               {customerRequestFromBook ? (
                 <Text style={styles.deliveryRequest} numberOfLines={1}>
@@ -769,6 +813,21 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               >
                 {displayLabel}
               </Text>
+            </View>
+          ) : isPendingCall ? (
+            <View style={styles.tilePendingCallWrap}>
+              <Text style={styles.tilePendingCallBadge}>🕐 주문대기</Text>
+              <Text
+                style={isSplitPart ? styles.tileLabelTiny : styles.tileLabel}
+                numberOfLines={1}
+              >
+                {displayLabel}
+              </Text>
+              {deliveryPrimary ? (
+                <Text style={styles.tilePendingCallLabel} numberOfLines={1}>
+                  {deliveryIcon} {deliveryPrimary}
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View style={styles.tileEmptyWrap}>
@@ -1345,6 +1404,24 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           }}
         />
       ) : null}
+
+      {/* 2026-05-21: 단체 묶기 시 [통합][분리] 모드 선택 모달 */}
+      <GroupModePicker
+        open={groupModePickerOpen}
+        memberLabels={[]}
+        onSelect={(mode) => {
+          setGroupModePickerOpen(false);
+          setPendingGroupMode(mode);
+          setGroupMode(true);
+          setGroupSelection([]);
+          setMoveMessage(
+            mode === 'shared'
+              ? '🔗 통합 모드 — 단체로 묶을 테이블을 2개 이상 선택'
+              : '✂️ 분리 모드 — 단체로 묶을 테이블을 2개 이상 선택'
+          );
+        }}
+        onClose={() => setGroupModePickerOpen(false)}
+      />
 
       {/* 1.0.37: 단체 묶음 테이블 결제 — 합산/분리 선택 모달 */}
       <GroupPaymentSplitPicker

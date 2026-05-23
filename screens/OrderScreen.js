@@ -25,10 +25,12 @@ import {
 import { getCustomerRequest } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
+import OrderTypePicker from '../components/OrderTypePicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import TableSourcePicker from '../components/TableSourcePicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
+import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
@@ -50,6 +52,11 @@ import {
   parseVoiceOrder,
 } from '../utils/voice';
 import { reportError } from '../utils/sentry';
+import {
+  loadMemoTemplates,
+  appendChipToMemo,
+  isChipActive,
+} from '../utils/memoTemplates';
 
 export default function OrderScreen({
   table,
@@ -58,6 +65,8 @@ export default function OrderScreen({
   onRequestOrderWithTable,
   autoConfirmIntent,
   clearAutoConfirmIntent,
+  setSelectedTable,
+  goToTableWithSelection,
 }) {
   // 컴포넌트 전체에서 사용하는 web 여부 — JSX 평가 시점 ReferenceError 방지를 위해
   // 함수 상단에 한 번 정의. 26a620a 가 line 817 에서 !isWeb 사용 추가했는데
@@ -74,6 +83,10 @@ export default function OrderScreen({
   const [pendingAutoConfirm, setPendingAutoConfirm] = useState(false);
   // 메모 입력 프롬프트 — { slotId, value }
   const [memoPrompt, setMemoPrompt] = useState(null);
+  // 자주 쓰는 메모 칩 — 관리자에서 편집 가능. 모달 열릴 때 reload (사장님이 방금 수정했을 수 있음).
+  const [memoTemplates, setMemoTemplates] = useState([]);
+  // 배달/예약/포장 시간 휠 모달 (1.0.54: 숫자 키패드 입력 → iOS 알람 스타일 휠)
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   // 옵션 편집 모달 표시
   const [optionsEditOpen, setOptionsEditOpen] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
@@ -174,6 +187,7 @@ export default function OrderScreen({
     migratePendingCart,
     clearPendingCart,
     submitPendingAsDelivery,
+    submitPendingAsType,
     addressBook,
     addAddress,
     getGroupFor,
@@ -197,6 +211,9 @@ export default function OrderScreen({
   // 선택 기억 — 같은 손님 연속 추가가 보통이라 자동 적용 + 변경 가능.
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerMembers, setGroupPickerMembers] = useState([]);
+  // 2026-05-21: PENDING + cart + "주문" 누름 시 → 배달/포장/예약 3옵션 모달.
+  // 사장님이 선택한 type 으로 자동 슬롯 배당 + PENDING 의 phone/alias/address transfer + confirm.
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [pendingMenuItem, setPendingMenuItem] = useState(null);
   const [pendingMenuSlotId, setPendingMenuSlotId] = useState(null);
   const [pendingMenuHasLarge, setPendingMenuHasLarge] = useState(false);
@@ -411,7 +428,15 @@ export default function OrderScreen({
   ]);
 
   // 장바구니 = 편집중 내역. items = 이미 주방/테이블에 확정 커밋된 내역.
-  const cart = order.cartItems ?? order.items ?? [];
+  // 1.0.55: 확정된 슬롯 재진입 시 사장님이 옛 메뉴를 보고 수정 가능해야 함.
+  // 어제(2026-05-21) fix 가 confirmOrder 직후 cartItems=[] 강제 → 사장님 신고
+  // "테이블 메뉴 변경하려고 들어가면 카트가 비어있어 수정 불가". 처방:
+  //   - cartItems 가 *비어있지 않으면* (=사장님 수정중) cartItems 사용
+  //   - cartItems 가 *비어있으면* (=확정 직후 또는 재진입) items 사용
+  //   - 어제 fix 의 reducer 변경(cartItems: [])은 유지 — 무한 토글 fix 의 근거는 그대로
+  const cart = (order.cartItems && order.cartItems.length > 0)
+    ? order.cartItems
+    : (order.items ?? []);
   const committedItems = order.items ?? [];
   const total = getCartTotal(tableId);
   const totalQty = getCartQty(tableId);
@@ -441,14 +466,9 @@ export default function OrderScreen({
 
   const handleMenuPress = (item) => {
     if (!tableId) return;
-    const group = getGroupFor?.(tableId);
-    if (group && group.memberIds && group.memberIds.length > 1) {
-      // 단체 — sourceTable 선택 모달. 마지막 선택은 ★ 강조.
-      setPendingMenuItem(item);
-      setGroupPickerMembers(group.memberIds);
-      setGroupPickerOpen(true);
-      return;
-    }
+    // 2026-05-21 사장님 룰: "어느 손님?" 팝업 제거 — 단체 모드 (shared/split)
+    // 가 단체 묶기 시점에 이미 결정됨. shared 면 leader 슬롯에 자동, split 이면
+    // 클릭한 멤버 슬롯에 자동. TableSourcePicker 호출 제거.
     applyMenuAdd(item, null);
   };
 
@@ -689,6 +709,18 @@ export default function OrderScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table?.id]);
 
+  // 메모 모달 열릴 때마다 템플릿 reload — 관리자에서 방금 수정했을 수 있음.
+  useEffect(() => {
+    if (!memoPrompt) return;
+    let alive = true;
+    loadMemoTemplates().then((list) => {
+      if (alive) setMemoTemplates(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [memoPrompt?.slotId]);
+
   // 자동 확정: pendingAutoConfirm 가 set 되고 cart 가 (마이그레이션 후) 채워진 시점에 한 번 실행.
   useEffect(() => {
     if (!pendingAutoConfirm) return;
@@ -870,6 +902,47 @@ export default function OrderScreen({
                   <Text style={styles.sizeModalCloseText}>✕</Text>
                 </TouchableOpacity>
                 <Text style={styles.sizeModalLine1}>{targetItem.name} 메모</Text>
+                {/* 자주 쓰는 메모 칩 — 누르면 입력창에 추가/제거(토글). 관리자에서 편집. */}
+                {memoTemplates.length > 0 ? (
+                  <>
+                    <View style={styles.memoChipsWrap}>
+                      {memoTemplates.map((chip, idx) => {
+                        const active = isChipActive(memoPrompt.value, chip);
+                        return (
+                          <TouchableOpacity
+                            key={`${chip}-${idx}`}
+                            style={[
+                              styles.memoChip,
+                              active && styles.memoChipActive,
+                            ]}
+                            onPress={() => {
+                              setMemoPrompt((p) =>
+                                p
+                                  ? {
+                                      ...p,
+                                      value: appendChipToMemo(p.value, chip),
+                                    }
+                                  : p
+                              );
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.memoChipText,
+                                active && styles.memoChipTextActive,
+                              ]}
+                            >
+                              {chip}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.memoChipsHint}>
+                      누르면 추가 / 다시 누르면 제거
+                    </Text>
+                  </>
+                ) : null}
                 {/* 확인/비우기 버튼을 TextInput 위에 배치 — iOS 키보드가 올라와도 항상 보임 */}
                 <View style={styles.memoModalRow}>
                   <TouchableOpacity
@@ -1023,14 +1096,18 @@ export default function OrderScreen({
             tType === 'reservation' ? '6:30' : tType === 'takeout' ? '5:15' : '4:20';
           return (
             <View style={styles.headerAddressWrap}>
-              {tType === 'delivery' && (
+              {/* 2026-05-21 사장님 룰: 배달탭 진입 흐름과 통일 — 포장/예약 슬롯에서도
+                  주소 입력 칸 + 발신자 라벨 + 주소록 모달 표시. 매장 홀(t01 등)은 제외. */}
+              {needsTime && (
                 <>
-                  <Text style={styles.deliveryLabel}>📍</Text>
+                  <Text style={styles.deliveryLabel}>
+                    {tType === 'delivery' ? '📍' : tType === 'takeout' ? '🛍' : '📅'}
+                  </Text>
                   <TextInput
                     style={[styles.deliveryInput, styles.deliveryInputCompact]}
                     value={order.deliveryAddress || ''}
                     onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
-                    placeholder="주소"
+                    placeholder={tType === 'delivery' ? '주소' : '주소 (선택)'}
                     placeholderTextColor="#9ca3af"
                     returnKeyType="done"
                     onSubmitEditing={() => Keyboard.dismiss()}
@@ -1086,59 +1163,39 @@ export default function OrderScreen({
                   )}
                 </>
               )}
-              <Text style={styles.deliveryLabelTight}>🕐</Text>
-              <View style={styles.ampmGroup}>
-                <TouchableOpacity
-                  style={[
-                    styles.ampmBtn,
-                    !order.deliveryTimeIsPM && styles.ampmBtnActive,
-                  ]}
-                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, false)}
-                >
-                  <Text
-                    style={[
-                      styles.ampmText,
-                      !order.deliveryTimeIsPM && styles.ampmTextActive,
-                    ]}
-                  >
-                    오전
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.ampmBtn,
-                    (order.deliveryTimeIsPM ?? true) && styles.ampmBtnActive,
-                  ]}
-                  onPress={() => tableId && setDeliveryTimeIsPM(tableId, true)}
-                >
-                  <Text
-                    style={[
-                      styles.ampmText,
-                      (order.deliveryTimeIsPM ?? true) && styles.ampmTextActive,
-                    ]}
-                  >
-                    오후
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={[styles.deliveryTimeInput, styles.deliveryTimeInputCompact]}
-                value={order.deliveryTime || ''}
-                onChangeText={(v) => tableId && setDeliveryTime(tableId, v)}
-                placeholder={timePlaceholder}
-                placeholderTextColor="#9ca3af"
-                maxLength={5}
-                keyboardType="numeric"
-                returnKeyType="done"
-                onSubmitEditing={() => Keyboard.dismiss()}
-                blurOnSubmit
-              />
+              <TouchableOpacity
+                style={styles.deliveryTimePickerBtn}
+                onPress={() => tableId && setTimePickerOpen(true)}
+                activeOpacity={0.8}
+                accessibilityLabel="배달 시간 선택"
+              >
+                <Text style={styles.deliveryTimePickerIcon}>🕐</Text>
+                {(() => {
+                  const parsed = parseDeliveryTime(
+                    order?.deliveryTime,
+                    order?.deliveryTimeIsPM ?? true,
+                  );
+                  return (
+                    <Text
+                      style={[
+                        styles.deliveryTimePickerValue,
+                        !parsed && styles.deliveryTimePickerPlaceholder,
+                      ]}
+                    >
+                      {parsed ? formatShort12h(parsed) : '시간 선택'}
+                    </Text>
+                  );
+                })()}
+              </TouchableOpacity>
             </View>
           );
         })()}
       </View>
 
-      {table?.type === 'delivery' && (
+      {/* 2026-05-21: 포장/예약도 주소록 모달 표시 (사장님 룰 — 배달탭 진입과 동일 흐름) */}
+      {(table?.type === 'delivery' ||
+        table?.type === 'takeout' ||
+        table?.type === 'reservation') && (
         <AddressBookModal
           visible={addressBookOpen}
           onClose={() => setAddressBookOpen(false)}
@@ -1884,8 +1941,16 @@ export default function OrderScreen({
                 ]}
                 numberOfLines={1}
               >
+                {/* 2026-05-21 사장님 룰: PENDING + 발신자 정보 있으면 "미선택" 대신
+                    별칭/전번/주소 우선순위로 라벨 표시 — 메뉴 담는 중에도 누구 주문인지 식별. */}
                 {isPending
-                  ? '미선택'
+                  ? (order?.deliveryAlias
+                      ? `👤 ${order.deliveryAlias}`
+                      : order?.deliveryPhone
+                      ? `☎ ${order.deliveryPhone}`
+                      : order?.deliveryAddress
+                      ? `📍 ${order.deliveryAddress}`
+                      : '미선택')
                   : table?.isGroup
                   ? `👥 ${table.label}`
                   : table?.label || ''}
@@ -1953,33 +2018,13 @@ export default function OrderScreen({
                     disabled={!isPending && cart.length === 0}
                     onPress={() => {
                       if (isPending) {
-                        // 1.0.47: 미선택 + cart 있음 + "주문" → 빈 배달 슬롯 자동 배당 + 확정.
-                        // PENDING 에 미리 박힌 주소/전화/별칭(CID 흐름)이 있으면 같이 옮김.
+                        // 2026-05-21: 미선택 + cart 있음 + "주문" → 배달/포장/예약 3옵션 모달.
+                        //   사장님 직접 선택 후 submitPendingAsType 가 type 별 빈 슬롯 자동 배당
+                        //   + PENDING 의 phone/alias/address transfer + confirm.
+                        // 옛 1.0.47 자동 배달은 제거 — 전화 주문이 배달뿐만이 아니라 포장/예약도
+                        // 있어서 사장님이 직접 선택하는 흐름이 더 정확.
                         if (cart.length > 0) {
-                          const targetId = submitPendingAsDelivery({
-                            deliveryAddress: order?.deliveryAddress,
-                            deliveryPhone: order?.deliveryPhone,
-                            deliveryAlias: order?.deliveryAlias,
-                          });
-                          if (targetId) {
-                            const targetTable = {
-                              id: targetId,
-                              label: `배달${targetId.slice(1)}`,
-                              type: 'delivery',
-                            };
-                            playOrderSound();
-                            speakOrder({
-                              table: targetTable,
-                              order: { ...order, items: cart },
-                              menuItems,
-                              optionsList: options,
-                            });
-                            // migrate 가 dispatch 비동기라 다음 마이크로태스크에 확정.
-                            setTimeout(() => {
-                              confirmOrder(targetId);
-                              onBack?.();
-                            }, 0);
-                          }
+                          setTypePickerOpen(true);
                           return;
                         }
                         // cart 비어있으면 단순 테이블 탭 이동.
@@ -2126,9 +2171,17 @@ export default function OrderScreen({
                     ]}
                     disabled={!hasCommittedOrder || isPending}
                     onPress={() => {
-                      // 1.0.37: 단체 묶음이면 합산/분리 선택 모달 먼저
+                      // 1.0.37: 단체 묶음 시 합산/분리 선택 모달.
+                      // 2026-05-21 사장님 룰: split (분리) 모드는 *애초에* 각자 결제 →
+                      // 합산/분리 모달 건너뛰고 즉시 결제 picker. shared (통합) 모드만
+                      // 필요 시 분리 결제 가능 (GroupPaymentSplitPicker 그대로).
                       const group = getGroupFor?.(tableId);
-                      if (group && group.memberIds && group.memberIds.length > 1) {
+                      const isSharedGroup =
+                        group &&
+                        group.memberIds &&
+                        group.memberIds.length > 1 &&
+                        (group.mode || 'shared') === 'shared';
+                      if (isSharedGroup) {
                         const ord = getOrder(tableId);
                         const subs = computeSubtotalsBySource(
                           ord?.items || [],
@@ -2266,13 +2319,15 @@ export default function OrderScreen({
             }
 
             setPaymentPicker(null);
-            // 선불 = 결제만 (테이블 유지). 후불 = 결제 + 테이블 비우기 + 뒤로.
+            // 2026-05-21 사장님 룰: 선불도 결제 직후 테이블 탭으로 자동 복귀.
+            // 옛 코드는 선불 후 주문 탭에 남아서 직원이 수동 탭 이동 번거로움.
+            // 후불은 clearTable 까지 호출 (테이블 비움), 선불은 markPaid 만 (결제완료 배지 유지).
             if (mode === 'prepaid') {
               markPaid(id, picked);
             } else {
               clearTable(id, picked);
-              onBack?.();
             }
+            onBack?.();
             // 자동 출력 — receipt 데이터로 비동기 호출. 실패해도 결제 흐름엔 영향 X.
             if (receiptData) {
               printReceipt(receiptData).catch(() => {});
@@ -2307,18 +2362,71 @@ export default function OrderScreen({
         />
       ) : null}
 
-      {/* 1.0.36: 단체 묶음 후 메뉴 추가 시 어느 손님인지 묻는 모달 */}
-      <TableSourcePicker
-        open={groupPickerOpen}
-        members={groupPickerMembers}
-        lastSourceId={
-          (() => {
-            const group = getGroupFor?.(tableId);
-            return group?.leaderId ? lastSourceByGroup[group.leaderId] : null;
-          })()
-        }
-        onSelect={handleGroupSourceSelect}
-        onClose={handleGroupSourceCancel}
+      {/* 2026-05-21: PENDING + cart + "주문" 누름 시 배달/포장/예약 3옵션 모달.
+          사장님 선택 → submitPendingAsType → 슬롯 배당 + PENDING 정보 transfer →
+          그 슬롯 OrderScreen 으로 navigate (테이블 탭 활성화).
+          사장님이 *배달탭에서 배달1 클릭 진입 흐름과 동일* 한 화면에서 주소/메뉴 검토 후
+          직접 "주문" 한 번 더 누르면 confirm — 자동 confirm 제거로 잘못된 주소로 확정되는
+          사고 차단 (사장님 요청 2026-05-21). */}
+      {typePickerOpen ? (
+        <OrderTypePicker
+          total={total}
+          callerLabel={
+            order?.deliveryAlias ||
+            order?.deliveryPhone ||
+            order?.deliveryAddress ||
+            null
+          }
+          onClose={() => setTypePickerOpen(false)}
+          onSelect={(type) => {
+            setTypePickerOpen(false);
+            const targetId = submitPendingAsType(type, {
+              deliveryAddress: order?.deliveryAddress,
+              deliveryPhone: order?.deliveryPhone,
+              deliveryAlias: order?.deliveryAlias,
+            });
+            if (!targetId) return;
+            const targetTable =
+              resolveAnyTable(targetId) || { id: targetId, label: targetId, type };
+            // 새 슬롯 선택 + 테이블 탭으로 전환을 *한 번에* — 배달탭 진입과 동일 화면.
+            // goToTableWithSelection 은 tableResetSignal 증가시키지 않아 selectedTable
+            // 가 안전하게 유지됨 (handleTabPress 의 reset effect 회피).
+            if (typeof goToTableWithSelection === 'function') {
+              goToTableWithSelection(targetTable);
+              return;
+            }
+            // fallback (legacy) — 기존 자동 confirm 흐름.
+            playOrderSound();
+            speakOrder({
+              table: targetTable,
+              order: { ...order, items: cart },
+              menuItems,
+              optionsList: options,
+            });
+            setTimeout(() => {
+              confirmOrder(targetId);
+              onBack?.();
+            }, 0);
+          }}
+        />
+      ) : null}
+
+      {/* 2026-05-21: TableSourcePicker 제거 — 사장님 룰 "어느 손님 팝업 필요없음".
+          단체 모드 (shared/split) 가 단체 묶기 시점에 결정됨. */}
+
+      {/* 1.0.54: 배달/예약/포장 시간 휠 모달 — iOS 알람 스타일 위/아래 쓸기로 선택 */}
+      <TimeWheelPicker
+        visible={timePickerOpen}
+        initialText={order?.deliveryTime}
+        initialIsPM={order?.deliveryTimeIsPM ?? true}
+        onConfirm={({ text, isPM }) => {
+          if (tableId) {
+            setDeliveryTime(tableId, text);
+            setDeliveryTimeIsPM(tableId, isPM);
+          }
+          setTimePickerOpen(false);
+        }}
+        onCancel={() => setTimePickerOpen(false)}
       />
     </View>
   );

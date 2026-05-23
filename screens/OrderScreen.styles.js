@@ -164,6 +164,31 @@ export default function makeStyles(scale = 1) {
   ampmText: { fontSize: fp(12), fontWeight: '700', color: '#991b1b' },
   ampmTextActive: { color: '#fff' },
 
+  // 시간 휠 트리거 버튼 — AM/PM 토글 + TextInput 통합 (1.0.54)
+  deliveryTimePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 4,
+  },
+  deliveryTimePickerIcon: { fontSize: fp(13) },
+  deliveryTimePickerValue: {
+    fontSize: fp(13),
+    fontWeight: '800',
+    color: '#dc2626',
+    minWidth: 70,
+  },
+  deliveryTimePickerPlaceholder: {
+    color: '#9ca3af',
+    fontWeight: '600',
+  },
+
   body: { flex: 1, flexDirection: 'row', minHeight: 0 },
   bodyStacked: { flexDirection: 'column' },
   menuSide: { flex: 1, minHeight: 0, minWidth: 0 },
@@ -399,6 +424,40 @@ export default function makeStyles(scale = 1) {
     borderColor: '#d1d5db',
   },
   memoClearBtnText: { color: '#374151', fontSize: fp(13), fontWeight: '700' },
+  // 메모 템플릿 칩 — 자주 쓰는 문구 원클릭 (관리자에서 편집)
+  memoChipsWrap: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  memoChipsHint: {
+    fontSize: fp(11),
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  memoChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  memoChipActive: {
+    backgroundColor: '#dbeafe', // blue-100
+    borderColor: '#3b82f6', // blue-500
+  },
+  memoChipText: {
+    color: '#374151',
+    fontSize: fp(12),
+    fontWeight: '600',
+  },
+  memoChipTextActive: {
+    color: '#1d4ed8', // blue-700
+  },
   // 옵션 편집 모달
   optionsEditCard: {
     width: '100%',

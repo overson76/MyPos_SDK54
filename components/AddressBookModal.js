@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   PanResponder,
   Platform,
   Pressable,
@@ -290,6 +291,12 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
+        {/* 1.0.54: 가로 모드 키보드(landscape, 풍경) 가 입력칸 가리는 문제 처방.
+            iOS=padding / Android=height. KAV 가 키보드 영역만큼 컨텐츠 위로 밀어올림. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidWrap}
+        >
         <Pressable
           style={styles.sheet}
           // 7차 fix(View+responder) 가 PC web 에서 자식 click bubble 을
@@ -560,6 +567,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             </View>
           )}
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </View>
   );
@@ -603,6 +611,13 @@ function makeStyles(scale = 1, viewportH = 800) {
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+  },
+  // 1.0.54: 가로 모드 키보드 가림 처방 (모든 모달 공통 패턴)
+  keyboardAvoidWrap: {
+    width: '100%',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sheet: {
     width: '100%',

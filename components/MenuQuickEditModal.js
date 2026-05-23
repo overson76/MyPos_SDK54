@@ -5,6 +5,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -91,6 +93,10 @@ export default function MenuQuickEditModal({ item, addAt, onClose }) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidWrap}
+        >
         <Pressable style={styles.card} onPress={() => {}}>
           {/* 헤더 */}
           <View style={styles.header}>
@@ -184,6 +190,7 @@ export default function MenuQuickEditModal({ item, addAt, onClose }) {
               : '이미지·카테고리 등 상세 수정 → 관리자 → 메뉴 관리'}
           </Text>
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </View>
   );
@@ -200,6 +207,12 @@ function makeStyles(scale = 1) {
       backgroundColor: 'rgba(0,0,0,0.55)',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    keyboardAvoidWrap: {
+      width: '100%',
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     card: {
       width: 320,

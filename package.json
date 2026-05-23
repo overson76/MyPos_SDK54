@@ -3,10 +3,13 @@
   "version": "1.0.52",
   "main": "index.js",
   "scripts": {
+    "prestart": "node scripts/sync-secrets.js",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "secrets:sync": "node scripts/sync-secrets.js",
+    "secrets:push": "node scripts/sync-secrets.js push",
     "deploy:web": "bash scripts/deploy-web.sh",
     "electron": "electron electron/main.js",
     "electron:kiosk": "cross-env MYPOS_KIOSK=1 electron electron/main.js",

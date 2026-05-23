@@ -114,25 +114,27 @@ describe('buildReceiptText', () => {
     expect(text).not.toContain('▸');
     expect(text).toContain('■ 테이블');
     expect(text).toContain('● 분리 결제 손님');
-    // 1.0.44: orderType 미지정 + deliveryAddress 있음 → 'delivery' 추정 → 새 형식
-    expect(text).toContain('배달지');
+    // 2026-05-21: "배달지 " prefix 제거 정책 — 별칭/전번 없을 땐 주소가 단독 라벨.
+    expect(text).not.toContain('배달지 ');
+    expect(text).toContain('서울시 종로구');
     expect(text).toContain('- 매운맛');
     expect(text).toContain('메모: 소스 따로');
   });
 
-  test('배달 주소만 있고 orderType 미지정 — 옛 호환 "■ 배달:" fallback', () => {
+  test('배달 주소만 있고 orderType 미지정 — 주소가 단일 라벨로 출력', () => {
     const text = buildReceiptText({
       ...sample,
       deliveryAddress: '서울시 종로구 ...',
     });
     // 1.0.44: orderType 미지정 + deliveryAddress 만 있으면 'delivery' 로 추정
+    // 2026-05-21: "배달지 " prefix 제거 → 주소만 출력
     expect(text).toContain('배 달 주 문 지');
-    expect(text).toContain('배달지');
+    expect(text).not.toContain('배달지 ');
     expect(text).toContain('서울시 종로구');
   });
 
-  // 1.0.44 신규 ───────────────────────────────────────────────
-  test('1.0.44 — orderType=delivery + 손님 정보 + 도로거리 + 배달요청 시각', () => {
+  // 1.0.44 + 2026-05-21 라벨 정책 ───────────────────────────────
+  test('배달 라벨 — 별칭 있으면 별칭만 단독 출력 (주소/전번 미표시)', () => {
     const text = buildReceiptText({
       ...sample,
       orderType: 'delivery',
@@ -145,12 +147,42 @@ describe('buildReceiptText', () => {
       scheduledTimeIsPM: true,
     });
     expect(text).toContain('배 달 주 문 지');
-    expect(text).toContain('배달지 부산 사하구 하신번영로 199');
-    expect(text).toContain('별칭   김씨네 아파트');
-    expect(text).toContain('손님   010-1234-5678');
+    // 사장님 정책: 별칭 > 전번 > 주소. 별칭 있으면 별칭만 prefix 없이.
+    expect(text).toContain('김씨네 아파트');
+    expect(text).not.toContain('배달지 ');
+    expect(text).not.toContain('별칭 ');
+    expect(text).not.toContain('손님 ');
+    expect(text).not.toContain('부산 사하구');
+    expect(text).not.toContain('010-1234-5678');
+    // 도로/출발 메타는 그대로 유지
     expect(text).toContain('도로   2.3km');
     expect(text).toContain('12분');
     expect(text).toContain('출발   오후 4시 20분');
+  });
+
+  test('배달 라벨 — 별칭 없고 전번만 있으면 전번이 라벨 (포맷팅됨)', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 하신번영로 199',
+      customerPhone: '01012345678',
+      customerAlias: null,
+    });
+    expect(text).toContain('010-1234-5678');
+    expect(text).not.toContain('부산 사하구');
+    expect(text).not.toContain('배달지 ');
+  });
+
+  test('배달 라벨 — 별칭/전번 모두 없으면 주소가 라벨', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'delivery',
+      deliveryAddress: '부산 사하구 하신번영로 199',
+      customerPhone: null,
+      customerAlias: null,
+    });
+    expect(text).toContain('부산 사하구 하신번영로 199');
+    expect(text).not.toContain('배달지 ');
   });
 
   test('1.0.44 — orderType=reservation 헤더 + 예약시각', () => {
@@ -174,6 +206,68 @@ describe('buildReceiptText', () => {
     });
     expect(text).toContain('포 장 주 문 지');
     expect(text).toContain('픽업시각 오후 5시 15분');
+  });
+
+  // 2026-05-21: 예약/포장에도 단일 라벨 (별칭/전번) 정책 통일 ─────────
+  test('예약 — customerAlias 있으면 라벨 한 줄 + 예약시각', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'reservation',
+      customerAlias: '진실보석',
+      customerPhone: '01012345678',
+      scheduledTime: '630',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('예 약 주 문 지');
+    // 별칭 우선, prefix 없이
+    expect(text).toContain('진실보석');
+    expect(text).not.toContain('010-1234-5678');
+    expect(text).toContain('예약시각 오후 6시 30분');
+  });
+
+  test('예약 — 별칭 없고 전번만 있으면 전번이 라벨', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'reservation',
+      customerPhone: '01012345678',
+      scheduledTime: '630',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('010-1234-5678');
+    expect(text).toContain('예약시각');
+  });
+
+  test('포장 — customerAlias 있으면 라벨 한 줄 + 픽업시각', () => {
+    const text = buildReceiptText({
+      ...sample,
+      orderType: 'takeout',
+      customerAlias: '하나헤어',
+      scheduledTime: '515',
+      scheduledTimeIsPM: true,
+    });
+    expect(text).toContain('포 장 주 문 지');
+    expect(text).toContain('하나헤어');
+    expect(text).toContain('픽업시각');
+  });
+
+  test('포장/예약 — 별칭/전번 없으면 시각만 (라벨 빈 줄 없음)', () => {
+    const t1 = buildReceiptText({
+      ...sample,
+      orderType: 'reservation',
+      scheduledTime: '630',
+      scheduledTimeIsPM: true,
+    });
+    expect(t1).toContain('예약시각');
+    expect(t1).not.toContain('배달지');
+
+    const t2 = buildReceiptText({
+      ...sample,
+      orderType: 'takeout',
+      scheduledTime: '515',
+      scheduledTimeIsPM: true,
+    });
+    expect(t2).toContain('픽업시각');
+    expect(t2).not.toContain('배달지');
   });
 
   test('단골요청 — orderType=delivery 에서만 표시 (주방·라이더용)', () => {
@@ -217,9 +311,11 @@ describe('buildReceiptText', () => {
       drivingDistanceM: null,
     });
     expect(text).toContain('배 달 주 문 지');
-    expect(text).toContain('배달지');
-    expect(text).not.toContain('별칭');
-    expect(text).not.toContain('손님');
+    // 2026-05-21: 라벨 prefix 없이 주소만
+    expect(text).toContain('부산 사하구');
+    expect(text).not.toContain('배달지 ');
+    expect(text).not.toContain('별칭 ');
+    expect(text).not.toContain('손님 ');
     expect(text).not.toContain('도로');
   });
 

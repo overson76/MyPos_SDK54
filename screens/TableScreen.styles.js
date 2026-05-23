@@ -344,6 +344,30 @@ export default function makeStyles(scale = 1) {
     borderRadius: 10,
     overflow: 'hidden',
   },
+  // 2026-05-21: 주문대기 (발신자 정보만 있고 메뉴 없음) — 파랑 톤으로 구분
+  tilePendingCallWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  tilePendingCallBadge: {
+    fontSize: fp(8),
+    color: '#fff',
+    fontWeight: '800',
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tilePendingCallLabel: {
+    fontSize: fp(10),
+    color: '#1e3a8a',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   tileGroupBadge: {
     fontSize: fp(8),
     color: '#fff',
