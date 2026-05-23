@@ -168,6 +168,27 @@ export function orderReducer(state, action) {
       return rest;
     }
 
+    // 2026-05-23: OrderScreen 재진입 시 cartItems=[] && items.length>0 이면
+    // cartItems = items 카피로 동기화. 옛 line-437 fallback (cart 표시 시 items
+    // 로 대체) 의 부작용 — 사장님이 - 키로 cartItems 를 0 까지 비우면 화면이
+    // items 의 원본 qty 로 다시 표시되어 "1 로 남는다 / 안 빠진다" 증상 — 차단.
+    // 호출자(OrderScreen useEffect) 가 ref 가드로 진입 시 1 회만 호출하므로
+    // 사장님이 비운 직후 자동 복원되지 않음.
+    case 'orders/hydrateCartFromItems': {
+      const { tableId } = action;
+      const existing = state[tableId];
+      if (!existing) return state;
+      if ((existing.cartItems || []).length > 0) return state;
+      if ((existing.items || []).length === 0) return state;
+      return {
+        ...state,
+        [tableId]: {
+          ...existing,
+          cartItems: existing.items.map((i) => ({ ...i })),
+        },
+      };
+    }
+
     case 'orders/markReady': {
       const { tableId } = action;
       if (!state[tableId]) return state;

@@ -1115,3 +1115,102 @@ describe('orderReducer · clearTableBySource (1.0.37 분리 결제)', () => {
     expect(next.t1.items[0].slotId).toBe('a2');
   });
 });
+
+// 2026-05-23 회귀 방지 — 사장님 신고 "주문 후 카트 비어 보임 + - 키 0까지 누르면 1로 남음"
+// 의 근본 원인: OrderScreen 의 옛 cart 표시 fallback (cartItems=[]일 때 items 로 대체).
+// 처방은 OrderScreen 의 useEffect 가 hydrateCartFromItems 1회 호출 — reducer 측 가드.
+describe('orderReducer · hydrateCartFromItems (재진입 시 카트 동기화)', () => {
+  test('cartItems=[] && items 있으면 items 카피로 cartItems 채움', () => {
+    const s = {
+      t1: makeOrder({
+        items: [
+          { slotId: 's1', id: 'm1', name: '김치찌개', qty: 2, cookState: 'pending' },
+          { slotId: 's2', id: 'm2', name: '비빔밥', qty: 1, cookState: 'cooked' },
+        ],
+        cartItems: [],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/hydrateCartFromItems',
+      tableId: 't1',
+    });
+    expect(next.t1.cartItems).toHaveLength(2);
+    expect(next.t1.cartItems[0].slotId).toBe('s1');
+    expect(next.t1.cartItems[0].qty).toBe(2);
+    // 카피여야 함 (참조 공유 X) — 사장님이 cart 수정해도 items 안 바뀌게
+    expect(next.t1.cartItems[0]).not.toBe(s.t1.items[0]);
+    // items 는 그대로
+    expect(next.t1.items).toBe(s.t1.items);
+  });
+
+  test('cartItems 가 이미 채워져 있으면 변화 없음 (사장님이 - 로 비운 직후 자동 복원 차단)', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', qty: 2 }],
+        cartItems: [{ slotId: 's1', qty: 1 }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/hydrateCartFromItems',
+      tableId: 't1',
+    });
+    expect(next).toBe(s);
+  });
+
+  test('items 비어있으면 변화 없음 (hydrate 할 source 없음)', () => {
+    const s = {
+      t1: makeOrder({ items: [], cartItems: [] }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/hydrateCartFromItems',
+      tableId: 't1',
+    });
+    expect(next).toBe(s);
+  });
+
+  test('존재하지 않는 tableId 면 변화 없음', () => {
+    const s = { t1: makeOrder({ items: [{ slotId: 's1', qty: 1 }] }) };
+    const next = orderReducer(s, {
+      type: 'orders/hydrateCartFromItems',
+      tableId: 't999',
+    });
+    expect(next).toBe(s);
+  });
+
+  test('사장님 시나리오: 진입 hydrate → - 키 2회 → cart 비고 items 그대로', () => {
+    // 1) 진입 시점 — items=[X qty=2], cartItems=[]
+    let s = {
+      t1: makeOrder({
+        items: [{ slotId: 's1', id: 'm1', qty: 2, cookState: 'pending' }],
+        cartItems: [],
+      }),
+    };
+    // 2) effect hydrate 호출
+    s = orderReducer(s, {
+      type: 'orders/hydrateCartFromItems',
+      tableId: 't1',
+    });
+    expect(s.t1.cartItems).toEqual([
+      expect.objectContaining({ slotId: 's1', qty: 2 }),
+    ]);
+    // 3) - 1번 → qty 1
+    s = orderReducer(s, {
+      type: 'orders/removeItemFromCart',
+      tableId: 't1',
+      slotIdOrMenuId: 's1',
+    });
+    expect(s.t1.cartItems).toEqual([
+      expect.objectContaining({ slotId: 's1', qty: 1 }),
+    ]);
+    // 4) - 2번 → cart 슬롯 제거 (qty 0 → filter)
+    s = orderReducer(s, {
+      type: 'orders/removeItemFromCart',
+      tableId: 't1',
+      slotIdOrMenuId: 's1',
+    });
+    expect(s.t1.cartItems).toEqual([]);
+    // 5) items 는 그대로 — 사장님이 "변경" 안 누르면 확정분 보존
+    expect(s.t1.items).toHaveLength(1);
+    expect(s.t1.items[0].qty).toBe(2);
+  });
+});

@@ -171,6 +171,14 @@ export function OrderProvider({ children }) {
       });
     };
 
+    // 2026-05-23: OrderScreen 진입 시 cartItems=[] && items.length>0 인 테이블을
+    // 카트로 동기화. 호출자가 ref 가드로 진입 시 1 회만 호출 — 사장님이 - 키로
+    // 비운 후 자동 복원되지 않도록 (그 케이스는 reducer 가드가 처리).
+    const hydrateCartFromItems = (tableId) => {
+      if (!tableId) return;
+      dispatch({ type: 'orders/hydrateCartFromItems', tableId });
+    };
+
     // 장바구니에서 1개 감산. cart/items/confirmed 모두 비면 테이블 삭제 + split 정리.
     // 빈 여부 판단을 wrapper 에서 미리 해야 maybeUnsplitAfter 의 nextOrders 인자가 채워짐.
     const removeItem = (tableId, slotIdOrMenuId) => {
@@ -752,6 +760,7 @@ export function OrderProvider({ children }) {
       isSplit,
       addItem,
       removeItem,
+      hydrateCartFromItems,
       clearTable,
       clearTableBySource,
       // 1.0.37: 분리 결제 / 영수증 빌더에서 sourceTable 별 소계 표시용.
@@ -816,7 +825,8 @@ const ORDERS_FALLBACK = {
   setPhones: noop, addPhone: noop, removePhone: noop,
   setCustomerRequest: noop,
   addAddress: noop, addPhoneOnly: noop, editLabel: noop, isSplit: () => false,
-  addItem: noop, removeItem: noop, clearTable: noop, clearTableBySource: noop,
+  addItem: noop, removeItem: noop, hydrateCartFromItems: noop,
+  clearTable: noop, clearTableBySource: noop,
   computeSubtotalsBySource: () => ({}), groupItemsBySource: () => new Map(),
   markReady: noop, undoMarkReady: () => false,
   revertHistoryEntry: () => ({ ok: false, reason: 'notFound' }),
