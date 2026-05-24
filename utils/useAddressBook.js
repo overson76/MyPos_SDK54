@@ -392,6 +392,105 @@ export function useAddressBook() {
     });
   }, []);
 
+  // 2026-05-25 사장님 요청: 주문 확정 시 사장님이 입력한 alias/phone 가 자동으로
+  // 주소 entry 에 sync. 같은 phone 의 CID phone-only entry 가 있으면 통합 (삭제).
+  // alias 가 이미 채워져 있으면 덮어쓰기 X — 사장님 명시 편집으로만 변경.
+  const upsertEntryFromOrder = useCallback(({ address, alias, phone, customerRequest } = {}) => {
+    const safeAddr = sanitizeDeliveryAddress(address);
+    const safeAlias = String(alias || '').trim().slice(0, 30);
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!safeAddr) return null;
+    const key = normalizeAddressKey(safeAddr);
+    if (!key) return null;
+
+    setAddressBook((prev) => {
+      const entries = { ...prev.entries };
+      const existing = entries[key];
+
+      if (existing) {
+        // 주소 entry 있음 — alias/phones 빈 경우 채움 (덮어쓰기 X)
+        const next = { ...existing };
+        if (safeAlias && !next.alias) next.alias = safeAlias;
+        if (digits) {
+          const phones = Array.isArray(next.phones)
+            ? next.phones.map((p) => String(p).replace(/\D/g, '')).filter(Boolean)
+            : (next.phone ? [String(next.phone).replace(/\D/g, '')] : []);
+          if (!phones.includes(digits)) {
+            phones.push(digits);
+            next.phones = phones;
+            if (!next.phone) next.phone = digits;
+          }
+        }
+        if (customerRequest && !next.customerRequest) {
+          next.customerRequest = String(customerRequest).trim().slice(0, 100);
+        }
+        entries[key] = next;
+      } else {
+        // 주소 entry 없음 — 새 entry
+        const entry = {
+          key,
+          label: safeAddr,
+          count: 0,
+          pinned: false,
+          firstSeenAt: Date.now(),
+          lastUsedAt: Date.now(),
+        };
+        if (safeAlias) entry.alias = safeAlias;
+        if (digits) {
+          entry.phone = digits;
+          entry.phones = [digits];
+        }
+        if (customerRequest) {
+          entry.customerRequest = String(customerRequest).trim().slice(0, 100);
+        }
+        entries[key] = entry;
+      }
+
+      // CID phone-only entry (__phone:digits) 가 있으면 통합 삭제 — 위에서 alias/phone 채움
+      if (digits) {
+        const cidKey = `__phone:${digits}`;
+        if (entries[cidKey]) {
+          delete entries[cidKey];
+        }
+      }
+
+      return { ...prev, entries };
+    });
+    return key;
+  }, []);
+
+  // 사장님 "진실 → 진실보석 매칭" confirm 시 호출. 기존 entry 에 phone 추가
+  // + alias 가 비어있으면 입력한 alias 로 채움 + CID phone-only entry 통합.
+  const mergePhoneIntoEntry = useCallback((targetKey, phone, alias) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!targetKey) return false;
+    setAddressBook((prev) => {
+      const ex = prev.entries[targetKey];
+      if (!ex) return prev;
+      const updated = { ...ex };
+      if (digits) {
+        const phones = Array.isArray(updated.phones)
+          ? updated.phones.map((p) => String(p).replace(/\D/g, '')).filter(Boolean)
+          : (updated.phone ? [String(updated.phone).replace(/\D/g, '')] : []);
+        if (!phones.includes(digits)) {
+          phones.push(digits);
+          updated.phones = phones;
+          if (!updated.phone) updated.phone = digits;
+        }
+      }
+      const safeAlias = String(alias || '').trim().slice(0, 30);
+      if (safeAlias && !updated.alias) updated.alias = safeAlias;
+
+      const newEntries = { ...prev.entries, [targetKey]: updated };
+      if (digits) {
+        const cidKey = `__phone:${digits}`;
+        if (newEntries[cidKey]) delete newEntries[cidKey];
+      }
+      return { ...prev, entries: newEntries };
+    });
+    return true;
+  }, []);
+
   return {
     addressBook,
     setAddressBook,
@@ -409,6 +508,8 @@ export function useAddressBook() {
     addAddress,
     addPhoneOnly,
     editLabel,
+    upsertEntryFromOrder,
+    mergePhoneIntoEntry,
   };
 }
 

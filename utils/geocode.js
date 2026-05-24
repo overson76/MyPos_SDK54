@@ -59,6 +59,54 @@ async function callKakao(path, query) {
   }
 }
 
+// 2026-05-25: 별칭(가게명/키워드) → 매장 좌표 반경 내 첫 매칭 장소 검색.
+// 사장님 요청: 별칭만 등록 시 자동 주소 검색 — 매장 반경 5km 안에서.
+// 못 찾으면 null 반환 (호출부가 pendingAddress 처리).
+//
+// 입력:
+//   - keyword: "진실보석" 같은 가게명/키워드
+//   - center: { lat, lng } — 매장 좌표
+//   - radius: 미터 (default 5000 = 5km, 카카오 최대 20000)
+// 출력: { lat, lng, formatted, name } | null
+//   - formatted: 도로명 또는 지번 주소
+//   - name: 카카오가 인식한 장소명 (가게명)
+export async function searchKeywordNearby(keyword, center, radius = 5000) {
+  if (!getKakaoKey()) return null;
+  const trimmed = String(keyword ?? '').trim();
+  if (!trimmed) return null;
+  if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') {
+    return null;
+  }
+  const r = Math.max(100, Math.min(20000, Math.round(radius)));
+
+  try {
+    const params = new URLSearchParams({
+      query: trimmed,
+      x: String(center.lng),
+      y: String(center.lat),
+      radius: String(r),
+      sort: 'distance',  // 가까운 순
+      size: '5',
+    });
+    const url = `${BASE}/v2/local/search/keyword.json?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const doc = json?.documents?.[0];
+    if (!doc || !doc.x || !doc.y) return null;
+    return {
+      lat: parseFloat(doc.y),
+      lng: parseFloat(doc.x),
+      formatted: doc.road_address_name || doc.address_name || trimmed,
+      name: doc.place_name || trimmed,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 // 두 좌표 사이 직선거리(하버사인) 를 km 로 반환. 잘못된 입력이면 null.
 export function distanceKm(a, b) {
   if (!isCoord(a) || !isCoord(b)) return null;

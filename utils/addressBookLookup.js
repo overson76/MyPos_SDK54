@@ -84,6 +84,77 @@ export function listAddressBookEntries(addressBook) {
   return [];
 }
 
+// 2026-05-25: 사장님 요청 "진실 → 진실보석 되묻기". 부분 매칭 후보 찾기.
+// query: 사장님이 입력한 별칭 (예: "진실")
+// addressBook: useOrders().addressBook
+// 반환: 후보 entries 배열 (가장 가까운 매칭 순). 정확 매칭은 제외 (그 entry 가
+//       이미 있으면 그대로 사용 — confirm 불필요).
+//
+// 매칭 정책:
+//   - entry.alias 가 query 를 *포함* (substring)
+//   - 또는 query 가 entry.alias 를 *포함*
+//   - 대소문자 무시
+//   - 정확 일치는 제외 (호출부가 별도 매칭으로 처리)
+//   - 최대 3건
+export function findSimilarAliases(query, addressBook) {
+  const q = String(query || '').trim().toLowerCase();
+  if (q.length < 1) return [];
+  const all = listAddressBookEntries(addressBook);
+  const out = [];
+  for (const e of all) {
+    const a = String(e?.alias || '').trim().toLowerCase();
+    if (!a) continue;
+    if (a === q) continue; // 정확 매칭 제외
+    if (a.includes(q) || q.includes(a)) {
+      out.push(e);
+    }
+  }
+  // 사용 횟수 / 길이 차이 기준 가까운 순
+  out.sort((x, y) => {
+    const xa = (x.alias || '').length;
+    const ya = (y.alias || '').length;
+    const xDiff = Math.abs(xa - q.length);
+    const yDiff = Math.abs(ya - q.length);
+    if (xDiff !== yDiff) return xDiff - yDiff;
+    return (y.count || 0) - (x.count || 0);
+  });
+  return out.slice(0, 3);
+}
+
+// 2026-05-25: phone digits 정규화 (+82 → 0 한국 국가코드 흡수). CID 매칭과
+// 같은 함수 — 일관성 위해. useCidHandler.web.js 의 normalizePhoneDigits 와 동일.
+export function normalizePhoneDigits(raw) {
+  if (!raw) return '';
+  let d = String(raw).replace(/\D/g, '');
+  if (d.startsWith('82') && d.length >= 11) {
+    d = '0' + d.slice(2);
+  }
+  return d;
+}
+
+// 2026-05-25: 전화번호로 entry 찾기 (phones array + 옛 phone 단일 모두 검색).
+// CID phone-only entry 와 주소 entry 통합 시 사용.
+export function findEntryByPhone(addressBook, phone) {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return null;
+  const all = listAddressBookEntries(addressBook);
+  for (const e of all) {
+    const list = [];
+    if (Array.isArray(e?.phones)) {
+      for (const p of e.phones) {
+        const d = normalizePhoneDigits(p);
+        if (d) list.push(d);
+      }
+    }
+    if (e?.phone) {
+      const d = normalizePhoneDigits(e.phone);
+      if (d && !list.includes(d)) list.push(d);
+    }
+    if (list.includes(digits)) return e;
+  }
+  return null;
+}
+
 // 배달 손님 식별 — 주소 → 주소록 entry 의 alias/phone/phones 통합 추출.
 // 우선순위: order 객체에 명시 저장된 fallback.alias/phone (orderReducer 가 보존) > 주소록 entry.
 // 매출 history 빌더 / 영수증 재출력 / 라벨 표기 모든 곳이 같은 식별값을 쓰도록.

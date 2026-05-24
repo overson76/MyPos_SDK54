@@ -27,6 +27,7 @@ import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import OrderTypePicker from '../components/OrderTypePicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import AliasPromptModal from '../components/AliasPromptModal';
 import MenuQuickEditModal from '../components/MenuQuickEditModal';
 import TableSourcePicker from '../components/TableSourcePicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
@@ -180,6 +181,10 @@ export default function OrderScreen({
     incrementSlotQty,
     splitOffWithOptionToggle,
     setDeliveryAddress,
+    setDeliveryContact,
+    upsertEntryFromOrder,
+    mergePhoneIntoEntry,
+    addressBook,
     setDeliveryTime,
     setDeliveryTimeIsPM,
     setPhone,
@@ -215,6 +220,8 @@ export default function OrderScreen({
   // 2026-05-21: PENDING + cart + "주문" 누름 시 → 배달/포장/예약 3옵션 모달.
   // 사장님이 선택한 type 으로 자동 슬롯 배당 + PENDING 의 phone/alias/address transfer + confirm.
   const [typePickerOpen, setTypePickerOpen] = useState(false);
+  // 2026-05-25 사장님 요청: 배달 주문 확정 직전 별칭 입력 + 자동 매칭/주소 검색.
+  const [aliasPromptOpen, setAliasPromptOpen] = useState(false);
   const [pendingMenuItem, setPendingMenuItem] = useState(null);
   const [pendingMenuSlotId, setPendingMenuSlotId] = useState(null);
   const [pendingMenuHasLarge, setPendingMenuHasLarge] = useState(false);
@@ -447,6 +454,60 @@ export default function OrderScreen({
   // 입장 깜빡임 X — 진입 즉시 카트에 기존 주문(items) 보임. 사장님 보고
   // "동지 사라지고 밀면만 올라감" 의 *추가 안전망*. (이미 reducer 의 cartFromExisting
   // fallback 이 addItem 시점에도 items 카피 보장 — 이중 안전망.)
+  // 2026-05-25: 주문 확정 흐름 함수화 — AliasPromptModal 콜백에서 재호출 위해.
+  // overrideOrder 인자: state 갱신 비동기 차단용 — 사장님 입력 alias/address 즉시 반영.
+  const doSubmitOrder = (overrideOrder) => {
+    const effOrder = overrideOrder || order;
+    if (hasCommittedOrder) {
+      const diff = computeDiffRows(cart, effOrder.confirmedItems || []);
+      const anyChange = diff.some((r) => r.kind !== 'unchanged');
+      if (anyChange) {
+        playChangeSound();
+        speakOrderChange({ table, diff, menuItems, order: { ...effOrder, items: cart }, optionsList: options });
+      } else {
+        playOrderSound();
+        speakOrder({ table, order: { ...effOrder, items: cart }, menuItems, optionsList: options });
+      }
+    } else {
+      playOrderSound();
+      speakOrder({ table, order: { ...effOrder, items: cart }, menuItems, optionsList: options });
+    }
+    confirmOrder(tableId);
+    onBack?.();
+  };
+
+  const handleAliasPromptConfirm = ({ alias, mergeIntoKey, autoAddress }) => {
+    setAliasPromptOpen(false);
+    const phone = order?.deliveryPhone;
+    let finalAddress = order?.deliveryAddress;
+
+    // 카카오 검색 결과 주소 자동 채움
+    if (autoAddress && !finalAddress) {
+      finalAddress = autoAddress;
+      setDeliveryAddress(tableId, autoAddress);
+    }
+
+    // 주소록 sync
+    if (mergeIntoKey && phone) {
+      mergePhoneIntoEntry(mergeIntoKey, phone, alias);
+    } else if (finalAddress) {
+      upsertEntryFromOrder({ address: finalAddress, alias, phone });
+    }
+
+    // order 의 deliveryAlias 갱신 (영수증/표시/음성용)
+    if (alias) {
+      setDeliveryContact(tableId, phone, alias);
+    }
+
+    // state 갱신 비동기 — override 객체로 즉시 반영해서 음성 / 영수증에 alias 포함
+    const effOrder = {
+      ...order,
+      deliveryAlias: alias || order?.deliveryAlias,
+      deliveryAddress: finalAddress || order?.deliveryAddress,
+    };
+    doSubmitOrder(effOrder);
+  };
+
   const lastHydratedTableRef = useRef(null);
   const cartLen = (order.cartItems || []).length;
   const itemsLen = (order.items || []).length;
@@ -2043,57 +2104,24 @@ export default function OrderScreen({
                     onPress={() => {
                       if (isPending) {
                         // 2026-05-21: 미선택 + cart 있음 + "주문" → 배달/포장/예약 3옵션 모달.
-                        //   사장님 직접 선택 후 submitPendingAsType 가 type 별 빈 슬롯 자동 배당
-                        //   + PENDING 의 phone/alias/address transfer + confirm.
-                        // 옛 1.0.47 자동 배달은 제거 — 전화 주문이 배달뿐만이 아니라 포장/예약도
-                        // 있어서 사장님이 직접 선택하는 흐름이 더 정확.
                         if (cart.length > 0) {
                           setTypePickerOpen(true);
                           return;
                         }
-                        // cart 비어있으면 단순 테이블 탭 이동.
                         onGoToTables?.();
                         return;
                       }
-                      // 이미 확정된 주문이 있고 cart 와 다르면 변경 음성/사운드로 안내,
-                      // 그 외(첫 주문이거나 변경 없음)는 새 주문 음성/사운드.
-                      if (hasCommittedOrder) {
-                        const diff = computeDiffRows(
-                          cart,
-                          order.confirmedItems || []
-                        );
-                        const anyChange = diff.some(
-                          (r) => r.kind !== 'unchanged'
-                        );
-                        if (anyChange) {
-                          playChangeSound();
-                          speakOrderChange({
-                            table,
-                            diff,
-                            menuItems,
-                            order: { ...order, items: cart },
-                            optionsList: options,
-                          });
-                        } else {
-                          playOrderSound();
-                          speakOrder({
-                            table,
-                            order: { ...order, items: cart },
-                            menuItems,
-                            optionsList: options,
-                          });
-                        }
-                      } else {
-                        playOrderSound();
-                        speakOrder({
-                          table,
-                          order: { ...order, items: cart },
-                          menuItems,
-                          optionsList: options,
-                        });
+                      // 2026-05-25 사장님 요청: 배달 주문 + 전화 있고 별칭 없으면
+                      // AliasPromptModal 띄움 → 사장님 입력 후 자동 sync + confirmOrder.
+                      const needsAliasPrompt =
+                        table?.type === 'delivery' &&
+                        !!order?.deliveryPhone &&
+                        !(order?.deliveryAlias || '').trim();
+                      if (needsAliasPrompt) {
+                        setAliasPromptOpen(true);
+                        return;
                       }
-                      confirmOrder(tableId);
-                      onBack?.();
+                      doSubmitOrder();
                     }}
                   >
                     <Text style={[styles.payBtnText, isPhone && styles.payBtnTextPhone]}>주문</Text>
@@ -2434,6 +2462,22 @@ export default function OrderScreen({
           }}
         />
       ) : null}
+
+      {/* 2026-05-25: 배달 주문 확정 직전 별칭 입력 + 유사 매칭 + 자동 주소 검색 */}
+      <AliasPromptModal
+        visible={aliasPromptOpen}
+        initialAlias={order?.deliveryAlias || ''}
+        currentPhone={order?.deliveryPhone || ''}
+        currentAddress={order?.deliveryAddress || ''}
+        addressBook={addressBook}
+        storeCoord={
+          typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number'
+            ? { lat: storeInfo.lat, lng: storeInfo.lng }
+            : null
+        }
+        onConfirm={handleAliasPromptConfirm}
+        onCancel={() => setAliasPromptOpen(false)}
+      />
 
       {/* 2026-05-21: TableSourcePicker 제거 — 사장님 룰 "어느 손님 팝업 필요없음".
           단체 모드 (shared/split) 가 단체 묶기 시점에 결정됨. */}
