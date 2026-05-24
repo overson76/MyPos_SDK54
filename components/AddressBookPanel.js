@@ -1058,6 +1058,8 @@ function makeStyles(scale = 1) {
       borderBottomWidth: 1,
       borderBottomColor: '#e5e7eb',
       backgroundColor: '#f9fafb',
+      // 2026-05-25 (3차): 검색칸 보강 후 좁은 환경에서 백업 버튼들 가려짐 — wrap 보장.
+      flexWrap: 'wrap',
     },
     toolbarNarrow: { flexDirection: 'column', alignItems: 'stretch', gap: 6 },
     searchBox: {
@@ -1069,20 +1071,21 @@ function makeStyles(scale = 1) {
       borderColor: '#d1d5db',
       borderRadius: 8,
       paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 4,
       gap: 8,
       minWidth: 200,
-      minHeight: 52,
+      // 2026-05-25 (3차): minHeight 52→44 — 사장님 보고 "백업 가려짐" 으로 적당히 줄임
+      minHeight: 44,
     },
     searchIcon: { fontSize: fp(14) },
     searchInput: {
       flex: 1,
       fontSize: fp(16),
       color: '#111827',
-      // 2026-05-25 사장님 보고 (2차): "여전히 얇음" — paddingVertical 14 + minHeight 48
-      // 로 보강. 부모 searchBox 의 paddingV 도 함께 키움.
-      paddingVertical: 14,
-      minHeight: 48,
+      // 2026-05-25 (3차): paddingV 14→10 + minHeight 48→40 — 적당히. 부모 toolbar
+      // 전체 높이 줄여 백업 버튼들이 같이 가려지지 않게.
+      paddingVertical: 10,
+      minHeight: 40,
       outlineStyle: 'none',
     },
     clearBtn: {
@@ -1092,7 +1095,13 @@ function makeStyles(scale = 1) {
       paddingHorizontal: 4,
     },
 
-    toolbarBtns: { flexDirection: 'row', gap: 6 },
+    toolbarBtns: {
+      flexDirection: 'row',
+      gap: 6,
+      // 좁은 화면에서 검색박스와 버튼들 함께 wrap 되도록 + 버튼 자체는 압축 X.
+      flexWrap: 'wrap',
+      flexShrink: 0,
+    },
     btn: {
       paddingHorizontal: 12,
       paddingVertical: 8,
