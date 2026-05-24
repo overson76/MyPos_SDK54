@@ -71,8 +71,18 @@ function log(msg) {
 function resolveNasDir() {
   if (process.env.MYPOS_NAS_SECRETS) return process.env.MYPOS_NAS_SECRETS;
 
+  // Windows 후보:
+  //  - Z:\secrets\mypos          → 직접 마운트 (메인 PC 패턴)
+  //  - Z:\캐드피아\secrets\mypos → RaiDrive 마운트 (노트북 패턴 — 사용자 폴더 prefix)
+  //  - Y:/UNC 도 백업 후보
   const candidates = process.platform === 'win32'
-    ? ['Z:\\secrets\\mypos', 'Y:\\secrets\\mypos', '\\\\NAS\\secrets\\mypos']
+    ? [
+        'Z:\\secrets\\mypos',
+        'Z:\\캐드피아\\secrets\\mypos',
+        'Y:\\secrets\\mypos',
+        'Y:\\캐드피아\\secrets\\mypos',
+        '\\\\NAS\\secrets\\mypos',
+      ]
     : process.platform === 'darwin'
       ? ['/Volumes/secrets/mypos', '/Volumes/NAS/secrets/mypos', path.join(HOME, 'NAS', 'secrets', 'mypos')]
       : [path.join(HOME, 'NAS', 'secrets', 'mypos')];
