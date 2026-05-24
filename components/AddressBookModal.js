@@ -331,9 +331,21 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
 
   if (!visible) return null;
 
+  // 2026-05-25 사장님 보고 "별칭 검색 목록이 너무 찌그러져 사용 불가". 처방:
+  // 편집/추가 진입 시 검색바·정렬·인덱스바·리스트 모두 숨기고 *전용 화면* 으로
+  // 전환 — 폼만 sheet 영역 가득. 저장/취소 시 일반 화면 복귀.
+  // backdrop 클릭으로 모달 자동 닫힘도 focused 시 비활성 — 편집 데이터 손실 방지.
+  const isFocused = !!editingKey || addingNew;
+  const editingEntry = editingKey
+    ? items.find((e) => e.key === editingKey)
+    : null;
+
   return (
     <View style={styles.overlay} pointerEvents="auto">
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable
+        style={styles.backdrop}
+        onPress={isFocused ? () => {} : onClose}
+      >
         {/* 1.0.54: 가로 모드 키보드(landscape, 풍경) 가 입력칸 가리는 문제 처방.
             iOS=padding / Android=height. KAV 가 키보드 영역만큼 컨텐츠 위로 밀어올림. */}
         <KeyboardAvoidingView
@@ -349,18 +361,26 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
           // 확보하므로 Pressable sheet 와 공존 가능.
           onPress={() => {}}>
           <View style={styles.header}>
-            <Text style={styles.title}>배달 주소록</Text>
+            <Text style={styles.title}>
+              {isFocused
+                ? (addingNew ? '+ 새 주소' : '편집')
+                : '배달 주소록'}
+            </Text>
             <View style={styles.headerRight}>
-              <TouchableOpacity
-                style={styles.addBtn}
-                onPress={() => setAddingNew(true)}
-                hitSlop={6}
-              >
-                <Text style={styles.addBtnText}>+ 추가</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onClose} hitSlop={8}>
-                <Text style={styles.closeBtn}>닫기</Text>
-              </TouchableOpacity>
+              {!isFocused && (
+                <TouchableOpacity
+                  style={styles.addBtn}
+                  onPress={() => setAddingNew(true)}
+                  hitSlop={6}
+                >
+                  <Text style={styles.addBtnText}>+ 추가</Text>
+                </TouchableOpacity>
+              )}
+              {!isFocused && (
+                <TouchableOpacity onPress={onClose} hitSlop={8}>
+                  <Text style={styles.closeBtn}>닫기</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -412,6 +432,86 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             </View>
           )}
 
+          {/* 2026-05-25: 편집 전용 화면 — editingKey 있을 때 newBox 자리에 큰 폼.
+              list / searchRow / indexBar 모두 숨김 → 키보드 떠도 충분한 공간. */}
+          {!!editingKey && editingEntry && (
+            <View style={styles.newBox}>
+              <Text style={styles.editLabel} numberOfLines={2}>
+                {editingEntry.label}
+              </Text>
+              <View style={styles.editRow}>
+                <Text style={styles.editFieldLabel}>별칭</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editAlias}
+                  onChangeText={setEditAlias}
+                  placeholder="예) 김사장"
+                  placeholderTextColor="#9ca3af"
+                  maxLength={20}
+                  autoFocus
+                />
+              </View>
+              {editPhones.map((p, idx) => (
+                <View key={`ph-${idx}`} style={styles.editRow}>
+                  <Text style={styles.editFieldLabel}>
+                    {`전화 ${idx + 1}`}
+                  </Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={p}
+                    onChangeText={(v) =>
+                      setEditPhones((prev) => {
+                        const next = [...prev];
+                        next[idx] = v;
+                        return next;
+                      })
+                    }
+                    placeholder={
+                      idx === 0
+                        ? '예) 010-1234-5678'
+                        : '예) 051-200-1234 (선택)'
+                    }
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="phone-pad"
+                    maxLength={14}
+                  />
+                  {editPhones.length > 1 && (
+                    <TouchableOpacity
+                      style={styles.phoneRemoveBtn}
+                      onPress={() =>
+                        setEditPhones((prev) =>
+                          prev.filter((_, i) => i !== idx)
+                        )
+                      }
+                      accessibilityLabel={`전화 ${idx + 1} 삭제`}
+                    >
+                      <Text style={styles.phoneRemoveText}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+              <View style={styles.editRow}>
+                <Text style={styles.editFieldLabel}> </Text>
+                <TouchableOpacity
+                  style={styles.phoneAddBtn}
+                  onPress={() => setEditPhones((prev) => [...prev, ''])}
+                >
+                  <Text style={styles.phoneAddText}>+ 전화번호 추가</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.editActions}>
+                <TouchableOpacity style={styles.editConfirmBtn} onPress={confirmEdit}>
+                  <Text style={styles.editConfirmText}>저장</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.editCancelBtn} onPress={cancelEdit}>
+                  <Text style={styles.editCancelText}>취소</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {!isFocused && (
+          <>
           <View style={styles.searchRow}>
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
@@ -649,6 +749,8 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               })}
             </View>
             </View>
+          )}
+          </>
           )}
           {activeHover && (
             <View pointerEvents="none" style={styles.hoverPreview}>

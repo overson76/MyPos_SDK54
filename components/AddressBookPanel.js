@@ -447,11 +447,21 @@ export default function AddressBookPanel() {
     }
   };
 
+  // 2026-05-25 사장님 보고 "별칭 검색 목록이 너무 찌그러져 사용 불가". 처방:
+  // 편집/추가 진입 시 toolbar·statusBar·sortBar·list 모두 숨기고 *전용 화면* 으로
+  // 전환 — 폼만 화면 가득. 저장/취소 시 일반 화면 복귀.
+  const isFocused = !!editingKey || addingNew;
+  const editingEntry = editingKey
+    ? items.find((e) => e.key === editingKey)
+    : null;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {!isFocused && (
+      <>
       {/* ── 상단 툴바 ────────────────────────────────────── */}
       <View style={[styles.toolbar, isNarrow && styles.toolbarNarrow]}>
         <View style={styles.searchBox}>
@@ -563,6 +573,9 @@ export default function AddressBookPanel() {
         })}
       </View>
 
+      </>
+      )}
+
       {/* ── 신규 추가 폼 ─────────────────────────────────── */}
       {addingNew && (
         <View style={styles.addBox}>
@@ -623,6 +636,107 @@ export default function AddressBookPanel() {
         </View>
       )}
 
+      {/* ── 2026-05-25: 편집 전용 화면 — toolbar·list 모두 숨김 + 폼만 크게 ── */}
+      {!!editingKey && editingEntry && (
+        <View style={styles.addBox}>
+          <Text style={styles.editHeader}>
+            {editingEntry.pendingAddress
+              ? `📌 ${editingEntry.alias || '키워드'} — 주소 채우기`
+              : `편집: ${editingEntry.alias || editingEntry.label}`}
+          </Text>
+          <View style={styles.addRow}>
+            <Text style={styles.fieldLabel}>주소</Text>
+            <TextInput
+              style={styles.addInput}
+              value={editLabelText}
+              onChangeText={setEditLabelText}
+              placeholder="예) 부산 사하구 사하로 47"
+              placeholderTextColor="#9ca3af"
+              maxLength={100}
+              autoFocus
+            />
+          </View>
+          <View style={styles.addRow}>
+            <Text style={styles.fieldLabel}>별칭</Text>
+            <TextInput
+              style={styles.addInput}
+              value={editAlias}
+              onChangeText={setEditAlias}
+              placeholder="예) 김사장"
+              placeholderTextColor="#9ca3af"
+              maxLength={20}
+            />
+          </View>
+          {editPhones.map((p, idx) => (
+            <View key={`ph-${idx}`} style={styles.addRow}>
+              <Text style={styles.fieldLabel}>{`전화 ${idx + 1}`}</Text>
+              <TextInput
+                style={styles.addInput}
+                value={p}
+                onChangeText={(v) =>
+                  setEditPhones((prev) => {
+                    const next = [...prev];
+                    next[idx] = v;
+                    return next;
+                  })
+                }
+                placeholder={
+                  idx === 0
+                    ? '예) 010-1234-5678'
+                    : '예) 051-200-1234 (선택)'
+                }
+                placeholderTextColor="#9ca3af"
+                keyboardType="phone-pad"
+                maxLength={14}
+              />
+              {editPhones.length > 1 && (
+                <TouchableOpacity
+                  style={styles.phoneRemoveBtn}
+                  onPress={() =>
+                    setEditPhones((prev) =>
+                      prev.filter((_, i) => i !== idx)
+                    )
+                  }
+                  accessibilityLabel={`전화 ${idx + 1} 삭제`}
+                >
+                  <Text style={styles.phoneRemoveText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+          <View style={styles.addRow}>
+            <Text style={styles.fieldLabel}> </Text>
+            <TouchableOpacity
+              style={styles.phoneAddBtn}
+              onPress={() => setEditPhones((prev) => [...prev, ''])}
+            >
+              <Text style={styles.phoneAddText}>+ 전화번호 추가</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.addRow}>
+            <Text style={styles.fieldLabel}>단골요청</Text>
+            <TextInput
+              style={styles.addInput}
+              value={editCustomerRequest}
+              onChangeText={setEditCustomerRequest}
+              placeholder="예) 다진고추, 김치많이"
+              placeholderTextColor="#9ca3af"
+              maxLength={100}
+            />
+          </View>
+          <View style={styles.addActions}>
+            <TouchableOpacity style={styles.addConfirmBtn} onPress={confirmEdit}>
+              <Text style={styles.addConfirmText}>저장</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addCancelBtn} onPress={cancelEdit}>
+              <Text style={styles.addCancelText}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {!isFocused && (
+      <>
       {/* ── 행 목록 ──────────────────────────────────────── */}
       {items.length === 0 ? (
         <View style={styles.empty}>
@@ -860,6 +974,8 @@ export default function AddressBookPanel() {
             );
           })}
         </ScrollView>
+      )}
+      </>
       )}
 
       {/* ── 임포트 모달 ──────────────────────────────────── */}
