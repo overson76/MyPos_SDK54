@@ -17,8 +17,13 @@
  * 동기화 대상:
  *   - <project>/.env                              ↔  <NAS>/.env
  *   - <home>/.expo/state.json                     ↔  <NAS>/expo-state.json
- *   - <home>/.wrangler/config/default.toml        ↔  <NAS>/wrangler-config.toml
+ *   - <wrangler-config-dir>/config/default.toml   ↔  <NAS>/wrangler-config.toml
  *     (Cloudflare wrangler OAuth 토큰 — npm run deploy:web 비대화형 인증)
+ *
+ * wrangler config 위치 (플랫폼별 — wrangler 4.x):
+ *   - Windows: %APPDATA%\xdg.config\.wrangler\config\default.toml
+ *   - macOS:   ~/.config/.wrangler/config/default.toml  (또는 ~/.wrangler/)
+ *   - Linux:   ~/.config/.wrangler/config/default.toml
  */
 
 const fs = require('fs');
@@ -28,13 +33,35 @@ const os = require('os');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const HOME = os.homedir();
 
+// wrangler 4.x 의 OAuth 토큰이 박히는 default.toml 위치 — 플랫폼별.
+// 존재하는 후보 우선, 없으면 그 플랫폼의 *표준* 경로 (push 시 디렉토리 자동 생성).
+// Windows wrangler 4.x 는 %APPDATA%\xdg.config\ 안에 박힘 — HOME 직하 X (.wrangler).
+function resolveWranglerConfigPath() {
+  const candidates = process.platform === 'win32'
+    ? [
+        path.join(process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming'),
+                  'xdg.config', '.wrangler', 'config', 'default.toml'),
+        path.join(HOME, '.wrangler', 'config', 'default.toml'),
+      ]
+    : [
+        // macOS / Linux 동일 (XDG 표준)
+        path.join(HOME, '.config', '.wrangler', 'config', 'default.toml'),
+        path.join(HOME, '.wrangler', 'config', 'default.toml'),
+      ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch { /* 권한/마운트 등 무시 */ }
+  }
+  return candidates[0]; // 표준 경로 — push 시 ensureDir 가 만들어줌
+}
+
 const FILES = [
   { local: path.join(PROJECT_ROOT, '.env'), nasName: '.env', label: '.env' },
   { local: path.join(HOME, '.expo', 'state.json'), nasName: 'expo-state.json', label: 'EAS state' },
   // 2026-05-24: wrangler 4.x OAuth 토큰을 NAS 공유. 한 PC 에서 `wrangler login`
   // 1회면 모든 PC 가 자동 받아 deploy:web 비대화형 인증 통과. 미인증 PC 에서는
   // 파일이 없어 silent skip → 영업 안 멎음.
-  { local: path.join(HOME, '.wrangler', 'config', 'default.toml'), nasName: 'wrangler-config.toml', label: 'wrangler config' },
+  // Windows wrangler 4.x 의 실제 경로 호환을 위해 헬퍼로 플랫폼별 분기.
+  { local: resolveWranglerConfigPath(), nasName: 'wrangler-config.toml', label: 'wrangler config' },
 ];
 
 function log(msg) {
