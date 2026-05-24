@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ImageBackground,
@@ -171,6 +171,7 @@ export default function OrderScreen({
     getCartQty,
     addItem,
     removeItem,
+    hydrateCartFromItems,
     clearTable,
     markPaid,
     confirmOrder,
@@ -428,16 +429,39 @@ export default function OrderScreen({
   ]);
 
   // 장바구니 = 편집중 내역. items = 이미 주방/테이블에 확정 커밋된 내역.
-  // 1.0.55: 확정된 슬롯 재진입 시 사장님이 옛 메뉴를 보고 수정 가능해야 함.
-  // 어제(2026-05-21) fix 가 confirmOrder 직후 cartItems=[] 강제 → 사장님 신고
-  // "테이블 메뉴 변경하려고 들어가면 카트가 비어있어 수정 불가". 처방:
-  //   - cartItems 가 *비어있지 않으면* (=사장님 수정중) cartItems 사용
-  //   - cartItems 가 *비어있으면* (=확정 직후 또는 재진입) items 사용
-  //   - 어제 fix 의 reducer 변경(cartItems: [])은 유지 — 무한 토글 fix 의 근거는 그대로
-  const cart = (order.cartItems && order.cartItems.length > 0)
-    ? order.cartItems
-    : (order.items ?? []);
+  // 2026-05-23: cart 표시는 *오직* cartItems 만. 옛 fallback (cartItems=[] 면
+  // items 로 대체) 는 사장님이 - 키로 cartItems 를 0 까지 비우면 화면이 다시
+  // items 의 원본 qty 로 돌아가 "1 로 남는다 / 안 빠진다" 증상의 원인이었음.
+  // 진입 시 cartItems=[] && items.length>0 케이스는 useEffect 가 hydrate 호출
+  // 로 cartItems = items 카피로 동기화 — 그 후로는 cartItems 가 단일 진실 소스.
+  const cart = order.cartItems || [];
   const committedItems = order.items ?? [];
+
+  // 2026-05-23: 진입/재진입 시 cartItems=[] && items.length>0 케이스를 cartItems
+  // = items 카피로 동기화 (옛 line-437 fallback 의 부작용 fix 의 후속 처치).
+  // ref 가드로 *tableId 별 1회만* 호출 — 사장님이 - 키로 비운 직후 자동 복원되지
+  // 않게. deps 에 length 박아 *Firestore listener 가 뒤늦게 채운* 케이스도 cover.
+  //
+  // useLayoutEffect 사용 이유: 진입 첫 render 시점 cartItems=[] 상태가 *paint 전에*
+  // hydrate dispatch 로 cartItems=items 카피 되어 *render 2 가 paint 되도록*. 사장님
+  // 입장 깜빡임 X — 진입 즉시 카트에 기존 주문(items) 보임. 사장님 보고
+  // "동지 사라지고 밀면만 올라감" 의 *추가 안전망*. (이미 reducer 의 cartFromExisting
+  // fallback 이 addItem 시점에도 items 카피 보장 — 이중 안전망.)
+  const lastHydratedTableRef = useRef(null);
+  const cartLen = (order.cartItems || []).length;
+  const itemsLen = (order.items || []).length;
+  useLayoutEffect(() => {
+    if (!tableId) {
+      lastHydratedTableRef.current = null;
+      return;
+    }
+    if (lastHydratedTableRef.current === tableId) return;
+    if (itemsLen === 0) return; // hydrate 할 items 가 없으면 skip (다음 update 대기)
+    lastHydratedTableRef.current = tableId;
+    if (cartLen === 0) {
+      hydrateCartFromItems(tableId);
+    }
+  }, [tableId, cartLen, itemsLen, hydrateCartFromItems]);
   const total = getCartTotal(tableId);
   const totalQty = getCartQty(tableId);
   const hasCommittedOrder = committedItems.length > 0;
