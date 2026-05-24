@@ -184,7 +184,6 @@ export default function OrderScreen({
     setDeliveryContact,
     upsertEntryFromOrder,
     mergePhoneIntoEntry,
-    addressBook,
     setDeliveryTime,
     setDeliveryTimeIsPM,
     setPhone,
