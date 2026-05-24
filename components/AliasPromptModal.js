@@ -24,7 +24,7 @@ import {
   View,
 } from 'react-native';
 import { useResponsive } from '../utils/useResponsive';
-import { findSimilarAliases } from '../utils/addressBookLookup';
+import { findSimilarAliases, isLandlinePhone } from '../utils/addressBookLookup';
 import { searchKeywordNearby } from '../utils/geocode';
 
 export default function AliasPromptModal({
@@ -102,7 +102,14 @@ export default function AliasPromptModal({
     setSearching(true);
     setSearchResult(null);
     try {
-      const result = await searchKeywordNearby(kw, storeCoord, 5000);
+      // 1차: 별칭 키워드 검색
+      let result = await searchKeywordNearby(kw, storeCoord, 5000);
+      // 2차 fallback: phone 이 일반전화/대표번호면 phone 으로 재시도.
+      // 사장님 운영 — 상호 있는 가게는 카카오 장소 DB 에 전화 등록되어 있어 매칭 가능.
+      // 휴대폰 (010 등) 은 개인 번호라 카카오 DB 미등록 → skip.
+      if (!result && currentPhone && isLandlinePhone(currentPhone)) {
+        result = await searchKeywordNearby(currentPhone, storeCoord, 5000);
+      }
       setSearchResult(result);
     } catch (_) {
       setSearchResult(null);

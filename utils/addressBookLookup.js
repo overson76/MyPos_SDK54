@@ -132,6 +132,20 @@ export function normalizePhoneDigits(raw) {
   return d;
 }
 
+// 2026-05-25: 일반전화/대표번호 판별 — 휴대폰 prefix 제외.
+// 카카오 로컬 검색 가능 여부 — 가게는 일반전화/대표번호 등록, 휴대폰은 개인 번호라 미등록.
+// 휴대폰 prefix: 010 (현재) / 011, 016, 017, 018, 019 (옛 PCS)
+// 그 외 (02 서울, 031~064 지역, 070 인터넷전화 등) = 가게 등록 가능 = 검색 가능
+export function isLandlinePhone(rawPhone) {
+  const d = normalizePhoneDigits(rawPhone);
+  if (!d || d.length < 9) return false;
+  const mobilePrefixes = ['010', '011', '016', '017', '018', '019'];
+  for (const p of mobilePrefixes) {
+    if (d.startsWith(p)) return false;
+  }
+  return true;
+}
+
 // 2026-05-25: 전화번호로 entry 찾기 (phones array + 옛 phone 단일 모두 검색).
 // CID phone-only entry 와 주소 entry 통합 시 사용.
 export function findEntryByPhone(addressBook, phone) {
