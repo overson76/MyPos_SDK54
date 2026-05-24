@@ -578,7 +578,12 @@ export default function AddressBookPanel() {
 
       {/* ── 신규 추가 폼 ─────────────────────────────────── */}
       {addingNew && (
-        <View style={styles.addBox}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.addBox, { paddingBottom: 200 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={styles.addRow}>
             <Text style={styles.fieldLabel}>주소</Text>
             <TextInput
@@ -633,12 +638,17 @@ export default function AddressBookPanel() {
               <Text style={styles.addCancelText}>취소</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       )}
 
       {/* ── 2026-05-25: 편집 전용 화면 — toolbar·list 모두 숨김 + 폼만 크게 ── */}
       {!!editingKey && editingEntry && (
-        <View style={styles.addBox}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.addBox, { paddingBottom: 200 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <Text style={styles.editHeader}>
             {editingEntry.pendingAddress
               ? `📌 ${editingEntry.alias || '키워드'} — 주소 채우기`
@@ -732,7 +742,7 @@ export default function AddressBookPanel() {
               <Text style={styles.addCancelText}>취소</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       )}
 
       {!isFocused && (
@@ -1066,9 +1076,12 @@ function makeStyles(scale = 1) {
     searchIcon: { fontSize: fp(14) },
     searchInput: {
       flex: 1,
-      fontSize: fp(14),
+      fontSize: fp(15),
       color: '#111827',
-      paddingVertical: 6,
+      // 2026-05-25 사장님 보고: 검색 입력칸이 매우 얇아 사용 어려움. iOS 터치
+      // 권장 44pt 충족 + 폰 가로 환경에서 손가락으로 정확히 탭 가능한 높이.
+      paddingVertical: 12,
+      minHeight: 44,
       outlineStyle: 'none',
     },
     clearBtn: {

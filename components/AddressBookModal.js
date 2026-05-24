@@ -385,7 +385,12 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
           </View>
 
           {addingNew && (
-            <View style={styles.newBox}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={[styles.newBox, { paddingBottom: 200 }]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <View style={styles.editRow}>
                 <Text style={styles.editFieldLabel}>주소</Text>
                 <TextInput
@@ -429,13 +434,18 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                   <Text style={styles.editCancelText}>취소</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           )}
 
           {/* 2026-05-25: 편집 전용 화면 — editingKey 있을 때 newBox 자리에 큰 폼.
               list / searchRow / indexBar 모두 숨김 → 키보드 떠도 충분한 공간. */}
           {!!editingKey && editingEntry && (
-            <View style={styles.newBox}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={[styles.newBox, { paddingBottom: 200 }]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.editLabel} numberOfLines={2}>
                 {editingEntry.label}
               </Text>
@@ -507,7 +517,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                   <Text style={styles.editCancelText}>취소</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           )}
 
           {!isFocused && (
@@ -860,9 +870,12 @@ function makeStyles(scale = 1, viewportH = 800) {
   searchIcon: { fontSize: fp(14) },
   searchInput: {
     flex: 1,
-    fontSize: fp(14),
+    fontSize: fp(15),
     color: '#111827',
-    paddingVertical: 6,
+    // 2026-05-25 사장님 보고: 검색 입력칸이 매우 얇아 사용 어려움. iOS 터치
+    // 권장 44pt 충족 + 폰 가로 환경에서 손가락으로 정확히 탭 가능한 높이.
+    paddingVertical: 12,
+    minHeight: 44,
     outlineStyle: 'none',
   },
   clearBtn: {
