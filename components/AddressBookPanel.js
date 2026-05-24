@@ -579,7 +579,7 @@ export default function AddressBookPanel() {
       {/* ── 신규 추가 폼 ─────────────────────────────────── */}
       {addingNew && (
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ flexGrow: 1, minHeight: 200 }}
           contentContainerStyle={[styles.addBox, { paddingBottom: 200 }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -644,7 +644,7 @@ export default function AddressBookPanel() {
       {/* ── 2026-05-25: 편집 전용 화면 — toolbar·list 모두 숨김 + 폼만 크게 ── */}
       {!!editingKey && editingEntry && (
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ flexGrow: 1, minHeight: 200 }}
           contentContainerStyle={[styles.addBox, { paddingBottom: 200 }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -1068,20 +1068,21 @@ function makeStyles(scale = 1) {
       borderWidth: 1,
       borderColor: '#d1d5db',
       borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      gap: 8,
       minWidth: 200,
+      minHeight: 52,
     },
     searchIcon: { fontSize: fp(14) },
     searchInput: {
       flex: 1,
-      fontSize: fp(15),
+      fontSize: fp(16),
       color: '#111827',
-      // 2026-05-25 사장님 보고: 검색 입력칸이 매우 얇아 사용 어려움. iOS 터치
-      // 권장 44pt 충족 + 폰 가로 환경에서 손가락으로 정확히 탭 가능한 높이.
-      paddingVertical: 12,
-      minHeight: 44,
+      // 2026-05-25 사장님 보고 (2차): "여전히 얇음" — paddingVertical 14 + minHeight 48
+      // 로 보강. 부모 searchBox 의 paddingV 도 함께 키움.
+      paddingVertical: 14,
+      minHeight: 48,
       outlineStyle: 'none',
     },
     clearBtn: {
