@@ -15,8 +15,10 @@
  *   2. OS 별 흔한 마운트 경로 자동 탐지
  *
  * 동기화 대상:
- *   - <project>/.env            ↔  <NAS>/.env
- *   - <home>/.expo/state.json   ↔  <NAS>/expo-state.json
+ *   - <project>/.env                              ↔  <NAS>/.env
+ *   - <home>/.expo/state.json                     ↔  <NAS>/expo-state.json
+ *   - <home>/.wrangler/config/default.toml        ↔  <NAS>/wrangler-config.toml
+ *     (Cloudflare wrangler OAuth 토큰 — npm run deploy:web 비대화형 인증)
  */
 
 const fs = require('fs');
@@ -29,6 +31,10 @@ const HOME = os.homedir();
 const FILES = [
   { local: path.join(PROJECT_ROOT, '.env'), nasName: '.env', label: '.env' },
   { local: path.join(HOME, '.expo', 'state.json'), nasName: 'expo-state.json', label: 'EAS state' },
+  // 2026-05-24: wrangler 4.x OAuth 토큰을 NAS 공유. 한 PC 에서 `wrangler login`
+  // 1회면 모든 PC 가 자동 받아 deploy:web 비대화형 인증 통과. 미인증 PC 에서는
+  // 파일이 없어 silent skip → 영업 안 멎음.
+  { local: path.join(HOME, '.wrangler', 'config', 'default.toml'), nasName: 'wrangler-config.toml', label: 'wrangler config' },
 ];
 
 function log(msg) {
