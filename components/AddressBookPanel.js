@@ -71,6 +71,10 @@ export default function AddressBookPanel() {
   const [editingKey, setEditingKey] = useState(null);
   const [editLabelText, setEditLabelText] = useState('');
   const [editAlias, setEditAlias] = useState('');
+  // 2026-05-23 (2부 후속): 편집 진입 시 그 row 가 키보드 위쪽 영역에 보이도록
+  // 자동 점프. 사장님 보고 "폰에서 키보드에 가려져 열람/기입 힘들다".
+  const listRef = useRef(null);
+  const rowOffsetsRef = useRef({});
   // 2026-05-23 (1.0.52): 한 배달지에 여러 가족·동료가 다른 번호로 주문 거는 케이스
   // (사장님 보고). editPhones 배열로 제한 없이 추가 가능. 빈 칸은 confirmEdit 에서
   // 자동 필터. 최소 1칸은 항상 노출. "+ 전화번호 추가" 버튼으로 새 칸 추가.
@@ -357,6 +361,21 @@ export default function AddressBookPanel() {
 
   const cancelEdit = () => setEditingKey(null);
 
+  // 2026-05-23 (2부 후속): 편집 진입 시 그 row 가 키보드 위로 보이도록 자동 점프.
+  // 폰 가로(landscape) 키보드가 화면 50% 가까이 덮어 편집 form 안 보이는 문제 처방.
+  useEffect(() => {
+    if (!editingKey) return;
+    const y = rowOffsetsRef.current[editingKey];
+    if (!listRef.current || typeof y !== 'number') return;
+    // 다음 tick 에 scrollTo — onLayout 가 새 (편집 모드) row 의 정확한 y 박을 시간 확보.
+    const t = setTimeout(() => {
+      try {
+        listRef.current?.scrollTo?.({ y: Math.max(0, y - 8), animated: true });
+      } catch (_) {}
+    }, 50);
+    return () => clearTimeout(t);
+  }, [editingKey]);
+
   const confirmAdd = () => {
     if (!newLabel.trim()) return;
     const ok = addAddress(
@@ -604,6 +623,7 @@ export default function AddressBookPanel() {
         </View>
       ) : (
         <ScrollView
+          ref={listRef}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
@@ -625,7 +645,13 @@ export default function AddressBookPanel() {
 
             if (isEditing) {
               return (
-                <View key={it.key} style={[styles.row, styles.rowEditing]}>
+                <View
+                  key={it.key}
+                  style={[styles.row, styles.rowEditing]}
+                  onLayout={(e) => {
+                    rowOffsetsRef.current[it.key] = e.nativeEvent.layout.y;
+                  }}
+                >
                   <View style={styles.editBox}>
                     <Text style={styles.editHeader}>
                       {it.pendingAddress
@@ -733,6 +759,9 @@ export default function AddressBookPanel() {
               <View
                 key={it.key}
                 style={[styles.row, it.pendingAddress && styles.rowPending]}
+                onLayout={(e) => {
+                  rowOffsetsRef.current[it.key] = e.nativeEvent.layout.y;
+                }}
               >
                 <View style={styles.rowMain}>
                   <View style={styles.rowTitleLine}>

@@ -26,12 +26,15 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   // = 162 가 들어가야 하므로 ScrollView 는 225 까지만. PC(viewport 800) 에선
   // sheet 720 안에 충분히 들어가 420 까지 자연스럽게 사용.
   const styles = useMemo(() => makeStyles(scale, viewportH), [scale, viewportH]);
-  const { addressBook, pinAddress, deleteAddress, setAlias, setPhone, addAddress } = useOrders();
+  const { addressBook, pinAddress, deleteAddress, setAlias, setPhones, addAddress } = useOrders();
   const [query, setQuery] = useState('');
   // 편집 중인 항목 key. null = 편집 없음.
   const [editingKey, setEditingKey] = useState(null);
   const [editAlias, setEditAlias] = useState('');
-  const [editPhone, setEditPhone] = useState('');
+  // 2026-05-23 (2부 후속): 한 entry 에 휴대폰+일반전화 여러 번호 — AddressBookPanel
+  // 과 동일 UI. 사장님 보고 "주문→자주→배달 주소록 에는 전화번호 추가 입력이 없다.
+  // 어디서 하든 같아야".
+  const [editPhones, setEditPhones] = useState(['']);
   // 새 주소 추가 폼
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState('');
@@ -258,17 +261,37 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const openEdit = (it) => {
     setEditingKey(it.key);
     setEditAlias(it.alias || '');
-    setEditPhone(it.phone ? formatPhoneDisplay(it.phone) : '');
+    // phones array (신) 우선 + 옛 phone 단일 fallback. 동적 입력란에 채움.
+    // 비어있어도 항상 1칸 유지 — 사용자가 새 번호 입력할 자리.
+    const phones = Array.isArray(it.phones)
+      ? it.phones.filter(Boolean)
+      : (it.phone ? [it.phone] : []);
+    setEditPhones(phones.length > 0 ? phones.map(formatPhoneDisplay) : ['']);
   };
 
   const confirmEdit = () => {
     if (!editingKey) return;
     setAlias(editingKey, editAlias);
-    setPhone(editingKey, editPhone);
+    // setPhones 가 digits 정규화 + 중복 제외 + 첫 phone 옛 phone 필드 sync 처리.
+    setPhones(editingKey, editPhones);
     setEditingKey(null);
   };
 
   const cancelEdit = () => setEditingKey(null);
+
+  // 2026-05-23 (2부 후속): 편집 진입 시 그 row 가 키보드 위로 보이도록 자동 점프.
+  // 폰 가로(landscape) 키보드가 입력칸 가리는 문제 처방. AddressBookPanel 과 동일 패턴.
+  useEffect(() => {
+    if (!editingKey) return;
+    const y = rowOffsetsRef.current[editingKey];
+    if (!listRef.current || typeof y !== 'number') return;
+    const t = setTimeout(() => {
+      try {
+        listRef.current?.scrollTo?.({ y: Math.max(0, y - 8), animated: true });
+      } catch (_) {}
+    }, 50);
+    return () => clearTimeout(t);
+  }, [editingKey]);
 
   const confirmAdd = () => {
     if (!newLabel.trim()) return;
@@ -399,7 +422,12 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             </View>
           ) : (
             <View style={styles.listWithIndex}>
-            <ScrollView ref={listRef} style={styles.list}>
+            <ScrollView
+              ref={listRef}
+              style={styles.list}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);
                 const isEditing = editingKey === it.key;
@@ -434,17 +462,57 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
                             autoFocus
                           />
                         </View>
+                        {editPhones.map((p, idx) => (
+                          <View key={`ph-${idx}`} style={styles.editRow}>
+                            <Text style={styles.editFieldLabel}>
+                              {`전화 ${idx + 1}`}
+                            </Text>
+                            <TextInput
+                              style={styles.editInput}
+                              value={p}
+                              onChangeText={(v) =>
+                                setEditPhones((prev) => {
+                                  const next = [...prev];
+                                  next[idx] = v;
+                                  return next;
+                                })
+                              }
+                              placeholder={
+                                idx === 0
+                                  ? '예) 010-1234-5678'
+                                  : '예) 051-200-1234 (선택)'
+                              }
+                              placeholderTextColor="#9ca3af"
+                              keyboardType="phone-pad"
+                              maxLength={14}
+                            />
+                            {editPhones.length > 1 && (
+                              <TouchableOpacity
+                                style={styles.phoneRemoveBtn}
+                                onPress={() =>
+                                  setEditPhones((prev) =>
+                                    prev.filter((_, i) => i !== idx)
+                                  )
+                                }
+                                accessibilityLabel={`전화 ${idx + 1} 삭제`}
+                              >
+                                <Text style={styles.phoneRemoveText}>✕</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
                         <View style={styles.editRow}>
-                          <Text style={styles.editFieldLabel}>전화번호</Text>
-                          <TextInput
-                            style={styles.editInput}
-                            value={editPhone}
-                            onChangeText={setEditPhone}
-                            placeholder="예) 010-1234-5678"
-                            placeholderTextColor="#9ca3af"
-                            keyboardType="phone-pad"
-                            maxLength={14}
-                          />
+                          <Text style={styles.editFieldLabel}> </Text>
+                          <TouchableOpacity
+                            style={styles.phoneAddBtn}
+                            onPress={() =>
+                              setEditPhones((prev) => [...prev, ''])
+                            }
+                          >
+                            <Text style={styles.phoneAddText}>
+                              + 전화번호 추가
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                         <View style={styles.editActions}>
                           <TouchableOpacity style={styles.editConfirmBtn} onPress={confirmEdit}>
@@ -866,6 +934,35 @@ function makeStyles(scale = 1, viewportH = 800) {
     color: '#9ca3af',
     fontSize: fp(12),
     fontWeight: '700',
+  },
+
+  // 2026-05-23 (2부 후속): 다중 전화번호 입력 — 추가/삭제 버튼.
+  // AddressBookPanel 동일 스타일 — UX 일관성.
+  phoneAddBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    borderStyle: 'dashed',
+    backgroundColor: '#eff6ff',
+  },
+  phoneAddText: {
+    fontSize: fp(11),
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+  phoneRemoveBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: '#fee2e2',
+  },
+  phoneRemoveText: {
+    fontSize: fp(12),
+    color: '#dc2626',
+    fontWeight: '900',
   },
   });
 }
