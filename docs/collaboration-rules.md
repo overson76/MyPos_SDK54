@@ -115,19 +115,24 @@
 사장님은 **단독 개발자**(Windows 본관 + macOS 별관). 두 PC 가 *동시 작업* 안 한다는 전제. 어긋남 사고 차단 위해:
 
 **시작 트리거 (자동)**:
-- Claude Code SessionStart hook (`~/.claude/hooks/session-start-pull.sh`) 가 *세션 시작 시* 자동 `git fetch + pull --rebase` 실행
+- Claude Code SessionStart hook (`.claude/hooks/session-start-pull.sh` — **프로젝트 안, git tracked**) 가 *세션 시작 시* 자동 `git fetch + pull --rebase` 실행
 - *분기 감지* (다른 PC 에서 push 한 commit + 내 local commit) 시 ⚠ 경고 + 사장님 결정 대기
 - 사장님 *수동 명령 불필요* — Claude 가 자동 시작
 
 **종료 트리거 (자동)**:
-- Claude Code Stop hook (`~/.claude/hooks/git-status-warn.sh`) 가 *응답 마무리 시점* 미커밋 / 미푸시 한 줄 경고
+- Claude Code Stop hook (`~/.claude/hooks/git-status-warn.sh` — 글로벌, 모든 프로젝트 일반 적용) 가 *응답 마무리 시점* 미커밋 / 미푸시 한 줄 경고
 - 별관 워크트리 미머지도 같이 알림
 - 사장님 *깜빡 push 안 한 채* PC 끄는 사고 차단
 
 **push 직전 검증 (자동)**:
-- Claude Code PreToolUse hook (`~/.claude/hooks/pre-push-check.sh`) 가 `git push` 명령 직전 자동 `git fetch` + non-fast-forward 검증
+- Claude Code PreToolUse hook (`.claude/hooks/pre-push-check.sh` — **프로젝트 안, git tracked**) 가 `git push` 명령 직전 자동 `git fetch` + non-fast-forward 검증
 - 분기 시 push 차단 (exit 2) + 해결 순서 안내
 - 사장님 의도적 force 면 `--force` / `--force-with-lease` 명시 → 통과
+
+**hook 두 PC 자동 적용**:
+- 프로젝트 안 `.claude/hooks/` + `.claude/settings.json` 이 *git tracked* — 사장님 맥북에서 `git pull` 만 하면 자동 동일 hook 적용
+- `~/.claude/settings.json` 에는 *Stop hook 만* 등록 (다른 프로젝트에 일반 적용)
+- 프로젝트 settings 가 *프로젝트 cwd 기준* SessionStart + PreToolUse 단일 진실 — 두 PC 환경 완전 일치
 
 **remote 정책**:
 - `origin` = GitHub 단일 push (단일 진실 소스)
