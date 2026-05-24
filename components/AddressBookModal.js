@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   PanResponder,
   Platform,
@@ -58,6 +59,25 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
   const lastIdxRef = useRef(-1);
   // 인덱스 항목 — ⭐ (자주 정렬) + 14자음 + A + # = 17개. memo 로 안정성.
   const indexItems = useMemo(() => ['⭐', ...HANGUL_INDEX_BAR], []);
+
+  // 2026-05-25 사장님 보고 "주소록 채팅창(검색창)이 진입 시 자동으로 키보드
+  // 활성화 → 스크롤부터 막힘". autoFocus={false} 명시에도 iOS Safari 가
+  // *첫 input element 에 자동 포커스 기억* + Modal mount 시점 RN-Web 의 자동
+  // 포커스 동작이 결합되어 발생. 처방:
+  //   1) Modal 열릴 때 Keyboard.dismiss() 자동 호출
+  //   2) 검색 input 에 ref + 명시적 blur() — Safari 기억 차단
+  //   3) ScrollView keyboardDismissMode='on-drag' (interactive 보다 강함) —
+  //      사장님이 스크롤 시작 즉시 키보드 자동 dismiss
+  const searchInputRef = useRef(null);
+  useEffect(() => {
+    if (!visible) return;
+    // setTimeout 0 으로 mount 완료 직후 dismiss — autoFocus 가 mount 후 작동하므로 그 뒤에 차단
+    const t = setTimeout(() => {
+      try { Keyboard.dismiss(); } catch (_) {}
+      try { searchInputRef.current?.blur?.(); } catch (_) {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [visible]);
 
   const todaySet = useMemo(
     () => new Set(addressBook.todayDeliveredKeys || []),
@@ -395,6 +415,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
           <View style={styles.searchRow}>
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
+              ref={searchInputRef}
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
@@ -426,7 +447,7 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
               ref={listRef}
               style={styles.list}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardDismissMode="on-drag"
             >
               {items.map((it) => {
                 const isToday = todaySet.has(it.key);

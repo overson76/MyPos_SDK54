@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -376,6 +377,18 @@ export default function AddressBookPanel() {
     return () => clearTimeout(t);
   }, [editingKey]);
 
+  // 2026-05-25 사장님 보고 "주소록 채팅창(검색창) 진입 시 키보드 자동 활성화 → 스크롤 막힘".
+  // iOS Safari 가 첫 input 자동 포커스 기억 + RN-Web 의 mount 시 자동 포커스 결합.
+  // 처방: 컴포넌트 mount 시 Keyboard.dismiss() + 검색 input ref blur() 강제.
+  const searchInputRef = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { Keyboard.dismiss(); } catch (_) {}
+      try { searchInputRef.current?.blur?.(); } catch (_) {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
   const confirmAdd = () => {
     if (!newLabel.trim()) return;
     const ok = addAddress(
@@ -444,6 +457,7 @@ export default function AddressBookPanel() {
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
@@ -627,7 +641,7 @@ export default function AddressBookPanel() {
           style={styles.list}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardDismissMode="on-drag"
         >
           {items.map((it) => {
             const isEditing = editingKey === it.key;
