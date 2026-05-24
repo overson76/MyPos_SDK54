@@ -68,17 +68,39 @@ function log(msg) {
   process.stdout.write(`[secrets] ${msg}\n`);
 }
 
+// /Volumes/<어떤이름>/secrets/mypos 또는 Z:\<어떤폴더>\secrets\mypos 같이
+// *임의 사용자 폴더 prefix* 가 끼는 RaiDrive / SMB / AFP 마운트도 자동 발견.
+function scanMountsForNas() {
+  try {
+    if (process.platform === 'darwin') {
+      const base = '/Volumes';
+      if (!fs.existsSync(base)) return null;
+      for (const e of fs.readdirSync(base)) {
+        const p = path.join(base, e, 'secrets', 'mypos');
+        if (fs.existsSync(path.join(p, '.env'))) return p;
+      }
+    } else if (process.platform === 'win32') {
+      for (const drive of ['Z:', 'Y:']) {
+        const base = drive + path.sep;
+        if (!fs.existsSync(base)) continue;
+        for (const e of fs.readdirSync(base)) {
+          const p = path.join(base, e, 'secrets', 'mypos');
+          if (fs.existsSync(path.join(p, '.env'))) return p;
+        }
+      }
+    }
+  } catch { /* 권한/마운트 lock 등 무시 */ }
+  return null;
+}
+
 function resolveNasDir() {
   if (process.env.MYPOS_NAS_SECRETS) return process.env.MYPOS_NAS_SECRETS;
 
-  // Windows 후보:
-  //  - Z:\secrets\mypos          → 직접 마운트 (메인 PC 패턴)
-  //  - Z:\캐드피아\secrets\mypos → RaiDrive 마운트 (노트북 패턴 — 사용자 폴더 prefix)
-  //  - Y:/UNC 도 백업 후보
+  // 1단계: 정적 후보 (직접 마운트 / 흔한 패턴)
   const candidates = process.platform === 'win32'
     ? [
         'Z:\\secrets\\mypos',
-        'Z:\\캐드피아\\secrets\\mypos',
+        'Z:\\캐드피아\\secrets\\mypos',  // RaiDrive 한글 사용자 폴더
         'Y:\\secrets\\mypos',
         'Y:\\캐드피아\\secrets\\mypos',
         '\\\\NAS\\secrets\\mypos',
@@ -92,6 +114,11 @@ function resolveNasDir() {
       if (fs.existsSync(p)) return p;
     } catch { /* ENOENT 등 무시 */ }
   }
+
+  // 2단계: 동적 스캔 — Z:/Volumes 안의 *어떤 폴더 prefix* 든 자동 발견
+  const auto = scanMountsForNas();
+  if (auto) return auto;
+
   return null;
 }
 
