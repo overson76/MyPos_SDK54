@@ -15,13 +15,15 @@
  *   2. OS 별 흔한 마운트 경로 자동 탐지
  *
  * 동기화 대상:
- *   - <project>/.env                                  ↔  <NAS>/.env
- *   - <home>/.expo/state.json                         ↔  <NAS>/expo-state.json
- *   - <wrangler-config-dir>/.wrangler/config/default.toml  ↔  <NAS>/wrangler-config.toml
+ *   - <project>/.env                              ↔  <NAS>/.env
+ *   - <home>/.expo/state.json                     ↔  <NAS>/expo-state.json
+ *   - <wrangler-config-dir>/config/default.toml   ↔  <NAS>/wrangler-config.toml
  *     (Cloudflare wrangler OAuth 토큰 — npm run deploy:web 비대화형 인증)
- *     wrangler 4.x 경로 (XDG 표준 따름):
- *       - Windows: %APPDATA%/xdg.config/.wrangler/config/default.toml
- *       - macOS/Linux: $XDG_CONFIG_HOME/.wrangler/config/default.toml (기본 ~/.config)
+ *
+ * wrangler config 위치 (플랫폼별 — wrangler 4.x):
+ *   - Windows: %APPDATA%\xdg.config\.wrangler\config\default.toml
+ *   - macOS:   ~/.config/.wrangler/config/default.toml  (또는 ~/.wrangler/)
+ *   - Linux:   ~/.config/.wrangler/config/default.toml
  */
 
 const fs = require('fs');
@@ -31,15 +33,25 @@ const os = require('os');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const HOME = os.homedir();
 
-// wrangler 4.x 가 OAuth 토큰을 저장하는 실제 경로. ~/.wrangler 가 아니라 XDG 표준.
-// Windows 는 %APPDATA%/xdg.config 아래로 둠 (wrangler 자체 quirk — 표준 %APPDATA%/.wrangler 아님).
-function wranglerConfigPath() {
-  if (process.platform === 'win32') {
-    const base = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
-    return path.join(base, 'xdg.config', '.wrangler', 'config', 'default.toml');
+// wrangler 4.x 의 OAuth 토큰이 박히는 default.toml 위치 — 플랫폼별.
+// 존재하는 후보 우선, 없으면 그 플랫폼의 *표준* 경로 (push 시 디렉토리 자동 생성).
+// Windows wrangler 4.x 는 %APPDATA%\xdg.config\ 안에 박힘 — HOME 직하 X (.wrangler).
+function resolveWranglerConfigPath() {
+  const candidates = process.platform === 'win32'
+    ? [
+        path.join(process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming'),
+                  'xdg.config', '.wrangler', 'config', 'default.toml'),
+        path.join(HOME, '.wrangler', 'config', 'default.toml'),
+      ]
+    : [
+        // macOS / Linux 동일 (XDG 표준)
+        path.join(HOME, '.config', '.wrangler', 'config', 'default.toml'),
+        path.join(HOME, '.wrangler', 'config', 'default.toml'),
+      ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch { /* 권한/마운트 등 무시 */ }
   }
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
-  return path.join(xdg, '.wrangler', 'config', 'default.toml');
+  return candidates[0]; // 표준 경로 — push 시 ensureDir 가 만들어줌
 }
 
 const FILES = [
@@ -48,7 +60,8 @@ const FILES = [
   // 2026-05-24: wrangler 4.x OAuth 토큰을 NAS 공유. 한 PC 에서 `wrangler login`
   // 1회면 모든 PC 가 자동 받아 deploy:web 비대화형 인증 통과. 미인증 PC 에서는
   // 파일이 없어 silent skip → 영업 안 멎음.
-  { local: wranglerConfigPath(), nasName: 'wrangler-config.toml', label: 'wrangler config' },
+  // Windows wrangler 4.x 의 실제 경로 호환을 위해 헬퍼로 플랫폼별 분기.
+  { local: resolveWranglerConfigPath(), nasName: 'wrangler-config.toml', label: 'wrangler config' },
 ];
 
 function log(msg) {
@@ -58,8 +71,18 @@ function log(msg) {
 function resolveNasDir() {
   if (process.env.MYPOS_NAS_SECRETS) return process.env.MYPOS_NAS_SECRETS;
 
+  // Windows 후보:
+  //  - Z:\secrets\mypos          → 직접 마운트 (메인 PC 패턴)
+  //  - Z:\캐드피아\secrets\mypos → RaiDrive 마운트 (노트북 패턴 — 사용자 폴더 prefix)
+  //  - Y:/UNC 도 백업 후보
   const candidates = process.platform === 'win32'
-    ? ['Z:\\secrets\\mypos', 'Y:\\secrets\\mypos', '\\\\NAS\\secrets\\mypos']
+    ? [
+        'Z:\\secrets\\mypos',
+        'Z:\\캐드피아\\secrets\\mypos',
+        'Y:\\secrets\\mypos',
+        'Y:\\캐드피아\\secrets\\mypos',
+        '\\\\NAS\\secrets\\mypos',
+      ]
     : process.platform === 'darwin'
       ? ['/Volumes/secrets/mypos', '/Volumes/NAS/secrets/mypos', path.join(HOME, 'NAS', 'secrets', 'mypos')]
       : [path.join(HOME, 'NAS', 'secrets', 'mypos')];
