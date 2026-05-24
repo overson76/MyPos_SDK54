@@ -16,7 +16,8 @@
     "build:web": "npx expo export --platform web",
     "kis:build": "dotnet build electron/payment/bridge/KisPaymentBridge.csproj -c Release -p:Platform=x86",
     "kis:test": "echo {\"dryRun\":true} | electron/payment/bridge/bin/x86/Release/net48/KisPaymentBridge.exe",
-    "electron:build": "npm run deploy:web && electron-builder --config electron/builder.config.js",
+    "electron:build": "npm run deploy:web && electron-builder --config electron/builder.config.js --win",
+    "electron:publish": "npm run deploy:web && electron-builder --config electron/builder.config.js --win --publish always",
     "test": "jest",
     "test:watch": "jest --watch"
   },
