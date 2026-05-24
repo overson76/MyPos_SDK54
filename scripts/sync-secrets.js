@@ -15,10 +15,13 @@
  *   2. OS 별 흔한 마운트 경로 자동 탐지
  *
  * 동기화 대상:
- *   - <project>/.env                              ↔  <NAS>/.env
- *   - <home>/.expo/state.json                     ↔  <NAS>/expo-state.json
- *   - <home>/.wrangler/config/default.toml        ↔  <NAS>/wrangler-config.toml
+ *   - <project>/.env                                  ↔  <NAS>/.env
+ *   - <home>/.expo/state.json                         ↔  <NAS>/expo-state.json
+ *   - <wrangler-config-dir>/.wrangler/config/default.toml  ↔  <NAS>/wrangler-config.toml
  *     (Cloudflare wrangler OAuth 토큰 — npm run deploy:web 비대화형 인증)
+ *     wrangler 4.x 경로 (XDG 표준 따름):
+ *       - Windows: %APPDATA%/xdg.config/.wrangler/config/default.toml
+ *       - macOS/Linux: $XDG_CONFIG_HOME/.wrangler/config/default.toml (기본 ~/.config)
  */
 
 const fs = require('fs');
@@ -28,13 +31,24 @@ const os = require('os');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const HOME = os.homedir();
 
+// wrangler 4.x 가 OAuth 토큰을 저장하는 실제 경로. ~/.wrangler 가 아니라 XDG 표준.
+// Windows 는 %APPDATA%/xdg.config 아래로 둠 (wrangler 자체 quirk — 표준 %APPDATA%/.wrangler 아님).
+function wranglerConfigPath() {
+  if (process.platform === 'win32') {
+    const base = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
+    return path.join(base, 'xdg.config', '.wrangler', 'config', 'default.toml');
+  }
+  const xdg = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
+  return path.join(xdg, '.wrangler', 'config', 'default.toml');
+}
+
 const FILES = [
   { local: path.join(PROJECT_ROOT, '.env'), nasName: '.env', label: '.env' },
   { local: path.join(HOME, '.expo', 'state.json'), nasName: 'expo-state.json', label: 'EAS state' },
   // 2026-05-24: wrangler 4.x OAuth 토큰을 NAS 공유. 한 PC 에서 `wrangler login`
   // 1회면 모든 PC 가 자동 받아 deploy:web 비대화형 인증 통과. 미인증 PC 에서는
   // 파일이 없어 silent skip → 영업 안 멎음.
-  { local: path.join(HOME, '.wrangler', 'config', 'default.toml'), nasName: 'wrangler-config.toml', label: 'wrangler config' },
+  { local: wranglerConfigPath(), nasName: 'wrangler-config.toml', label: 'wrangler config' },
 ];
 
 function log(msg) {
