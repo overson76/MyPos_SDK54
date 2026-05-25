@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { sanitizeDeliveryAddress } from './validate';
 import { localDateString, normalizeAddressKey } from './orderHelpers';
 import { geocodeAddress, isGeocodingAvailable } from './geocode';
+import {
+  hasPhoneDigitsAnywhere,
+  mergeOrphanPhoneOnlyEntries,
+} from './addressBookMigrations';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -27,6 +31,25 @@ export function useAddressBook() {
     const id = setInterval(tick, 60 * 1000); // 1분
     return () => clearInterval(id);
   }, []);
+
+  // 2026-05-25: 옛 데이터 1회 청소 — 같은 휴대폰의 정식 entry 와 phone-only entry
+  // (__phone:digits) 가 중복 존재하면 phone-only 삭제. addPhoneOnly 의 옛 가드
+  // 결함으로 누적된 케이스 자동 복구. hydrate 가 지연될 수 있으므로 entries 비어
+  // 있으면 다음 변화 기다림. 한 번 통합 후 ranRef 로 마크 — 영업 중 신규 생성은
+  // 강화된 가드가 차단하므로 추가 실행 불필요.
+  const migrationRanRef = useRef(false);
+  useEffect(() => {
+    if (migrationRanRef.current) return;
+    const entries = addressBook.entries;
+    if (!entries || Object.keys(entries).length === 0) return;
+    const merged = mergeOrphanPhoneOnlyEntries(entries);
+    if (merged !== entries) {
+      setAddressBook((prev) =>
+        prev.entries === entries ? { ...prev, entries: merged } : prev
+      );
+    }
+    migrationRanRef.current = true;
+  }, [addressBook.entries]);
 
   // ── 좌표 자동 변환 (lazy + fire-and-forget) ─────────────────────
   // entry 에 lat 없으면 백그라운드로 카카오 호출 → 결과 저장.
@@ -189,6 +212,11 @@ export function useAddressBook() {
   // 전화번호만 있는 미완성 entry — CID 신규 번호 / "나중에 주소 채움" 용.
   // 같은 phone digits 가 어디에 등록돼 있으면 noop. key 는 __phone:digits 패턴으로
   // normalizeAddressKey 충돌 방지. pendingAddress=true 플래그로 UI 가 강조 표시.
+  //
+  // 2026-05-25: 옛 가드는 e.phone 단일 필드만 검사 → phones array 만 있고 phone
+  // 단일이 비어있는 정식 entry 의 휴대폰을 CID 가 받으면 가드 통과 → phone-only
+  // entry 가 별도 생성됨 → CID 매칭 시 그게 먼저 잡혀 별칭 없이 전번만 표시
+  // (동진카에어컨 사례). hasPhoneDigitsAnywhere 가 phones array 도 같이 검사.
   const addPhoneOnly = useCallback((phone, alias) => {
     const digits = (phone || '').replace(/\D/g, '');
     if (!digits) return false;
@@ -196,10 +224,7 @@ export function useAddressBook() {
     const formatted = formatPhoneDigits(digits);
     const placeholder = `(주소 미입력) ${formatted}`;
     setAddressBook((prev) => {
-      const exists = Object.values(prev.entries).some(
-        (e) => e.phone && e.phone.replace(/\D/g, '') === digits
-      );
-      if (exists) return prev;
+      if (hasPhoneDigitsAnywhere(prev.entries, digits)) return prev;
       const entry = {
         key,
         label: placeholder,
