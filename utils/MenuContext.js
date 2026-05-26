@@ -25,6 +25,7 @@ import {
 } from './menuData';
 import { encodeMenuRows, decodeMenuRows } from './menuRowsCodec';
 import { reconcileRowsWithDefaults } from './menuRowsReconcile';
+import { mergeMenuItems } from './mergeMenuItems';
 import {
   sanitizeImageDataUrl,
   sanitizeMenuName,
@@ -218,7 +219,12 @@ export function MenuProvider({ children }) {
         const list = snap.docs
           .map((d) => d.data())
           .filter((m) => m && m.id != null);
-        if (list.length === 0) return;
+        // 2026-05-26: Firestore 와 defaultMenuItems 합치기 — Firestore 가 비거나
+        // customize 적은 매장에서도 default 메뉴 baseline 보장. 같은 id 면 Firestore
+        // override 우선, Firestore 신규 id (들깨칼제비 같은 케이스) 는 append.
+        // 옛 동작 (setItems(list) 통째 갈아엎기) 은 사장님 매장처럼 Firestore 가 거의
+        // 빈 매장에서 default 메뉴 다 사라지는 사고 일으켰음.
+        const merged = mergeMenuItems(defaultMenuItems, list);
         // shortName 누락 마이그레이션 — 옛 데이터 호환.
         const defaultByName = new Map(
           defaultMenuItems.map((m) => [m.name, m])
@@ -226,7 +232,7 @@ export function MenuProvider({ children }) {
         const defaultById = new Map(
           defaultMenuItems.map((m) => [m.id, m])
         );
-        const migrated = list.map((m) => {
+        const migrated = merged.map((m) => {
           const sn = (m.shortName || '').trim();
           if (sn) return m;
           const def = defaultById.get(m.id) || defaultByName.get(m.name);
