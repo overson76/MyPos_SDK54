@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,11 +19,34 @@ import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import { sanitizeMenuName, sanitizeMenuPrice, VALIDATE_LIMITS } from '../utils/validate';
 
+// 2026-05-26 ⑥ fix: confirm 호출이 옛 코드의 `typeof window !== 'undefined' ? window?.confirm?.()
+// : true` 는 폰에서 window.confirm 이 undefined → ok=undefined → if(!ok) return 으로
+// 삭제가 작동 안 함. Platform.OS 분기 + native 는 Alert 로 정상 confirm.
+function confirmDestructive(message) {
+  return new Promise((resolve) => {
+    if (Platform.OS === 'web') {
+      const ok =
+        typeof window !== 'undefined' && window.confirm
+          ? window.confirm(message)
+          : true;
+      resolve(!!ok);
+      return;
+    }
+    Alert.alert('확인', message, [
+      { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+      { text: '확인', style: 'destructive', onPress: () => resolve(true) },
+    ]);
+  });
+}
+
 // 1.0.26: addAt prop 추가 — { category, flatIndex } 면 신규 추가 모드.
 //   - mode='edit' (기본, item prop): 기존 메뉴 이름/가격 빠른 수정
 //   - mode='add' (addAt prop): 빈 슬롯 클릭 시 그 위치에 신규 메뉴 추가 (addNewItemAt)
-export default function MenuQuickEditModal({ item, addAt, onClose }) {
-  const { updateItem, addNewItemAt, deleteItem } = useMenu();
+// 2026-05-26 ⑥: fromCategory prop — '즐겨찾기' 면 삭제 버튼이 "즐겨찾기에서 빼기" 동작
+//   (default 메뉴 자체 삭제는 ② mergeMenuItems 가 baseline 으로 다시 살리므로 의미 없음.
+//   사장님 의도 = 즐겨찾기 카테고리에서 그 메뉴 빼기).
+export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory }) {
+  const { updateItem, addNewItemAt, deleteItem, removeFromFavorite } = useMenu();
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
@@ -153,7 +177,8 @@ export default function MenuQuickEditModal({ item, addAt, onClose }) {
             </TouchableOpacity>
           </View>
 
-          {/* 1.0.26: 삭제 버튼 — 수정 모드에서만 노출. confirm 필수. */}
+          {/* 1.0.26 + ⑥(2026-05-26): 삭제 버튼. 즐겨찾기 카테고리에서는 즐겨찾기 해제,
+              다른 카테고리에서는 메뉴 자체 삭제. confirm 도 Platform 분기로 폰 정상 작동. */}
           {!isAddMode ? (
             <TouchableOpacity
               style={{
@@ -165,20 +190,26 @@ export default function MenuQuickEditModal({ item, addAt, onClose }) {
                 borderColor: '#fecaca',
                 alignItems: 'center',
               }}
-              onPress={() => {
-                const ok =
-                  typeof window !== 'undefined'
-                    ? window?.confirm?.(
-                        `'${item.name}' 메뉴를 삭제할까요?\n매출 이력에는 영향 없음. 격자 슬롯이 비워집니다.`
-                      )
-                    : true;
+              onPress={async () => {
+                if (fromCategory === '즐겨찾기') {
+                  // 즐겨찾기에서 빼기 — confirm 없이 즉시 (☆ 다시 누르면 복원 가능)
+                  if (typeof removeFromFavorite === 'function') {
+                    removeFromFavorite(item.id);
+                  }
+                  onClose();
+                  return;
+                }
+                // 메뉴 자체 삭제 — 되돌릴 수 없으므로 confirm 유지
+                const ok = await confirmDestructive(
+                  `'${item.name}' 메뉴를 삭제할까요?\n매출 이력에는 영향 없음. 격자 슬롯이 비워집니다.`
+                );
                 if (!ok) return;
                 deleteItem(item.id);
                 onClose();
               }}
             >
               <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>
-                🗑️ 메뉴 삭제
+                {fromCategory === '즐겨찾기' ? '⭐ 즐겨찾기에서 빼기' : '🗑️ 메뉴 삭제'}
               </Text>
             </TouchableOpacity>
           ) : null}

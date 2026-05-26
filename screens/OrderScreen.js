@@ -2401,6 +2401,7 @@ export default function OrderScreen({
       {quickEditItem ? (
         <MenuQuickEditModal
           item={quickEditItem}
+          fromCategory={activeCategory}
           onClose={() => setQuickEditItem(null)}
         />
       ) : null}
