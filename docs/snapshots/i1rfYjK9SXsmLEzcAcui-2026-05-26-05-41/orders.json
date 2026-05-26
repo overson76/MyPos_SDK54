@@ -1,0 +1,168 @@
+[
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/orders/t03#2",
+    "fields": {
+      "items": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "slotId": {
+                    "stringValue": "s-mouxdmx1-cmht55"
+                  },
+                  "options": {
+                    "arrayValue": {}
+                  },
+                  "cookState": {
+                    "stringValue": "cooked"
+                  },
+                  "largeQty": {
+                    "integerValue": "0"
+                  },
+                  "name": {
+                    "stringValue": "들깨칼국수"
+                  },
+                  "sizeUpcharge": {
+                    "integerValue": "2000"
+                  },
+                  "sizeGroup": {
+                    "stringValue": "deulpatkong"
+                  },
+                  "cooked": {
+                    "booleanValue": true
+                  },
+                  "id": {
+                    "integerValue": "5"
+                  },
+                  "qty": {
+                    "integerValue": "1"
+                  },
+                  "price": {
+                    "integerValue": "9000"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "readyAt": {
+        "integerValue": "1778215307406"
+      },
+      "deliveryAlerted": {
+        "booleanValue": false
+      },
+      "cartItems": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "price": {
+                    "integerValue": "9000"
+                  },
+                  "id": {
+                    "integerValue": "5"
+                  },
+                  "qty": {
+                    "integerValue": "1"
+                  },
+                  "cookState": {
+                    "stringValue": "pending"
+                  },
+                  "slotId": {
+                    "stringValue": "s-mouxdmx1-cmht55"
+                  },
+                  "options": {
+                    "arrayValue": {}
+                  },
+                  "sizeGroup": {
+                    "stringValue": "deulpatkong"
+                  },
+                  "largeQty": {
+                    "integerValue": "0"
+                  },
+                  "name": {
+                    "stringValue": "들깨칼국수"
+                  },
+                  "sizeUpcharge": {
+                    "integerValue": "2000"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "deliveryAddress": {
+        "stringValue": ""
+      },
+      "deliveryTimeIsPM": {
+        "booleanValue": true
+      },
+      "status": {
+        "stringValue": "ready"
+      },
+      "options": {
+        "arrayValue": {}
+      },
+      "deliveryTime": {
+        "stringValue": ""
+      },
+      "confirmedItems": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "options": {
+                    "arrayValue": {}
+                  },
+                  "slotId": {
+                    "stringValue": "s-mouxdmx1-cmht55"
+                  },
+                  "cookState": {
+                    "stringValue": "cooked"
+                  },
+                  "name": {
+                    "stringValue": "들깨칼국수"
+                  },
+                  "sizeUpcharge": {
+                    "integerValue": "2000"
+                  },
+                  "largeQty": {
+                    "integerValue": "0"
+                  },
+                  "cooked": {
+                    "booleanValue": true
+                  },
+                  "sizeGroup": {
+                    "stringValue": "deulpatkong"
+                  },
+                  "qty": {
+                    "integerValue": "1"
+                  },
+                  "id": {
+                    "integerValue": "5"
+                  },
+                  "price": {
+                    "integerValue": "9000"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "createdAt": {
+        "integerValue": "1778124435013"
+      },
+      "paymentStatus": {
+        "stringValue": "unpaid"
+      }
+    },
+    "createTime": "2026-05-07T03:27:14.558719Z",
+    "updateTime": "2026-05-08T04:41:48.276229Z"
+  }
+]

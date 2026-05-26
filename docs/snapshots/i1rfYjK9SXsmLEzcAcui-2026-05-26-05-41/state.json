@@ -1,0 +1,104 @@
+[
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/addressBookMeta",
+    "fields": {
+      "todayDeliveredKeys": {
+        "arrayValue": {}
+      },
+      "autoRemember": {
+        "booleanValue": true
+      },
+      "todayDate": {
+        "stringValue": "2026-05-26"
+      }
+    },
+    "createTime": "2026-05-02T06:38:40.927069Z",
+    "updateTime": "2026-05-26T01:04:43.622894Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/audioEvent",
+    "fields": {
+      "sound": {
+        "nullValue": null
+      },
+      "source": {
+        "stringValue": "qThgj68r0UUnQYGgS7lYsJTIoMU2"
+      },
+      "type": {
+        "stringValue": "speak"
+      },
+      "text": {
+        "stringValue": "(주소 미입력) 051-207-2211"
+      },
+      "ts": {
+        "integerValue": "1779763976658"
+      }
+    },
+    "createTime": "2026-05-02T10:18:07.475799Z",
+    "updateTime": "2026-05-26T02:52:56.710910Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/groups",
+    "fields": {
+      "value": {
+        "mapValue": {}
+      }
+    },
+    "createTime": "2026-05-02T06:38:40.913133Z",
+    "updateTime": "2026-05-23T02:40:24.046095Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/incomingCall",
+    "fields": {
+      "phoneNumber": {
+        "stringValue": "01048160048"
+      },
+      "formattedNumber": {
+        "stringValue": "010-4816-0048"
+      },
+      "debugDigits": {
+        "stringValue": "01048160048"
+      },
+      "ts": {
+        "timestampValue": "2026-05-26T03:11:00.141Z"
+      },
+      "orderCount": {
+        "integerValue": "0"
+      },
+      "debugEntryCount": {
+        "integerValue": "276"
+      },
+      "isNewNumber": {
+        "booleanValue": true
+      },
+      "address": {
+        "nullValue": null
+      },
+      "alias": {
+        "nullValue": null
+      }
+    },
+    "createTime": "2026-05-15T03:17:34.448741Z",
+    "updateTime": "2026-05-26T03:11:00.271779Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/revenueTotal",
+    "fields": {
+      "total": {
+        "integerValue": "8443000"
+      }
+    },
+    "createTime": "2026-05-02T10:18:49.702599Z",
+    "updateTime": "2026-05-26T02:48:02.640522Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/state/splits",
+    "fields": {
+      "value": {
+        "mapValue": {}
+      }
+    },
+    "createTime": "2026-05-02T06:38:40.899583Z",
+    "updateTime": "2026-05-21T04:48:27.765193Z"
+  }
+]

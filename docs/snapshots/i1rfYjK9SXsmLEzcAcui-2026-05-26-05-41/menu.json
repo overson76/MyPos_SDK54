@@ -1,0 +1,12 @@
+[
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/menu/19",
+    "fields": {
+      "price": {
+        "integerValue": "11000"
+      }
+    },
+    "createTime": "2026-05-07T03:13:25.747770Z",
+    "updateTime": "2026-05-19T03:25:53.258747Z"
+  }
+]

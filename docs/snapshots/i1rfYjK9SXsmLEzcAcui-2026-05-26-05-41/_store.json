@@ -1,0 +1,34 @@
+{
+  "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui",
+  "fields": {
+    "revenuePinHash": {
+      "stringValue": "4d96cc5806f99a9eb75b58965d2d81cfd073532287de886e26dd908efaa2b2ed"
+    },
+    "createdAt": {
+      "timestampValue": "2026-05-02T06:38:38.648Z"
+    },
+    "lat": {
+      "doubleValue": 35.0986246593124
+    },
+    "code": {
+      "stringValue": "T8G8BBXB"
+    },
+    "name": {
+      "stringValue": "춘하추동"
+    },
+    "address": {
+      "stringValue": "부산 사하구 하신번영로177번길 50"
+    },
+    "revenuePinSalt": {
+      "stringValue": "3b2df6e76538d52c9f9666f5026d8f21"
+    },
+    "lng": {
+      "doubleValue": 128.957382003881
+    },
+    "ownerId": {
+      "stringValue": "p9u9IkjNWvaHlSin4XBLHhMiivH2"
+    }
+  },
+  "createTime": "2026-05-02T06:38:38.721075Z",
+  "updateTime": "2026-05-03T12:32:59.921980Z"
+}

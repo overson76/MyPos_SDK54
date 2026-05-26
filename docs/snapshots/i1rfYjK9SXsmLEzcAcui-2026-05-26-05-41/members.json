@@ -1,0 +1,178 @@
+[
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/2SjGfamlUgP2zshiHwz2JAZJUKH3",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-15T21:16:06.173Z"
+      },
+      "displayName": {
+        "stringValue": "확인용"
+      }
+    },
+    "createTime": "2026-05-15T21:16:06.192115Z",
+    "updateTime": "2026-05-15T21:16:06.192115Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/5wLlLODku3M942Gfi6ao3xGMzix1",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-04T05:59:07.278Z"
+      },
+      "displayName": {
+        "stringValue": "카운터PC"
+      }
+    },
+    "createTime": "2026-05-04T05:59:07.962188Z",
+    "updateTime": "2026-05-04T05:59:07.962188Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/SD8QfBu08khBwIn2KjVPU5uqCwi2",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-15T21:09:18.494Z"
+      },
+      "displayName": {
+        "stringValue": "점검용"
+      }
+    },
+    "createTime": "2026-05-15T21:09:18.656004Z",
+    "updateTime": "2026-05-15T21:09:18.656004Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/bp8z9NIJUrR8dNZWpt1c0aPhSTM2",
+    "fields": {
+      "displayName": {
+        "stringValue": "주방서빙"
+      },
+      "role": {
+        "stringValue": "staff"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-03T04:36:38.517Z"
+      }
+    },
+    "createTime": "2026-05-03T04:36:38.568881Z",
+    "updateTime": "2026-05-03T04:36:38.568881Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/eYrPCSu3OnMIUHfrgZCRp7B6tJB2",
+    "fields": {
+      "displayName": {
+        "stringValue": "강연지"
+      },
+      "role": {
+        "stringValue": "staff"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-04T03:38:13.032Z"
+      }
+    },
+    "createTime": "2026-05-04T03:38:13.097319Z",
+    "updateTime": "2026-05-04T03:38:13.097319Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/gmLiDEnUohgUIm7HcyTAvYFqAzx1",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-04T05:55:34.215Z"
+      },
+      "displayName": {
+        "stringValue": "주방담당PC"
+      }
+    },
+    "createTime": "2026-05-02T12:15:48.368936Z",
+    "updateTime": "2026-05-04T05:55:34.825958Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/iz79VOR6IASUrA3wvZQ0l0U050E2",
+    "fields": {
+      "displayName": {
+        "stringValue": "TEST"
+      },
+      "role": {
+        "stringValue": "staff"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-02T16:10:26.469Z"
+      }
+    },
+    "createTime": "2026-05-02T16:10:26.527379Z",
+    "updateTime": "2026-05-02T16:10:26.527379Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/jFvu3Y2kIpWbQkRikJuZkH35Ufp1",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-05T15:53:13.011Z"
+      },
+      "displayName": {
+        "stringValue": "개발용작업"
+      }
+    },
+    "createTime": "2026-05-05T15:53:12.963087Z",
+    "updateTime": "2026-05-05T15:53:12.963087Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/p9u9IkjNWvaHlSin4XBLHhMiivH2",
+    "fields": {
+      "displayName": {
+        "stringValue": "김민중"
+      },
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-02T06:38:38.805Z"
+      }
+    },
+    "createTime": "2026-05-02T06:38:38.848314Z",
+    "updateTime": "2026-05-02T06:38:38.848314Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/q8EdsOU89EMJ0xRcfQGDijJLoYu1",
+    "fields": {
+      "displayName": {
+        "stringValue": "서빙"
+      },
+      "role": {
+        "stringValue": "staff"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-04T04:08:24.247Z"
+      }
+    },
+    "createTime": "2026-05-04T04:08:24.305741Z",
+    "updateTime": "2026-05-04T04:08:24.305741Z"
+  },
+  {
+    "name": "projects/mypos-4cfcc/databases/(default)/documents/stores/i1rfYjK9SXsmLEzcAcui/members/qThgj68r0UUnQYGgS7lYsJTIoMU2",
+    "fields": {
+      "role": {
+        "stringValue": "owner"
+      },
+      "joinedAt": {
+        "timestampValue": "2026-05-04T10:59:25.256Z"
+      },
+      "displayName": {
+        "stringValue": "카운터PC"
+      }
+    },
+    "createTime": "2026-05-04T10:59:25.547727Z",
+    "updateTime": "2026-05-04T10:59:25.547727Z"
+  }
+]
