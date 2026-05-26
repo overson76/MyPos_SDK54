@@ -108,6 +108,8 @@ export default function SettingScreen() {
     deleteItem,
     toggleFavorite,
     moveItemInCategory,
+    placeFavoriteAt,
+    removeFromFavorite,
   } = useMenu();
   const { addressBook, setAutoRemember } = useOrders();
   const addressCount = Object.keys(addressBook?.entries || {}).length;
@@ -115,6 +117,8 @@ export default function SettingScreen() {
   const [filter, setFilter] = useState('전체');
   const [addModal, setAddModal] = useState(null);
   // addModal = { name, price, category, position }
+  // favoriteModal = { itemId } — 사장님이 ☆ 클릭 시 즐겨찾기 격자 띄움
+  const [favoriteModal, setFavoriteModal] = useState(null);
 
   const filterOptions = ['전체', ...categories.filter((c) => c !== '즐겨찾기')];
   const realCategories = categories.filter((c) => c !== '즐겨찾기');
@@ -209,6 +213,85 @@ export default function SettingScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 즐겨찾기 격자 선택 모달 — ☆ 클릭 시 사장님이 직접 자리 선택 */}
+      {favoriteModal && (() => {
+        const targetItem = items.find((m) => m.id === favoriteModal.itemId);
+        if (!targetItem) return null;
+        const favGrid2D = rows['즐겨찾기'] || [];
+        const flatFav = [].concat(...favGrid2D);
+        while (flatFav.length < 24) flatFav.push(null);
+        return (
+          <Modal transparent animationType="fade" visible>
+            <View style={styles.favModalBackdrop}>
+              <View style={styles.favModalCard}>
+                <TouchableOpacity
+                  style={styles.modalClose}
+                  onPress={() => setFavoriteModal(null)}
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+                <Text style={styles.favModalTitle}>
+                  {targetItem.name} — 즐겨찾기 자리 선택
+                </Text>
+                <Text style={styles.favModalHint}>
+                  빈 칸을 누르면 그 자리에 박힙니다. 다른 메뉴가 있는 칸을 누르면 교체됩니다.
+                </Text>
+                <View style={styles.favGrid}>
+                  {flatFav.slice(0, 24).map((slotId, idx) => {
+                    const occupant =
+                      slotId != null ? items.find((m) => m.id === slotId) : null;
+                    const isEmpty = occupant == null;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[
+                          styles.favSlot,
+                          isEmpty
+                            ? styles.favSlotEmpty
+                            : styles.favSlotFilled,
+                          occupant && {
+                            backgroundColor: occupant.color || '#9CA3AF',
+                          },
+                        ]}
+                        onPress={async () => {
+                          if (!isEmpty && occupant.id !== targetItem.id) {
+                            const ok = await confirmDialog(
+                              '자리 교체',
+                              `이 자리에 [${occupant.name}] 이(가) 있습니다. 교체할까요?`
+                            );
+                            if (!ok) return;
+                          }
+                          placeFavoriteAt(targetItem.id, idx);
+                          setFavoriteModal(null);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        {isEmpty ? (
+                          <Text style={styles.favSlotEmptyText}>+</Text>
+                        ) : (
+                          <Text
+                            style={styles.favSlotFilledText}
+                            numberOfLines={2}
+                          >
+                            {occupant.shortName || occupant.name}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TouchableOpacity
+                  style={styles.favModalCancelBtn}
+                  onPress={() => setFavoriteModal(null)}
+                >
+                  <Text style={styles.favModalCancelText}>취소</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
+
       {/* 메뉴 추가 모달 */}
       {addModal && (
         <Modal transparent animationType="fade" visible>
@@ -424,7 +507,18 @@ export default function SettingScreen() {
                       styles.favBtn,
                       item.favorite && styles.favBtnActive,
                     ]}
-                    onPress={() => toggleFavorite(item.id)}
+                    onPress={async () => {
+                      // 이미 즐겨찾기면 → 제거 confirm. 아니면 → 격자 모달 띄워서 자리 선택.
+                      if (item.favorite) {
+                        const ok = await confirmDialog(
+                          '즐겨찾기 제거',
+                          `${item.name} 을(를) 즐겨찾기에서 제거할까요?`
+                        );
+                        if (ok) removeFromFavorite(item.id);
+                      } else {
+                        setFavoriteModal({ itemId: item.id });
+                      }
+                    }}
                   >
                     <Text
                       style={[
@@ -468,40 +562,8 @@ export default function SettingScreen() {
                     <Text style={styles.moveBtnText}>▼</Text>
                   </TouchableOpacity>
 
-                  {inFav && (
-                    <>
-                      <Text style={styles.moveLabelFav}>
-                        즐겨찾기: {favIdx + 1}/{favLen}
-                      </Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.moveBtn,
-                          styles.moveBtnFav,
-                          favIdx <= 0 && styles.moveBtnDisabled,
-                        ]}
-                        disabled={favIdx <= 0}
-                        onPress={() =>
-                          moveItemInCategory('즐겨찾기', item.id, -1)
-                        }
-                      >
-                        <Text style={styles.moveBtnText}>▲</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.moveBtn,
-                          styles.moveBtnFav,
-                          (favIdx < 0 || favIdx >= favLen - 1) &&
-                            styles.moveBtnDisabled,
-                        ]}
-                        disabled={favIdx < 0 || favIdx >= favLen - 1}
-                        onPress={() =>
-                          moveItemInCategory('즐겨찾기', item.id, +1)
-                        }
-                      >
-                        <Text style={styles.moveBtnText}>▼</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  {/* 2026-05-26 ④ UX: 즐겨찾기 위치 이동은 ☆ 버튼 클릭 시 뜨는
+                      격자 모달에서 직접 선택하므로 ▲▼/"9/24" 제거. 카테고리 내 이동은 유지. */}
                 </View>
 
                 <TextInput
@@ -893,5 +955,87 @@ function makeStyles(scale = 1) {
     elevation: 2,
   },
   toggleKnobOn: { transform: [{ translateX: 20 }] },
+
+  // 즐겨찾기 격자 모달 (2026-05-26 ④ UX)
+  favModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  favModalCard: {
+    width: '100%',
+    maxWidth: 720,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  favModalTitle: {
+    fontSize: fp(18),
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  favModalHint: {
+    fontSize: fp(12),
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  favGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'center',
+  },
+  favSlot: {
+    width: '15.5%',
+    aspectRatio: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+  },
+  favSlotEmpty: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+  },
+  favSlotFilled: {
+    backgroundColor: '#9CA3AF',
+  },
+  favSlotEmptyText: {
+    fontSize: fp(24),
+    color: '#9ca3af',
+    fontWeight: '300',
+  },
+  favSlotFilledText: {
+    fontSize: fp(12),
+    color: '#fff',
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  favModalCancelBtn: {
+    marginTop: 18,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  favModalCancelText: {
+    fontSize: fp(14),
+    color: '#374151',
+    fontWeight: '700',
+  },
   });
 }

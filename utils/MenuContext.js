@@ -25,7 +25,12 @@ import {
 } from './menuData';
 import { encodeMenuRows, decodeMenuRows } from './menuRowsCodec';
 import { reconcileRowsWithDefaults } from './menuRowsReconcile';
-import { mergeMenuItems } from './mergeMenuItems';
+import { mergeMenuItems, mergeItemForWrite } from './mergeMenuItems';
+import {
+  placeIdInFavoriteGrid,
+  removeIdFromFavoriteGrid,
+  findIdSlotInGrid,
+} from './favoriteGrid';
 import {
   sanitizeImageDataUrl,
   sanitizeMenuName,
@@ -126,15 +131,25 @@ export function MenuProvider({ children }) {
 
   // ── Firestore write 헬퍼 ────────────────────────────────────
   const writeMenuItemFs = useCallback(
-    (id, data) => {
+    (id, partialUpdate) => {
       if (!storeId) return;
       const db = getFirestore();
       if (!db) return;
+      // 2026-05-26 fix: partial merge (옛 동작 .set(data, {merge:true})) 는 Firestore doc 에
+      // id/name 없는 상태로 저장 → listener filter 에서 그 doc 빠짐 → mergeMenuItems 가
+      // default 만 사용 → 사장님 customize (가격/이름/이미지/카테고리) 가 listener emit
+      // 으로 즉시 default 로 원복되는 사고. 항상 전체 item 으로 set.
+      const fullItem = mergeItemForWrite(
+        id,
+        partialUpdate,
+        itemsRef.current,
+        defaultMenuItems
+      );
       db.collection('stores')
         .doc(storeId)
         .collection('menu')
         .doc(String(id))
-        .set(data, { merge: true })
+        .set(fullItem)
         .catch((e) => reportError(e, { ctx: 'menu.writeMenuItem', id }));
     },
     [storeId]
@@ -496,6 +511,61 @@ export function MenuProvider({ children }) {
     [writeMenuItemFs, writeMenuRowsFs]
   );
 
+  // 2026-05-26 ④ UX: 사장님이 ☆ 클릭 후 즐겨찾기 격자에서 박을 위치를 직접 선택.
+  // 자리 강제 박기 — 그 자리에 다른 메뉴 있으면 그 메뉴는 즐겨찾기에서 빠짐.
+  const placeFavoriteAt = useCallback(
+    (id, flatIdx) => {
+      const next = safeCurrentRows();
+      const normalized = normalizeFav(next);
+      const currentFav = normalized['즐겨찾기'] || [[]];
+      const newFav = placeIdInFavoriteGrid(currentFav, id, flatIdx);
+      if (newFav === currentFav) return; // 변화 없음
+      normalized['즐겨찾기'] = newFav;
+
+      // 그 자리에 있던 옛 메뉴 favorite=false 로
+      const oldOccupant = []
+        .concat(...currentFav)
+        .filter((v) => v != null)
+        .find((vId) => {
+          const idx = findIdSlotInGrid(currentFav, vId);
+          return idx === flatIdx && vId !== id;
+        });
+
+      setItems((prev) =>
+        prev.map((m) => {
+          if (m.id === id) return { ...m, favorite: true };
+          if (oldOccupant != null && m.id === oldOccupant)
+            return { ...m, favorite: false };
+          return m;
+        })
+      );
+      setRows(normalized);
+      writeMenuItemFs(id, { favorite: true });
+      if (oldOccupant != null) writeMenuItemFs(oldOccupant, { favorite: false });
+      writeMenuRowsFs(normalized);
+    },
+    [writeMenuItemFs, writeMenuRowsFs]
+  );
+
+  const removeFromFavorite = useCallback(
+    (id) => {
+      const next = safeCurrentRows();
+      const normalized = normalizeFav(next);
+      const currentFav = normalized['즐겨찾기'] || [[]];
+      const newFav = removeIdFromFavoriteGrid(currentFav, id);
+      if (newFav === currentFav) return;
+      normalized['즐겨찾기'] = newFav;
+
+      setItems((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, favorite: false } : m))
+      );
+      setRows(normalized);
+      writeMenuItemFs(id, { favorite: false });
+      writeMenuRowsFs(normalized);
+    },
+    [writeMenuItemFs, writeMenuRowsFs]
+  );
+
   const setCategorySlot = useCallback(
     (category, fromIdx, toIdx) => {
       const cur = safeCurrentRows();
@@ -686,6 +756,8 @@ export function MenuProvider({ children }) {
       updateOptionLabel,
       moveOption,
       resetEditableOptions,
+      placeFavoriteAt,
+      removeFromFavorite,
     }),
     [
       items,
@@ -707,6 +779,8 @@ export function MenuProvider({ children }) {
       updateOptionLabel,
       moveOption,
       resetEditableOptions,
+      placeFavoriteAt,
+      removeFromFavorite,
     ]
   );
 
@@ -722,6 +796,7 @@ const MENU_FALLBACK = {
   toggleFavorite: () => {}, moveItemInCategory: () => {}, reorderInCategory: () => {},
   swapInCategory: () => {}, setFavoriteSlot: () => {}, setCategorySlot: () => {},
   updateOptionLabel: () => {}, moveOption: () => {}, resetEditableOptions: () => {},
+  placeFavoriteAt: () => {}, removeFromFavorite: () => {},
 };
 
 export function useMenu() {

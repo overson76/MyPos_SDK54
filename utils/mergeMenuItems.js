@@ -17,6 +17,33 @@
 //   살아남). 사장님 매장은 default 메뉴 삭제 흔적 없음 — 안전. 향후 명시적 "default
 //   삭제" 가 필요해지면 deletedDefaultIds marker collection 추가하는 옵션 C 로 확장.
 
+// 단일 메뉴 update 시 Firestore 에 *전체* item 으로 쓰기 위한 합치기.
+//
+// 배경 (2026-05-26 사고 회고 — 가격 수정 안 먹힘):
+//   updateItem 이 partial fields (예: { price: 9000 }) 만 writeMenuItemFs 에 전달하면
+//   set merge:true 로 Firestore doc 에 `{ price: 9000 }` 만 저장 (id / name 없이).
+//   listener 의 filter `(m) => m.id != null` 에서 그 doc 이 빠짐 → mergeMenuItems 가
+//   default 만 사용 → 사장님 customize 가 listener emit 으로 즉시 default 로 원복.
+//
+// 처방:
+//   write 직전에 default + 현재 + partial 합쳐서 전체 item 으로 set. id 보장 (마지막 스프레드
+//   로 강제) — partial 에 id 가 들어와도, default 가 없어도 docId 와 일관성 유지.
+export function mergeItemForWrite(id, partial, currentItems, defaults) {
+  const current =
+    (Array.isArray(currentItems) ? currentItems : []).find(
+      (m) => m && m.id === id
+    ) || null;
+  const defaultItem =
+    (Array.isArray(defaults) ? defaults : []).find((m) => m && m.id === id) ||
+    null;
+  return {
+    ...(defaultItem || {}),
+    ...(current || {}),
+    ...(partial || {}),
+    id,
+  };
+}
+
 export function mergeMenuItems(defaults, fromFirestore) {
   const safeDefaults = Array.isArray(defaults) ? defaults : [];
   const safeFs = Array.isArray(fromFirestore) ? fromFirestore : [];
