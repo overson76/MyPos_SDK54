@@ -213,84 +213,16 @@ export default function SettingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 즐겨찾기 격자 선택 모달 — ☆ 클릭 시 사장님이 직접 자리 선택 */}
-      {favoriteModal && (() => {
-        const targetItem = items.find((m) => m.id === favoriteModal.itemId);
-        if (!targetItem) return null;
-        const favGrid2D = rows['즐겨찾기'] || [];
-        const flatFav = [].concat(...favGrid2D);
-        while (flatFav.length < 24) flatFav.push(null);
-        return (
-          <Modal transparent animationType="fade" visible>
-            <View style={styles.favModalBackdrop}>
-              <View style={styles.favModalCard}>
-                <TouchableOpacity
-                  style={styles.modalClose}
-                  onPress={() => setFavoriteModal(null)}
-                >
-                  <Text style={styles.modalCloseText}>✕</Text>
-                </TouchableOpacity>
-                <Text style={styles.favModalTitle}>
-                  {targetItem.name} — 즐겨찾기 자리 선택
-                </Text>
-                <Text style={styles.favModalHint}>
-                  빈 칸을 누르면 그 자리에 박힙니다. 다른 메뉴가 있는 칸을 누르면 교체됩니다.
-                </Text>
-                <View style={styles.favGrid}>
-                  {flatFav.slice(0, 24).map((slotId, idx) => {
-                    const occupant =
-                      slotId != null ? items.find((m) => m.id === slotId) : null;
-                    const isEmpty = occupant == null;
-                    return (
-                      <TouchableOpacity
-                        key={idx}
-                        style={[
-                          styles.favSlot,
-                          isEmpty
-                            ? styles.favSlotEmpty
-                            : styles.favSlotFilled,
-                          occupant && {
-                            backgroundColor: occupant.color || '#9CA3AF',
-                          },
-                        ]}
-                        onPress={async () => {
-                          if (!isEmpty && occupant.id !== targetItem.id) {
-                            const ok = await confirmDialog(
-                              '자리 교체',
-                              `이 자리에 [${occupant.name}] 이(가) 있습니다. 교체할까요?`
-                            );
-                            if (!ok) return;
-                          }
-                          placeFavoriteAt(targetItem.id, idx);
-                          setFavoriteModal(null);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        {isEmpty ? (
-                          <Text style={styles.favSlotEmptyText}>+</Text>
-                        ) : (
-                          <Text
-                            style={styles.favSlotFilledText}
-                            numberOfLines={2}
-                          >
-                            {occupant.shortName || occupant.name}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <TouchableOpacity
-                  style={styles.favModalCancelBtn}
-                  onPress={() => setFavoriteModal(null)}
-                >
-                  <Text style={styles.favModalCancelText}>취소</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-        );
-      })()}
+      {/* 즐겨찾기 격자 선택 — absolute overlay (RN <Modal> 의 iOS new arch + 중첩
+          TouchableOpacity 크래시 영구 처방 패턴, AdminScreen PIN 모달과 동일) */}
+      {favoriteModal && renderFavoriteOverlay(
+        favoriteModal,
+        items,
+        rows,
+        styles,
+        placeFavoriteAt,
+        setFavoriteModal
+      )}
 
       {/* 메뉴 추가 모달 */}
       {addModal && (
@@ -602,6 +534,87 @@ export default function SettingScreen() {
         {/* 자주 쓰는 메모 칩 편집 — 주문 메모 모달에 노출됨 */}
         <MemoTemplatesEditor />
       </ScrollView>
+    </View>
+  );
+}
+
+// 즐겨찾기 격자 선택 overlay — RN <Modal> 의 iOS new arch + 중첩 TouchableOpacity 크래시
+// 영구 처방 (AdminScreen PIN 모달과 동일 패턴). absolute fullscreen overlay 로 띄움.
+// hook 안 쓰는 순수 render 함수 (React 컴포넌트 아님 — JSX 반환만 함).
+// confirmDialog (Alert) 도 iOS new arch 위험성 있어 제거 — 사장님이 명시적으로 자리를
+// 탭한 것 자체가 의도 표명. 즉시 교체.
+function renderFavoriteOverlay(
+  modalState,
+  items,
+  rows,
+  styles,
+  placeFavoriteAt,
+  setFavoriteModal
+) {
+  const targetItem = items.find((m) => m.id === modalState.itemId);
+  if (!targetItem) return null;
+  const favGrid2D = rows['즐겨찾기'] || [];
+  const flatFav = [];
+  for (const row of favGrid2D) {
+    if (Array.isArray(row)) flatFav.push(...row);
+  }
+  while (flatFav.length < 24) flatFav.push(null);
+
+  return (
+    <View style={styles.favOverlay} pointerEvents="auto">
+      <View style={styles.favOverlayCard}>
+        <TouchableOpacity
+          style={styles.modalClose}
+          onPress={() => setFavoriteModal(null)}
+        >
+          <Text style={styles.modalCloseText}>✕</Text>
+        </TouchableOpacity>
+        <Text style={styles.favModalTitle}>
+          {targetItem.name} — 즐겨찾기 자리 선택
+        </Text>
+        <Text style={styles.favModalHint}>
+          빈 칸 = 그 자리에 박힘. 다른 메뉴가 있는 칸 = 그 메뉴와 교체 (옛 메뉴는
+          즐겨찾기에서 빠짐).
+        </Text>
+        <View style={styles.favGrid}>
+          {flatFav.slice(0, 24).map((slotId, idx) => {
+            const occupant =
+              slotId != null ? items.find((m) => m.id === slotId) : null;
+            const isEmpty = occupant == null;
+            return (
+              <TouchableOpacity
+                key={idx}
+                style={[
+                  styles.favSlot,
+                  isEmpty ? styles.favSlotEmpty : styles.favSlotFilled,
+                  occupant && {
+                    backgroundColor: occupant.color || '#9CA3AF',
+                  },
+                ]}
+                onPress={() => {
+                  placeFavoriteAt(targetItem.id, idx);
+                  setFavoriteModal(null);
+                }}
+                activeOpacity={0.7}
+              >
+                {isEmpty ? (
+                  <Text style={styles.favSlotEmptyText}>+</Text>
+                ) : (
+                  <Text style={styles.favSlotFilledText} numberOfLines={2}>
+                    {occupant.shortName || occupant.name}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <TouchableOpacity
+          style={styles.favModalCancelBtn}
+          onPress={() => setFavoriteModal(null)}
+        >
+          <Text style={styles.favModalCancelText}>취소</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -956,15 +969,22 @@ function makeStyles(scale = 1) {
   },
   toggleKnobOn: { transform: [{ translateX: 20 }] },
 
-  // 즐겨찾기 격자 모달 (2026-05-26 ④ UX)
-  favModalBackdrop: {
-    flex: 1,
+  // 즐겨찾기 격자 overlay (2026-05-26 ⑤ — absolute fullscreen, RN <Modal> 의 iOS
+  // new arch 크래시 영구 처방). AdminScreen PIN 모달과 동일 패턴.
+  favOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    zIndex: 9999,
+    elevation: 9999,
   },
-  favModalCard: {
+  favOverlayCard: {
     width: '100%',
     maxWidth: 720,
     backgroundColor: '#fff',
