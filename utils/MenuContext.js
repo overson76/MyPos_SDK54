@@ -23,6 +23,8 @@ import {
   menuItems as defaultMenuItems,
   sizeOptions,
 } from './menuData';
+import { encodeMenuRows, decodeMenuRows } from './menuRowsCodec';
+import { reconcileRowsWithDefaults } from './menuRowsReconcile';
 import {
   sanitizeImageDataUrl,
   sanitizeMenuName,
@@ -102,6 +104,18 @@ export function MenuProvider({ children }) {
   // useCallback closure 의 stale 문제 회피 — ref 는 deps 에 안 넣어도 됨.
   const itemsRef = useRef(items);
   const rowsRef = useRef(rows);
+
+  // 2026-05-26: mutation 진입 시 rowsRef.current 가 깨졌어도 (빈 객체 / 일부 카테고리
+  // 누락 / 모두 null 격자) default 격자로 보강 후 시작. sparse 데이터가 Firestore 로
+  // 흘러가는 연쇄 차단.
+  const safeCurrentRows = () => {
+    const { rows: reconciled } = reconcileRowsWithDefaults(
+      rowsRef.current,
+      defaultCategoryRows,
+      categories
+    );
+    return reconciled;
+  };
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
@@ -160,11 +174,16 @@ export function MenuProvider({ children }) {
       if (!storeId) return;
       const db = getFirestore();
       if (!db) return;
+      // 2026-05-26: nested array 를 Firestore 호환 flat 형식으로 encode 후 set.
+      // 옛 코드 (set({ value: nested array })) 는 Firebase JS SDK 가 client-side
+      // 에서 throw → silent fail → menu_rows 한 번도 정상 저장 안 됨 → 클라이언트
+      // cache 가 빈 데이터 영구 저장 → 영업 마비 사고로 이어졌음.
+      const encoded = encodeMenuRows(newRows);
       db.collection('stores')
         .doc(storeId)
         .collection('state')
         .doc('menu_rows')
-        .set({ value: newRows })
+        .set({ value: encoded })
         .catch((e) => reportError(e, { ctx: 'menu.writeMenuRows' }));
     },
     [storeId]
@@ -222,8 +241,24 @@ export function MenuProvider({ children }) {
     const unsubRows = storeRef.collection('state').doc('menu_rows').onSnapshot(
       (snap) => {
         const data = snap.data();
-        if (data?.value && typeof data.value === 'object') {
-          setRows(normalizeFav(cloneRows(data.value)));
+        if (!data?.value || typeof data.value !== 'object') return;
+        // 2026-05-26: codec 으로 decode → reconcile 로 누락/빈 카테고리 default 복원
+        // → setRows. recovered=true 면 Firestore 에도 정상 데이터 다시 써서 영구 청소.
+        const decoded = decodeMenuRows(data.value);
+        if (!decoded) return;
+        const { rows: reconciled, recovered } = reconcileRowsWithDefaults(
+          decoded,
+          defaultCategoryRows,
+          categories
+        );
+        const normalized = normalizeFav(reconciled);
+        setRows(normalized);
+        if (recovered) {
+          storeRef
+            .collection('state')
+            .doc('menu_rows')
+            .set({ value: encodeMenuRows(normalized) })
+            .catch((e) => reportError(e, { ctx: 'menu.rowsRecoverWrite' }));
         }
       },
       (err) => reportError(err, { ctx: 'menu.rowsListener' })
@@ -271,7 +306,7 @@ export function MenuProvider({ children }) {
       writeMenuItemFs(id, safe);
 
       if (fields.category) {
-        const next = normalizeAllToGrid(cloneRows(rowsRef.current));
+        const next = normalizeAllToGrid(safeCurrentRows());
         for (const cat of Object.keys(next)) {
           if (cat === '즐겨찾기') continue;
           next[cat] = next[cat].map((row) =>
@@ -339,7 +374,7 @@ export function MenuProvider({ children }) {
         image: sanitizeImageDataUrl(partial.image) || '',
       };
 
-      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
+      const nextRows = normalizeAllToGrid(safeCurrentRows());
       if (!nextRows[cat]) nextRows[cat] = gridifyCategory([]);
       const flat = [].concat(...nextRows[cat]);
       const emptyIdx = flat.indexOf(null);
@@ -381,7 +416,7 @@ export function MenuProvider({ children }) {
         image: sanitizeImageDataUrl(partial.image) || '',
       };
 
-      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
+      const nextRows = normalizeAllToGrid(safeCurrentRows());
       if (!nextRows[cat]) nextRows[cat] = gridifyCategory([]);
       const grid = [].concat(...nextRows[cat]);
       const placeAt =
@@ -407,7 +442,7 @@ export function MenuProvider({ children }) {
 
   const deleteItem = useCallback(
     (id) => {
-      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
+      const nextRows = normalizeAllToGrid(safeCurrentRows());
       for (const cat of Object.keys(nextRows)) {
         nextRows[cat] = nextRows[cat].map((row) =>
           row.map((i) => (i === id ? null : i))
@@ -428,7 +463,7 @@ export function MenuProvider({ children }) {
       if (!target) return;
       const newFav = !target.favorite;
 
-      const next = cloneRows(rowsRef.current);
+      const next = safeCurrentRows();
       if (!next['즐겨찾기']) next['즐겨찾기'] = [[]];
       const normalized = normalizeFav(next);
       const grid = [].concat(...normalized['즐겨찾기']);
@@ -457,7 +492,7 @@ export function MenuProvider({ children }) {
 
   const setCategorySlot = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = rowsRef.current;
+      const cur = safeCurrentRows();
       if (
         !cur[category] ||
         fromIdx < 0 ||
@@ -493,7 +528,7 @@ export function MenuProvider({ children }) {
 
   const swapInCategory = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = rowsRef.current;
+      const cur = safeCurrentRows();
       const catRows = cur[category];
       if (!catRows) return;
       const rowLens = catRows.map((r) => r.length);
@@ -524,7 +559,7 @@ export function MenuProvider({ children }) {
 
   const reorderInCategory = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = rowsRef.current;
+      const cur = safeCurrentRows();
       const catRows = cur[category];
       if (!catRows) return;
       const rowLens = catRows.map((r) => r.length);
@@ -555,7 +590,7 @@ export function MenuProvider({ children }) {
 
   const moveItemInCategory = useCallback(
     (category, id, direction) => {
-      const cur = rowsRef.current;
+      const cur = safeCurrentRows();
       const catRows = cur[category];
       if (!catRows) return;
       const next = normalizeAllToGrid(cloneRows(cur));
