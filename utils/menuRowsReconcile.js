@@ -49,6 +49,18 @@ function cloneCategory(catRows) {
   return (catRows || []).map((row) => [...(Array.isArray(row) ? row : [])]);
 }
 
+// 격자가 모두 null 인지 검사 — 사고로 빈 격자가 된 카테고리 detect.
+function isAllNullGrid(grid) {
+  if (!Array.isArray(grid) || grid.length === 0) return true;
+  for (const row of grid) {
+    if (!Array.isArray(row)) continue;
+    for (const cell of row) {
+      if (cell != null) return false;
+    }
+  }
+  return true;
+}
+
 // 누락된 카테고리는 defaults 에서 채워서 반환. 기존 카테고리는 그대로 (gridify 만 적용).
 // 카테고리 키 목록(categoryList) 이 주어지면 그 순서로 정렬된 객체 반환.
 //
@@ -70,7 +82,20 @@ export function reconcileRowsWithDefaults(input, defaults, categoryList) {
   for (const cat of cats) {
     const present = Array.isArray(safeInput[cat]);
     if (present) {
-      out[cat] = gridifyCategory(safeInput[cat]);
+      const grid = gridifyCategory(safeInput[cat]);
+      // 카테고리 키는 있는데 격자가 모두 null = 사고로 비워진 상태로 간주.
+      // 사장님이 의도적으로 카테고리 통째 비울 일은 거의 없으므로 자동 복원이 안전.
+      if (isAllNullGrid(grid)) {
+        const def = safeDefaults[cat];
+        if (def) {
+          out[cat] = gridifyCategory(cloneCategory(def));
+          recovered = true;
+        } else {
+          out[cat] = grid;
+        }
+      } else {
+        out[cat] = grid;
+      }
     } else {
       const def = safeDefaults[cat];
       out[cat] = gridifyCategory(cloneCategory(def));
