@@ -23,7 +23,6 @@ import {
   menuItems as defaultMenuItems,
   sizeOptions,
 } from './menuData';
-import { reconcileRowsWithDefaults } from './menuRowsReconcile';
 import {
   sanitizeImageDataUrl,
   sanitizeMenuName,
@@ -103,19 +102,6 @@ export function MenuProvider({ children }) {
   // useCallback closure 의 stale 문제 회피 — ref 는 deps 에 안 넣어도 됨.
   const itemsRef = useRef(items);
   const rowsRef = useRef(rows);
-
-  // 2026-05-26: mutation 진입 시 rowsRef.current 가 깨진 상태 (빈 객체 /
-  // 일부 카테고리 누락) 라도 default 격자로 보강 후 mutation 진행.
-  // 어제 사고처럼 sparse 데이터가 Firestore 에 저장되어 다른 기기로 동기화되는
-  // 연쇄를 차단한다.
-  const safeCurrentRows = () => {
-    const { rows: reconciled } = reconcileRowsWithDefaults(
-      rowsRef.current,
-      defaultCategoryRows,
-      categories
-    );
-    return reconciled;
-  };
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
@@ -236,25 +222,8 @@ export function MenuProvider({ children }) {
     const unsubRows = storeRef.collection('state').doc('menu_rows').onSnapshot(
       (snap) => {
         const data = snap.data();
-        if (!data?.value || typeof data.value !== 'object') return;
-        // 2026-05-26: 빈 객체 / 일부 카테고리 누락 데이터가 들어오면
-        // defaultCategoryRows 에서 자동 복원. 사용자 배치는 보존.
-        // 복원 발생 시 Firestore 에도 즉시 다시 써서 깨진 데이터 영구 제거.
-        const { rows: reconciled, recovered } = reconcileRowsWithDefaults(
-          data.value,
-          defaultCategoryRows,
-          categories
-        );
-        const normalized = normalizeFav(reconciled);
-        setRows(normalized);
-        if (recovered) {
-          storeRef
-            .collection('state')
-            .doc('menu_rows')
-            .set({ value: normalized })
-            .catch((e) =>
-              reportError(e, { ctx: 'menu.rowsRecoverWrite' })
-            );
+        if (data?.value && typeof data.value === 'object') {
+          setRows(normalizeFav(cloneRows(data.value)));
         }
       },
       (err) => reportError(err, { ctx: 'menu.rowsListener' })
@@ -302,7 +271,7 @@ export function MenuProvider({ children }) {
       writeMenuItemFs(id, safe);
 
       if (fields.category) {
-        const next = normalizeAllToGrid(safeCurrentRows());
+        const next = normalizeAllToGrid(cloneRows(rowsRef.current));
         for (const cat of Object.keys(next)) {
           if (cat === '즐겨찾기') continue;
           next[cat] = next[cat].map((row) =>
@@ -370,7 +339,7 @@ export function MenuProvider({ children }) {
         image: sanitizeImageDataUrl(partial.image) || '',
       };
 
-      const nextRows = normalizeAllToGrid(safeCurrentRows());
+      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
       if (!nextRows[cat]) nextRows[cat] = gridifyCategory([]);
       const flat = [].concat(...nextRows[cat]);
       const emptyIdx = flat.indexOf(null);
@@ -412,7 +381,7 @@ export function MenuProvider({ children }) {
         image: sanitizeImageDataUrl(partial.image) || '',
       };
 
-      const nextRows = normalizeAllToGrid(safeCurrentRows());
+      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
       if (!nextRows[cat]) nextRows[cat] = gridifyCategory([]);
       const grid = [].concat(...nextRows[cat]);
       const placeAt =
@@ -438,7 +407,7 @@ export function MenuProvider({ children }) {
 
   const deleteItem = useCallback(
     (id) => {
-      const nextRows = normalizeAllToGrid(safeCurrentRows());
+      const nextRows = normalizeAllToGrid(cloneRows(rowsRef.current));
       for (const cat of Object.keys(nextRows)) {
         nextRows[cat] = nextRows[cat].map((row) =>
           row.map((i) => (i === id ? null : i))
@@ -459,7 +428,7 @@ export function MenuProvider({ children }) {
       if (!target) return;
       const newFav = !target.favorite;
 
-      const next = safeCurrentRows();
+      const next = cloneRows(rowsRef.current);
       if (!next['즐겨찾기']) next['즐겨찾기'] = [[]];
       const normalized = normalizeFav(next);
       const grid = [].concat(...normalized['즐겨찾기']);
@@ -488,7 +457,7 @@ export function MenuProvider({ children }) {
 
   const setCategorySlot = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = safeCurrentRows();
+      const cur = rowsRef.current;
       if (
         !cur[category] ||
         fromIdx < 0 ||
@@ -524,7 +493,7 @@ export function MenuProvider({ children }) {
 
   const swapInCategory = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = safeCurrentRows();
+      const cur = rowsRef.current;
       const catRows = cur[category];
       if (!catRows) return;
       const rowLens = catRows.map((r) => r.length);
@@ -555,7 +524,7 @@ export function MenuProvider({ children }) {
 
   const reorderInCategory = useCallback(
     (category, fromIdx, toIdx) => {
-      const cur = safeCurrentRows();
+      const cur = rowsRef.current;
       const catRows = cur[category];
       if (!catRows) return;
       const rowLens = catRows.map((r) => r.length);
@@ -586,7 +555,7 @@ export function MenuProvider({ children }) {
 
   const moveItemInCategory = useCallback(
     (category, id, direction) => {
-      const cur = safeCurrentRows();
+      const cur = rowsRef.current;
       const catRows = cur[category];
       if (!catRows) return;
       const next = normalizeAllToGrid(cloneRows(cur));
