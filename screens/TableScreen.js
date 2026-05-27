@@ -647,34 +647,34 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              {/* 2026-05-21: 예약/포장 — 별칭/전번 (있으면) + 시각 표기.
+              {/* 2026-05-21: 예약/포장 — 별칭/전번 (있으면).
                   CID PENDING → submitPendingAsType 흐름으로 박힌 alias/phone 이 라이더가 아닌
                   *사장님 식별* 용으로 표시됨. */}
-              {(t.type === 'reservation' || t.type === 'takeout') ? (
-                <>
-                  {deliveryPrimary ? (
-                    <Text style={styles.deliveryAddr} numberOfLines={1}>
-                      {deliveryIcon} {deliveryPrimary}
-                    </Text>
-                  ) : null}
-                  {(() => {
-                    // 2026-05-27: deliveryTime 은 "420" 같은 문자열 — parseDeliveryTime 으로
-                    // { h, m, period } 객체화 후 formatShort12h. 문자열 직접 넘기면
-                    // parsed.m.toString() 폭발 (사장님 영업 중 사고 2026-05-27).
-                    if (!order.deliveryTime) return null;
-                    const parsedTime = parseDeliveryTime(
-                      order.deliveryTime,
-                      order.deliveryTimeIsPM ?? true,
-                    );
-                    if (!parsedTime) return null;
-                    return (
-                      <Text style={styles.deliveryAddr} numberOfLines={1}>
-                        {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(parsedTime)}
-                      </Text>
-                    );
-                  })()}
-                </>
+              {(t.type === 'reservation' || t.type === 'takeout') && deliveryPrimary ? (
+                <Text style={styles.deliveryAddr} numberOfLines={1}>
+                  {deliveryIcon} {deliveryPrimary}
+                </Text>
               ) : null}
+              {(() => {
+                // 2026-05-27 (2차): 배달/예약/포장 *모두* 시간 표기. 사장님 요구.
+                // KitchenScreen 카드와 같은 아이콘 (🛵/📅/📦) 으로 시각 일관성.
+                // deliveryTime 은 "420" 같은 문자열 — parseDeliveryTime 으로 객체화 후
+                // formatShort12h. 문자열 직접 넘기면 parsed.m.toString() 폭발 (사고 2026-05-27).
+                const tp = t.type;
+                if (tp !== 'delivery' && tp !== 'reservation' && tp !== 'takeout') return null;
+                if (!order.deliveryTime) return null;
+                const parsedTime = parseDeliveryTime(
+                  order.deliveryTime,
+                  order.deliveryTimeIsPM ?? true,
+                );
+                if (!parsedTime) return null;
+                const icon = tp === 'delivery' ? '🛵' : tp === 'reservation' ? '📅' : '📦';
+                return (
+                  <Text style={styles.deliveryAddr} numberOfLines={1}>
+                    {icon} {formatShort12h(parsedTime)}
+                  </Text>
+                );
+              })()}
               {customerRequestFromBook ? (
                 <Text style={styles.deliveryRequest} numberOfLines={1}>
                   🌟 {customerRequestFromBook}

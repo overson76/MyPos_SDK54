@@ -766,6 +766,19 @@ export default function KitchenScreen() {
                             {optLabels.join(' · ')}
                           </Text>
                         )}
+                        {/* 2026-05-27 (2차): 메모도 메뉴 박스 안 들여쓰기로 — 어느 메뉴 메모인지
+                            오해 없도록 (사장님 요구). 옵션 라인과 같은 패턴. */}
+                        {r.item.memo ? (
+                          <Text
+                            style={[
+                              styles.itemMemoInline,
+                              isPhone && styles.itemMemoInlinePhone,
+                              isCooked && styles.text_cooked,
+                            ]}
+                          >
+                            📝 {r.item.memo}
+                          </Text>
+                        ) : null}
                       </View>
                       <Text
                         style={[
@@ -797,22 +810,8 @@ export default function KitchenScreen() {
                     </TouchableOpacity>
                     );
                   };
-                  // 메모는 같은 항목 묶음 최상단에 한 번만 표시.
-                  // 매장 운영의 핵심 정보 — 잘리지 않도록 줄바꿈 허용 (numberOfLines 제거).
-                  if (r.item.memo) {
-                    out.push(
-                      <View
-                        key={`memo-${r.item.slotId || r.item.id}`}
-                        style={styles.itemMemoLine}
-                      >
-                        <Text
-                          style={[styles.itemMemoText, isPhone && styles.itemMemoTextPhone]}
-                        >
-                          📝 {r.item.memo}
-                        </Text>
-                      </View>
-                    );
-                  }
+                  // 2026-05-27 (2차): 별도 메모 행 제거 — 메모는 메뉴 박스 안 들여쓰기로
+                  // 통합됨 (사장님 요구). 어느 메뉴의 메모인지 모호하지 않도록.
                   if (lq === 0) {
                     out.push(
                       makeRow(

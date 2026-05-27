@@ -350,21 +350,21 @@ export default function makeStyles(scale = 1) {
   normalTag: { color: '#6b7280', fontWeight: '700' },
   optTag: { color: '#2563eb', fontWeight: '700', fontSize: fp(10) },
   // 메모 — 항목 위 최상단에 노란 강조 박스
-  itemMemoLine: {
+  // 2026-05-27 (2차): 메모는 itemMemoInline 으로 메뉴 박스 안에 들여쓰기 표시.
+  itemMemoInline: {
+    fontSize: fp(11),
+    color: '#92400e',
+    fontWeight: '800',
+    marginTop: 1,
     backgroundColor: '#fffbeb',
     borderLeftWidth: 3,
     borderLeftColor: '#f59e0b',
-    borderRadius: 4,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginBottom: 2,
+    paddingVertical: 1,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
-  itemMemoText: {
-    fontSize: fp(12),
-    color: '#92400e',
-    fontWeight: '700',
-  },
-  itemMemoTextPhone: { fontSize: fp(10) },
+  itemMemoInlinePhone: { fontSize: fp(10) },
   sectionLabel: {
     fontSize: fp(10),
     color: '#9ca3af',
