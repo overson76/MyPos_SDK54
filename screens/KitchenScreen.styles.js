@@ -350,13 +350,12 @@ export default function makeStyles(scale = 1) {
   normalTag: { color: '#6b7280', fontWeight: '700' },
   optTag: { color: '#2563eb', fontWeight: '700', fontSize: fp(10) },
   // 메모 — 항목 위 최상단에 노란 강조 박스
-  // 2026-05-27 (3차): 메모는 메뉴 행 *아래* 별도 행으로 — 전체 폭 사용 + amber 바탕색
-  // + 들여쓰기로 메뉴와 시각적 묶음 (사장님 요구). 어느 메뉴의 메모인지 명확 + 메뉴
-  // 행 폭 제한으로 인한 텍스트 찌그러짐 해소.
+  // 2026-05-27 (3차+6차): 메모는 메뉴 행 *아래* 별도 행 — amber bg + 빨강 borderLeft +
+  // 빨강 텍스트 (사장님 요구). 주방이 손님 요청 한눈에 인지.
   itemMemoRow: {
     backgroundColor: '#fffbeb',
     borderLeftWidth: 3,
-    borderLeftColor: '#f59e0b',
+    borderLeftColor: '#dc2626',
     borderRadius: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -366,8 +365,8 @@ export default function makeStyles(scale = 1) {
   },
   itemMemoRowText: {
     fontSize: fp(12),
-    color: '#92400e',
-    fontWeight: '800',
+    color: '#b91c1c',
+    fontWeight: '900',
     lineHeight: 17,
   },
   itemMemoRowTextPhone: { fontSize: fp(11), lineHeight: 15 },
@@ -475,13 +474,14 @@ export default function makeStyles(scale = 1) {
   itemName: { fontSize: fp(14), color: '#111827', fontWeight: '600' },
   // 폰 화면에서도 변경사항 영역(changeName: 13px)과 동일한 크기로 통일
   itemNamePhone: { fontSize: fp(13) },
-  // 2026-05-27 (5차): 옵션은 메모와 같은 amber 박스 패턴 — 메뉴 행 아래 별도 행
-  // 으로 통일 (사장님 요구). 색상도 메모와 동일 amber 톤. 시각 차별은 fontWeight
-  // (옵션 700 < 메모 800) + 메모만 📝 prefix.
+  // 2026-05-27 (5차+6차): 옵션은 메모와 같은 amber 박스 패턴 — 메뉴 행 아래 별도 행
+  // 으로 통일 (사장님 요구). 6차에서 텍스트 + borderLeft 빨강으로 강조 — 주방이
+  // 옵션/메모 한눈에 인지. amber bg 유지 (메뉴 카드 안 부드러운 묶음 + 빨강 대비).
+  // 시각 차별: 옵션 fontWeight 700 (메모 800) + 메모만 📝 prefix.
   itemOptRow: {
     backgroundColor: '#fffbeb',
     borderLeftWidth: 3,
-    borderLeftColor: '#f59e0b',
+    borderLeftColor: '#dc2626',
     borderRadius: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -490,8 +490,8 @@ export default function makeStyles(scale = 1) {
   },
   itemOptRowText: {
     fontSize: fp(12),
-    color: '#92400e',
-    fontWeight: '700',
+    color: '#b91c1c',
+    fontWeight: '800',
     lineHeight: 16,
   },
   itemOptRowTextPhone: { fontSize: fp(11), lineHeight: 14 },
