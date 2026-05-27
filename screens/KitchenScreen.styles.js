@@ -475,13 +475,26 @@ export default function makeStyles(scale = 1) {
   itemName: { fontSize: fp(14), color: '#111827', fontWeight: '600' },
   // 폰 화면에서도 변경사항 영역(changeName: 13px)과 동일한 크기로 통일
   itemNamePhone: { fontSize: fp(13) },
-  itemOptLine: {
-    fontSize: fp(11),
-    color: '#1d4ed8',
-    fontWeight: '700',
-    marginTop: 1,
+  // 2026-05-27 (5차): 옵션은 메모와 같은 amber 박스 패턴 — 메뉴 행 아래 별도 행
+  // 으로 통일 (사장님 요구). 색상도 메모와 동일 amber 톤. 시각 차별은 fontWeight
+  // (옵션 700 < 메모 800) + 메모만 📝 prefix.
+  itemOptRow: {
+    backgroundColor: '#fffbeb',
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 2,
+    marginLeft: 28,
   },
-  itemOptLinePhone: { fontSize: fp(11) },
+  itemOptRowText: {
+    fontSize: fp(12),
+    color: '#92400e',
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  itemOptRowTextPhone: { fontSize: fp(11), lineHeight: 14 },
   itemQty: {
     fontSize: fp(13),
     color: '#374151',

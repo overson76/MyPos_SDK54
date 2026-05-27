@@ -754,18 +754,8 @@ export default function KitchenScreen() {
                             </Text>
                           )}
                         </Text>
-                        {/* 옵션은 매장 주문 정확도 핵심 — 잘리지 않도록 줄바꿈 허용 */}
-                        {optLabels.length > 0 && (
-                          <Text
-                            style={[
-                              styles.itemOptLine,
-                              isPhone && styles.itemOptLinePhone,
-                              isCooked && styles.text_cooked,
-                            ]}
-                          >
-                            {optLabels.join(' · ')}
-                          </Text>
-                        )}
+                        {/* 2026-05-27 (5차): 옵션은 메뉴 행 아래 별도 itemOptRow 로 분리.
+                            폭 제한 / 찌그러짐 해소 + 메모와 같은 amber 박스 패턴 통일. */}
                       </View>
                       <Text
                         style={[
@@ -814,6 +804,25 @@ export default function KitchenScreen() {
                   } else {
                     out.push(makeRow('n', nq, '보통'));
                     out.push(makeRow('l', lq, '대'));
+                  }
+                  // 2026-05-27 (5차): 옵션도 메모와 같은 amber 박스 패턴으로 통일 — 메뉴 행
+                  // 아래 별도 행, 전체 폭 사용. 옵션 → 메모 순. 같은 메뉴 그룹임을 한눈에.
+                  if (optLabels.length > 0) {
+                    out.push(
+                      <View
+                        key={`opt-${r.item.slotId || r.item.id}`}
+                        style={styles.itemOptRow}
+                      >
+                        <Text
+                          style={[
+                            styles.itemOptRowText,
+                            isPhone && styles.itemOptRowTextPhone,
+                          ]}
+                        >
+                          {optLabels.join(' · ')}
+                        </Text>
+                      </View>
+                    );
                   }
                   if (r.item.memo) {
                     out.push(
