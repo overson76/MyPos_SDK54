@@ -766,19 +766,6 @@ export default function KitchenScreen() {
                             {optLabels.join(' · ')}
                           </Text>
                         )}
-                        {/* 2026-05-27 (2차): 메모도 메뉴 박스 안 들여쓰기로 — 어느 메뉴 메모인지
-                            오해 없도록 (사장님 요구). 옵션 라인과 같은 패턴. */}
-                        {r.item.memo ? (
-                          <Text
-                            style={[
-                              styles.itemMemoInline,
-                              isPhone && styles.itemMemoInlinePhone,
-                              isCooked && styles.text_cooked,
-                            ]}
-                          >
-                            📝 {r.item.memo}
-                          </Text>
-                        ) : null}
                       </View>
                       <Text
                         style={[
@@ -810,8 +797,10 @@ export default function KitchenScreen() {
                     </TouchableOpacity>
                     );
                   };
-                  // 2026-05-27 (2차): 별도 메모 행 제거 — 메모는 메뉴 박스 안 들여쓰기로
-                  // 통합됨 (사장님 요구). 어느 메뉴의 메모인지 모호하지 않도록.
+                  // 2026-05-27 (3차): 메뉴 행 먼저 push → 메모 행은 메뉴 행 *아래* 에
+                  // 별도 행으로 push (사장님 요구). 메뉴 행 안 들여쓰기 패턴은 폭 제한
+                  // (이름/옵션/수량/가격 columns) 으로 메모 텍스트 찌그러짐 — 별도 행으로
+                  // 전체 폭 사용 + amber 바탕색 + 들여쓰기로 시각적 종속.
                   if (lq === 0) {
                     out.push(
                       makeRow(
@@ -825,6 +814,23 @@ export default function KitchenScreen() {
                   } else {
                     out.push(makeRow('n', nq, '보통'));
                     out.push(makeRow('l', lq, '대'));
+                  }
+                  if (r.item.memo) {
+                    out.push(
+                      <View
+                        key={`memo-${r.item.slotId || r.item.id}`}
+                        style={styles.itemMemoRow}
+                      >
+                        <Text
+                          style={[
+                            styles.itemMemoRowText,
+                            isPhone && styles.itemMemoRowTextPhone,
+                          ]}
+                        >
+                          📝 {r.item.memo}
+                        </Text>
+                      </View>
+                    );
                   }
                   return out;
                 })}
