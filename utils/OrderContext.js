@@ -554,6 +554,26 @@ export function OrderProvider({ children }) {
       }
       dispatch({ type: 'orders/confirmOrder', tableId });
 
+      // 2026-05-27: 사장님 호소 "분명히 등록한 번호인데 새 전화로 인식" 영구 처방.
+      // 배달/포장/예약 주문 확정 시 사장님 입력 phone + address (+alias) 자동
+      // 주소록 entry sync — alias 박혀있어 AliasPromptModal 안 거치는 케이스에서도
+      // 새 phone 이 entry.phones 에 자동 통합. 다음 같은 phone 전화 시 매칭 OK.
+      // upsertEntryFromOrder 의 정책: 기존 entry 있으면 phones 추가 (중복 X) + alias
+      // 빈 경우만 채움 (덮어쓰기 X), 새 entry 면 생성 + CID __phone:digits 자동 통합.
+      if (
+        (tblForListener?.type === 'delivery' ||
+          tblForListener?.type === 'takeout' ||
+          tblForListener?.type === 'reservation') &&
+        orderSnap?.deliveryAddress &&
+        orderSnap?.deliveryPhone
+      ) {
+        upsertEntryFromOrder({
+          address: orderSnap.deliveryAddress,
+          alias: orderSnap.deliveryAlias || '',
+          phone: orderSnap.deliveryPhone,
+        });
+      }
+
       // 1.0.44: 자동 출력 — 상황별 영수증을 위해 주소록 entry 조회로 손님번호/별칭/
       // 도로 실거리/예약시각 까지 함께 emit. 주소록은 useAddressBook 이 lat/lng/
       // drivingM 백그라운드 채움 — 처음 입력 직후 confirm 시엔 null 일 수 있음 (정상).

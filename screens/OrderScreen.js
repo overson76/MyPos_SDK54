@@ -1298,6 +1298,24 @@ export default function OrderScreen({
             ) {
               setPhone(entry.key, order.deliveryPhone);
             }
+            // 2026-05-27: 사장님 호소 처방 — 주소록에서 단골 선택 시 entry 의
+            // alias / phone 도 현재 주문에 자동 sync. 사장님이 다시 별칭/전번
+            // 입력하는 이중 작업 제거 + AliasPromptModal 안 떠도 되도록.
+            // 단 order 의 기존 값 있으면 덮어쓰기 X (사장님 명시 입력 우선).
+            const entryAlias = (entry?.alias || '').trim();
+            const entryPhone =
+              entry?.phone ||
+              (Array.isArray(entry?.phones) && entry.phones.length > 0
+                ? entry.phones[0]
+                : '');
+            const nextAlias = (order?.deliveryAlias || '').trim() || entryAlias;
+            const nextPhone = order?.deliveryPhone || entryPhone;
+            if (
+              (nextAlias && nextAlias !== order?.deliveryAlias) ||
+              (nextPhone && nextPhone !== order?.deliveryPhone)
+            ) {
+              setDeliveryContact(tableId, nextPhone, nextAlias);
+            }
           }}
         />
       )}
