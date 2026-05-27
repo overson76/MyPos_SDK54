@@ -22,14 +22,18 @@ export function parseDeliveryTime(text, isPM) {
   return { h, m, h24, period: isPM ? 'PM' : 'AM' };
 }
 
+// 2026-05-27: 방어 가드 — 호출부가 실수로 문자열("420") 이나 {h, m: undefined} 같은
+// 비정상 인자를 넘겨도 throw 하지 않도록. 영업 중 화면 폭발(사고 2026-05-27) 영구 처방.
 export function formatKorean12h(parsed) {
-  if (!parsed) return '';
+  if (!parsed || typeof parsed !== 'object') return '';
+  if (parsed.h == null || parsed.m == null) return '';
   const p = parsed.period === 'PM' ? '오후' : '오전';
   return `${p} ${parsed.h}시 ${parsed.m.toString().padStart(2, '0')}분`;
 }
 
 export function formatShort12h(parsed) {
-  if (!parsed) return '';
+  if (!parsed || typeof parsed !== 'object') return '';
+  if (parsed.h == null || parsed.m == null) return '';
   const p = parsed.period === 'PM' ? '오후' : '오전';
   return `${p} ${parsed.h}:${parsed.m.toString().padStart(2, '0')}`;
 }

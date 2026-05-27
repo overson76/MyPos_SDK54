@@ -68,6 +68,29 @@ describe('formatShort12h', () => {
     expect(formatShort12h({ h: 4, m: 20, period: 'PM' })).toBe('오후 4:20');
     expect(formatShort12h({ h: 9, m: 5, period: 'AM' })).toBe('오전 9:05');
   });
+
+  // 사고 2026-05-27: TableScreen 이 문자열("420") 을 직접 넘겨서 parsed.m.toString() 폭발.
+  // 호출부 fix + 여기 방어 가드 — 어떤 비정상 인자도 throw 하지 말 것.
+  test('비정상 인자 — 절대 throw 하지 않고 빈 문자열', () => {
+    expect(formatShort12h(null)).toBe('');
+    expect(formatShort12h(undefined)).toBe('');
+    expect(formatShort12h('420')).toBe('');
+    expect(formatShort12h(420)).toBe('');
+    expect(formatShort12h({})).toBe('');
+    expect(formatShort12h({ h: 5 })).toBe('');
+    expect(formatShort12h({ m: 20 })).toBe('');
+    expect(formatShort12h({ h: undefined, m: 20, period: 'PM' })).toBe('');
+    expect(formatShort12h({ h: 5, m: undefined, period: 'PM' })).toBe('');
+  });
+});
+
+describe('formatKorean12h — 방어 가드 (사고 2026-05-27)', () => {
+  test('비정상 인자 — 절대 throw 하지 않고 빈 문자열', () => {
+    expect(formatKorean12h('420')).toBe('');
+    expect(formatKorean12h({})).toBe('');
+    expect(formatKorean12h({ h: 5 })).toBe('');
+    expect(formatKorean12h({ m: 20 })).toBe('');
+  });
 });
 
 describe('deliveryDateFromParsed', () => {

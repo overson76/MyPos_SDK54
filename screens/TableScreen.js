@@ -27,7 +27,8 @@ import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
-import { formatShort12h } from '../utils/timeUtil';
+// 2026-05-27: deliveryTime 은 문자열("420") 로 저장 — parseDeliveryTime 으로 객체화 후 formatShort12h 호출.
+import { formatShort12h, parseDeliveryTime } from '../utils/timeUtil';
 import DeliveryMapSwiper from '../components/DeliveryMapSwiper';
 import DeliveryMapModal from '../components/DeliveryMapModal';
 import DeliveryRouteCard from '../components/DeliveryRouteCard';
@@ -656,11 +657,22 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                       {deliveryIcon} {deliveryPrimary}
                     </Text>
                   ) : null}
-                  {order.deliveryTime ? (
-                    <Text style={styles.deliveryAddr} numberOfLines={1}>
-                      {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(order.deliveryTime)}
-                    </Text>
-                  ) : null}
+                  {(() => {
+                    // 2026-05-27: deliveryTime 은 "420" 같은 문자열 — parseDeliveryTime 으로
+                    // { h, m, period } 객체화 후 formatShort12h. 문자열 직접 넘기면
+                    // parsed.m.toString() 폭발 (사장님 영업 중 사고 2026-05-27).
+                    if (!order.deliveryTime) return null;
+                    const parsedTime = parseDeliveryTime(
+                      order.deliveryTime,
+                      order.deliveryTimeIsPM ?? true,
+                    );
+                    if (!parsedTime) return null;
+                    return (
+                      <Text style={styles.deliveryAddr} numberOfLines={1}>
+                        {t.type === 'reservation' ? '📅' : '📦'} {formatShort12h(parsedTime)}
+                      </Text>
+                    );
+                  })()}
                 </>
               ) : null}
               {customerRequestFromBook ? (
