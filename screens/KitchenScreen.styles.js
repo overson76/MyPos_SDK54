@@ -235,6 +235,27 @@ export default function makeStyles(scale = 1) {
     borderRadius: 4,
     overflow: 'hidden',
   },
+  // 2026-05-27: 배달/예약/포장 시간 표기 바 — 주방이 즉시 인지.
+  timeBar: {
+    backgroundColor: '#f3f4f6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeBarLabel: {
+    fontSize: fp(11),
+    color: '#374151',
+    fontWeight: '800',
+  },
+  timeBarText: {
+    fontSize: fp(14),
+    color: '#111827',
+    fontWeight: '800',
+  },
   deliveryBar: {
     backgroundColor: '#fef2f2',
     borderBottomWidth: 1,

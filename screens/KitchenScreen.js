@@ -23,6 +23,9 @@ import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
 import { buildReceiptText } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
+// 2026-05-27: 사장님 요구 — 주문현황에서도 시간이 표기되어야 함.
+// 배달/예약/포장 모두 같은 표기. deliveryTime 은 "420" 문자열 → parseDeliveryTime 으로 객체화.
+import { formatShort12h, parseDeliveryTime } from '../utils/timeUtil';
 import {
   getCustomerRequest,
   findAddressEntry,
@@ -471,6 +474,28 @@ export default function KitchenScreen() {
                 {formatElapsed(o.createdAt, nowTick)}
               </Text>
             </View>
+
+            {(() => {
+              // 2026-05-27: 배달/예약/포장 시간 표기 — 주방이 즉시 인지.
+              // deliveryTime 은 "420" 같은 문자열, deliveryTimeIsPM 은 boolean.
+              // parseDeliveryTime 으로 { h, m, period } 객체화 후 formatShort12h.
+              const t = o.table?.type;
+              if (t !== 'delivery' && t !== 'reservation' && t !== 'takeout') return null;
+              if (!o.deliveryTime) return null;
+              const parsedTime = parseDeliveryTime(
+                o.deliveryTime,
+                o.deliveryTimeIsPM ?? true,
+              );
+              if (!parsedTime) return null;
+              const icon = t === 'delivery' ? '🛵' : t === 'reservation' ? '📅' : '📦';
+              const label = t === 'delivery' ? '출발' : t === 'reservation' ? '예약' : '픽업';
+              return (
+                <View style={styles.timeBar}>
+                  <Text style={styles.timeBarLabel}>{icon} {label}</Text>
+                  <Text style={styles.timeBarText}>{formatShort12h(parsedTime)}</Text>
+                </View>
+              );
+            })()}
 
             {o.table.type === 'delivery' && o.deliveryAddress ? (() => {
               // 배달지 표시 — 별칭 > 전번 > 주소 (사장님 정책 일관 적용).
