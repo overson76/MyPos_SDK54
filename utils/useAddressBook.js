@@ -46,22 +46,29 @@ export function useAddressBook() {
   // 결함으로 누적된 케이스 자동 복구. hydrate 가 지연될 수 있으므로 entries 비어
   // 있으면 다음 변화 기다림. 한 번 통합 후 ranRef 로 마크 — 영업 중 신규 생성은
   // 강화된 가드가 차단하므로 추가 실행 불필요.
-  const migrationRanRef = useRef(false);
+  // 2026-05-28: migrationRanRef 제거 — 옛 빌드에서 ranRef true 박힌 상태로 hydrate
+  // 되면 새 청소 effect 가 실행 자체 안 됨. 청소 함수는 idempotent (통합 완료면
+  // 같은 reference 반환) 라 무한 루프 없음. setAddressBook 가드도 ref 비교로 noop.
   useEffect(() => {
-    if (migrationRanRef.current) return;
     const entries = addressBook.entries;
     if (!entries || Object.keys(entries).length === 0) return;
-    // 1단계: phone 매칭 기준 orphan phone-only 통합 (옛 가드 결함 잔재)
+    // 1단계: phone 매칭 기준 orphan phone-only 통합
     let merged = mergeOrphanPhoneOnlyEntries(entries);
-    // 2단계: alias 매칭 기준 phone-only → 정식 entry 통합 (사장님 신고
-    // "김해시락국 2개" 사고 — alias 같은데 phone 달라 1단계가 못 잡은 케이스)
+    // 2단계: alias 매칭 기준 phone-only-like → 정식 entry 통합
+    //   ("(주소 미입력)" label 패턴 + __phone: key prefix 둘 다 phone-only 식별)
     merged = mergeSameAliasPhoneOnlyEntries(merged);
     if (merged !== entries) {
+      const removed = Object.keys(entries).length - Object.keys(merged).length;
+      if (typeof console !== 'undefined') {
+        console.warn(`[useAddressBook] 주소록 자동 통합 — ${removed}건 정리`, {
+          before: Object.keys(entries).length,
+          after: Object.keys(merged).length,
+        });
+      }
       setAddressBook((prev) =>
         prev.entries === entries ? { ...prev, entries: merged } : prev
       );
     }
-    migrationRanRef.current = true;
   }, [addressBook.entries]);
 
   // ── 좌표 자동 변환 (lazy + fire-and-forget) ─────────────────────
