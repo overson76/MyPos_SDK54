@@ -98,12 +98,22 @@ export function hasPhoneDigitsAnywhere(entries, digits) {
 //     phone-only 의 phone digits 를 정식 entry 의 phones array 에 추가 + phone-only 삭제.
 //   - 정식 entry 둘 (둘 다 주소 entry) 의 alias 같음 — 그대로 유지. 사장님이
 //     "집 주소 + 회사 주소" 처럼 의도적으로 다른 주소 등록한 케이스일 수 있음.
+// phone-only entry 식별 — __phone: key prefix 또는 "(주소 미입력)" label.
+//   옛 데이터에 두 형식 모두 잔재. 둘 다 검사해야 사장님 매장 (수동 생성
+//   잔재 포함) 의 phone-only 모두 통합.
+function isPhoneOnlyLike(key, entry) {
+  if (typeof key === 'string' && key.startsWith('__phone:')) return true;
+  const label = (entry?.label || '').trim();
+  if (label.startsWith('(주소 미입력)')) return true;
+  return false;
+}
+
 export function mergeSameAliasPhoneOnlyEntries(entries) {
   if (!entries || typeof entries !== 'object') return entries;
 
   // alias → [정식 entry key 들]
   const regularByAlias = {};
-  // alias → [phone-only entry key 들]
+  // alias → [phone-only-like entry key 들]
   const phoneOnlyByAlias = {};
 
   for (const key of Object.keys(entries)) {
@@ -111,7 +121,7 @@ export function mergeSameAliasPhoneOnlyEntries(entries) {
     if (!entry) continue;
     const alias = (entry.alias || '').trim();
     if (!alias) continue;
-    if (typeof key === 'string' && key.startsWith('__phone:')) {
+    if (isPhoneOnlyLike(key, entry)) {
       (phoneOnlyByAlias[alias] = phoneOnlyByAlias[alias] || []).push(key);
     } else {
       (regularByAlias[alias] = regularByAlias[alias] || []).push(key);
