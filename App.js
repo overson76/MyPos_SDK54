@@ -248,6 +248,7 @@ function MainApp() {
     mergePhoneIntoEntry,
     addPhoneOnly,
     setAlias,
+    clearAllSlots,
   } = useOrders();
   const { showToast } = useToast();
   // 2026-05-21: CID "주문받기" 클릭 시 띄울 OrderTypePicker — App 레벨에서 관리.
@@ -571,7 +572,10 @@ function MainApp() {
             <View
               style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
             >
-              <AdminScreen onSimulateCall={simulateIncomingCall} />
+              <AdminScreen
+                onSimulateCall={simulateIncomingCall}
+                onClearAllSlots={clearAllSlots}
+              />
             </View>
           </View>
         </View>

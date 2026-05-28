@@ -837,6 +837,30 @@ export function OrderProvider({ children }) {
       hydrateCartFromItems,
       clearTable,
       clearTableBySource,
+      // 2026-05-28: 시연 / 매장 정리용 — 모든 슬롯 한 번에 제거.
+      //   영업 중 실수 사고 방지 — AdminScreen 시연 섹션의 확인 모달 거침.
+      //   local dispatch + Firestore 직접 batch.delete (양방향). onSnapshot 가
+      //   옛 데이터 다시 hydrate 하는 사고 방지.
+      clearAllSlots: async () => {
+        addBreadcrumb('order.clearAllSlots', { count: Object.keys(orders).length });
+        dispatch({ type: 'orders/clearAllSlots' });
+        setGroups({});
+        setSplits({});
+        // Firestore 직접 비우기
+        try {
+          const { getFirestore: getFs } = await import('./firebase');
+          const db = getFs();
+          const sid = storeInfoForGuard?.storeId;
+          if (!db || !sid) return;
+          const storeRef = db.collection('stores').doc(sid);
+          const snap = await storeRef.collection('orders').get();
+          const batch = db.batch();
+          snap.forEach((doc) => batch.delete(doc.ref));
+          if (snap.size > 0) await batch.commit();
+        } catch (e) {
+          if (typeof console !== 'undefined') console.warn('[clearAllSlots] Firestore 비우기 실패', e);
+        }
+      },
       // 1.0.37: 분리 결제 / 영수증 빌더에서 sourceTable 별 소계 표시용.
       computeSubtotalsBySource: (items, defaultTableId) =>
         computeSubtotalsBySource(items, defaultTableId),

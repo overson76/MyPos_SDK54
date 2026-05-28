@@ -168,6 +168,13 @@ export function orderReducer(state, action) {
       return rest;
     }
 
+    // 2026-05-28: 시연 / 매장 정리용 — 모든 슬롯 한 번에 제거. AdminScreen 시연
+    // 섹션의 "🧹 모든 슬롯 비우기" 버튼이 호출. 영업 중 실수 사고 방지 — 호출부
+    // (OrderContext.clearAllSlots) 가 확인 모달 거침.
+    case 'orders/clearAllSlots': {
+      return {};
+    }
+
     // 2026-05-23: OrderScreen 재진입 시 cartItems=[] && items.length>0 이면
     // cartItems = items 카피로 동기화. 옛 line-437 fallback (cart 표시 시 items
     // 로 대체) 의 부작용 — 사장님이 - 키로 cartItems 를 0 까지 비우면 화면이

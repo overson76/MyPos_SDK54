@@ -74,7 +74,7 @@ const SECTIONS = [
 // 1.0.24: PinManageModal + PIN_LENGTH 는 components/PinManageModal.js 로 이동
 // (AdminSettingsView 와 공유). 아래에서 import.
 
-function SystemSettingsView({ onSimulateCall } = {}) {
+function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
   const { scale } = useResponsive();
   const sysStyles = useMemo(() => makeSysStyles(scale), [scale]);
   const lock = useLock();
@@ -653,6 +653,34 @@ function SystemSettingsView({ onSimulateCall } = {}) {
               </View>
             </>
           ) : null}
+
+          {/* 2026-05-28: 시연 환경 초기화 — 모든 진행중 주문 슬롯 한 번에 비움.
+              영업 중 실수 사고 방지 — 확인 모달 거침. 주소록/메뉴/수익은 보존. */}
+          {onClearAllSlots ? (
+            <View style={sysStyles.row}>
+              <View style={sysStyles.rowText}>
+                <Text style={sysStyles.label}>모든 슬롯 비우기</Text>
+                <Text style={sysStyles.helper}>
+                  진행중 주문 / 단체 묶음 / 분할 전부 정리. 주소록 / 메뉴 /
+                  수익 이력은 그대로. 영업 중에는 신중히 — 결제 안 한 슬롯도
+                  사라집니다.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[sysStyles.btnSecondary, { borderColor: '#dc2626' }]}
+                onPress={() => {
+                  if (typeof window !== 'undefined' && window.confirm) {
+                    if (!window.confirm('모든 진행중 주문을 정말 비우시겠어요? 결제 안 한 슬롯도 사라집니다.')) return;
+                  }
+                  onClearAllSlots();
+                }}
+              >
+                <Text style={[sysStyles.btnSecondaryText, { color: '#dc2626' }]}>
+                  🧹 비우기
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </>
       )}
 
@@ -738,7 +766,7 @@ function SystemSettingsView({ onSimulateCall } = {}) {
   );
 }
 
-export default function AdminScreen({ onSimulateCall } = {}) {
+export default function AdminScreen({ onSimulateCall, onClearAllSlots } = {}) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [section, setSection] = useState('returns');
@@ -833,7 +861,10 @@ export default function AdminScreen({ onSimulateCall } = {}) {
         ) : section === 'settings' ? (
           <AdminSettingsView />
         ) : (
-          <SystemSettingsView onSimulateCall={onSimulateCall} />
+          <SystemSettingsView
+            onSimulateCall={onSimulateCall}
+            onClearAllSlots={onClearAllSlots}
+          />
         )}
       </View>
     </View>
