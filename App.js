@@ -248,6 +248,7 @@ function MainApp() {
     mergePhoneIntoEntry,
     addPhoneOnly,
     setAlias,
+    upsertEntryFromOrder,
     clearAllSlots,
   } = useOrders();
   const { showToast } = useToast();
@@ -572,7 +573,27 @@ function MainApp() {
               style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
             >
               <AdminScreen
-                onSimulateCall={simulateIncomingCall}
+                onSimulateCall={(data) => {
+                  // 2026-05-28: 시뮬 호출 시 *주소록 entry 도 자동 박음* — 알림만으론
+                  // 사장님 슬롯/카드에서 단골 매칭 안 됨. upsertEntryFromOrder 가
+                  // 정식 entry 생성 (address+alias+phone). 다음 흐름에서 phone 기반
+                  // lookup 으로 어디서든 "👤 진실보석" 자동 표시.
+                  simulateIncomingCall(data);
+                  if (data?.alias) {
+                    if (data.address) {
+                      upsertEntryFromOrder({
+                        address: data.address,
+                        alias: data.alias,
+                        phone: data.phoneNumber,
+                      });
+                    } else if (data.phoneNumber) {
+                      // 주소 없는 시연 — phone-only entry + alias
+                      addPhoneOnly(data.phoneNumber, data.alias);
+                      const digits = String(data.phoneNumber).replace(/\D/g, '');
+                      if (digits) setAlias(`__phone:${digits}`, data.alias);
+                    }
+                  }
+                }}
                 onClearAllSlots={clearAllSlots}
               />
             </View>
