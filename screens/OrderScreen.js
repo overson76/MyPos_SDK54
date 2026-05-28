@@ -187,6 +187,8 @@ export default function OrderScreen({
     setDeliveryContact,
     upsertEntryFromOrder,
     mergePhoneIntoEntry,
+    addPhoneOnly,
+    setAlias,
     setDeliveryTime,
     setDeliveryTimeIsPM,
     setPhone,
@@ -529,6 +531,17 @@ export default function OrderScreen({
           });
         }
       }
+    } else if (alias && phone) {
+      // 2026-05-28: 사장님 신고 "별칭만 + phone 으로 entry 박혀야".
+      //   주소 없고 alias+phone 만 — phone-only entry 생성 + alias 추가.
+      //   App.js CID 통합 모달과 동일 패턴.
+      addPhoneOnly(phone, alias);
+      const digits = String(phone).replace(/\D/g, '');
+      if (digits) setAlias(`__phone:${digits}`, alias);
+      showToast({
+        kind: 'success',
+        text: `✓ ${phoneText} → ${alias} 신규 저장되었습니다 (주소 미입력)`,
+      });
     }
 
     // order 의 deliveryAlias 갱신 (영수증/표시/음성용)
