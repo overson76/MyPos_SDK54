@@ -18,21 +18,46 @@ export function isGeocodingAvailable() {
 // 주소 또는 키워드 한 줄 → { lat, lng, formatted } | null
 // 1차: address.json (정확한 도로명/지번). 2차: keyword.json (가게명/자유 키워드).
 // formatted: 카카오가 인식한 표준 주소/장소명 — 사용자에게 변환 결과 미리보기 표시용.
-export async function geocodeAddress(address) {
+//
+// 2026-05-28: 사장님 사고 "311km 짜리 entry 박힘" 영구 처방.
+//   keyword 검색이 *전국 첫 매칭* 을 반환해 수도권 "신한철물"/"GS편의점" 같은
+//   동명 가게가 부산 매장 주소록에 박힘 — 배달회수/도착시간 모두 마비.
+//   center 옵션 받으면 keyword 검색을 *반경 제한* (searchKeywordNearby) 으로 분기.
+//   address.json 1차 결과도 center 기준 검증해 reject.
+export async function geocodeAddress(address, opts = {}) {
   if (!getKakaoKey()) return null;
   const trimmed = String(address ?? '').trim();
   if (!trimmed) return null;
+  const { center = null, radius = MAX_DELIVERY_RADIUS_KM * 1000 } = opts;
 
   const addr = await callKakao('/v2/local/search/address.json', trimmed);
   const a = addr?.documents?.[0];
   if (a && a.x && a.y) {
-    return {
+    const result = {
       lat: parseFloat(a.y),
       lng: parseFloat(a.x),
       formatted: a.road_address?.address_name || a.address_name || trimmed,
     };
+    if (!center || isCoordNearCenter(result, center, radius / 1000)) {
+      return result;
+    }
+    // 1차 결과가 반경 밖이면 reject — 2차 keyword 검색은 nearby 로 시도.
   }
 
+  // 2차: keyword 검색. center 있으면 nearby (radius 제한), 없으면 옛 동작 (전국).
+  if (center) {
+    const nearby = await searchKeywordNearby(trimmed, center, radius);
+    if (nearby) {
+      return {
+        lat: nearby.lat,
+        lng: nearby.lng,
+        formatted: nearby.formatted,
+      };
+    }
+    return null; // 반경 안에서 못 찾음 — 사장님 정책 "주소지 미등록으로 남겨놔야".
+  }
+
+  // center 미설정 — 옛 동작 (전국 검색). 호출부가 center 안 주면 검증 책임도 호출부.
   const kw = await callKakao('/v2/local/search/keyword.json', trimmed);
   const k = kw?.documents?.[0];
   if (k && k.x && k.y) {
@@ -200,16 +225,17 @@ export function formatDrivingDistance(m) {
   return `${Math.round(km)} km`;
 }
 
-// 2026-05-28: 카카오 응답 검증 — 사장님 신고 "엄마선지 300km" 사고 처방.
+// 2026-05-28: 카카오 응답 검증 — 사장님 신고 "엄마선지 300km" / "신한철물 310km" 사고 처방.
 // 한 번 잘못 매칭된 좌표/거리가 Firestore 에 박혀 매번 화면에 노출되는 잠복 버그.
+// 배달회수 / 도착시간 / 지도 fitBounds 모두 마비.
 //
-// 임계값 근거 — 작은 동네 배달 매장 기준:
-//   - 매장 좌표 기준 30 km 반경 = 카카오 geocode 가 *합리적으로* 인식한 주소 한계.
-//     30 km 넘으면 거의 확실히 "동명 다른 도시 매장" 으로 잘못 매칭된 경우 (충청도/서울 등).
-//   - 도로 실거리 50 km = 배달 최대 사거리 상한. 그 이상은 카카오모빌리티 응답 오류로 간주.
+// 임계값 — 사장님 명시 룰 "사업장 기점 반경 5km 이내만 검색, 밖은 주소지 미등록":
+//   - 매장 좌표 기준 5 km 직선 반경 = 사장님 운영 정책. 부산 사하구 매장.
+//     5 km 넘으면 카카오가 "동명 다른 도시 매장" 으로 잘못 매칭한 것 (수도권 등).
+//   - 도로 실거리 10 km = 5km 직선 * 도로 우회 1~2배 여유. 그 이상은 매칭 오류.
 //   - 도로/직선 비율 5배 = 도로 우회 일반적으로 직선의 1.3~2배. 5배 넘으면 길찾기 매칭 오류.
-export const MAX_DELIVERY_RADIUS_KM = 30;
-export const MAX_REASONABLE_DRIVING_KM = 50;
+export const MAX_DELIVERY_RADIUS_KM = 5;
+export const MAX_REASONABLE_DRIVING_KM = 10;
 export const MAX_DRIVING_RATIO = 5;
 
 // drivingM 이 합리적 값인지 — entry.drivingM 사용/저장 전 검증.

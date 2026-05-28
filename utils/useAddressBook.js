@@ -87,13 +87,19 @@ export function useAddressBook() {
         continue;
       }
       inFlightRef.current.add(entry.key);
-      geocodeAddress(entry.label).then((result) => {
+      // 2026-05-28: 사장님 사고 "신한철물 311km 박힘" 영구 처방.
+      //   center 옵션 전달 → geocodeAddress 가 keyword 검색을 *반경 제한* 으로 분기.
+      //   처음부터 반경 밖 결과 reject — 전국 검색 절대 금지.
+      const geocodeOpts = storeCoord
+        ? { center: storeCoord, radius: MAX_DELIVERY_RADIUS_KM * 1000 }
+        : {};
+      geocodeAddress(entry.label, geocodeOpts).then((result) => {
         inFlightRef.current.delete(entry.key);
         if (!result) {
           failedRef.current.add(entry.key);
           return;
         }
-        // 매장 좌표 기준 합리 반경 검증. 매장 좌표 미설정이면 skip (true).
+        // 매장 좌표 기준 합리 반경 검증 (이중 가드). 매장 좌표 미설정이면 skip.
         if (!isCoordNearCenter(result, storeCoord, MAX_DELIVERY_RADIUS_KM)) {
           failedRef.current.add(entry.key);
           if (typeof console !== 'undefined') {
