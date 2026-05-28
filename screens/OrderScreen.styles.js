@@ -71,6 +71,27 @@ export default function makeStyles(scale = 1) {
     paddingHorizontal: 6,
     fontSize: fp(12),
   },
+  // 2026-05-28: 손님 전화번호 입력/표시 칸 — 사장님 신고 "배달1 진입 시 손님 phone
+  // 도 보여야". 헤더 inline 한 칸. CID 자동 채움 + 사장님 수동 편집.
+  deliveryPhoneInput: {
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    fontSize: fp(12),
+    color: '#1e3a8a',
+    fontWeight: '700',
+    width: 130,
+    flexShrink: 0,
+    marginLeft: 6,
+  },
+  // 채워진 상태 — 파란 강조 (사장님이 *보고* 인지)
+  deliveryPhoneInputFilled: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+  },
   kbDoneBtn: {
     backgroundColor: '#10b981',
     borderRadius: 6,

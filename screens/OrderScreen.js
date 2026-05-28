@@ -477,9 +477,14 @@ export default function OrderScreen({
     onBack?.();
   };
 
-  const handleAliasPromptConfirm = ({ alias, mergeIntoKey, autoAddress }) => {
+  const handleAliasPromptConfirm = ({ alias, mergeIntoKey, autoAddress, phone: modalPhone }) => {
     setAliasPromptOpen(false);
-    const phone = order?.deliveryPhone;
+    // 2026-05-28: 모달에서 사장님 직접 입력한 phone 우선, 없으면 order 의 deliveryPhone
+    // (CID 자동 stash 흐름). 모달 phone 입력 시 order 에도 반영 (영수증/표시 일관).
+    const phone = (modalPhone || '').trim() || order?.deliveryPhone || '';
+    if (modalPhone && modalPhone.trim() && phone !== (order?.deliveryPhone || '')) {
+      setDeliveryContact(tableId, phone, alias || order?.deliveryAlias || null);
+    }
     let finalAddress = order?.deliveryAddress;
 
     // 카카오 검색 결과 주소 자동 채움
@@ -1258,6 +1263,27 @@ export default function OrderScreen({
                   >
                     <Text style={styles.addressBookBtnText}>▼</Text>
                   </TouchableOpacity>
+                  {/* 2026-05-28: 사장님 신고 "배달1 클릭 시 손님 전화번호도 화면에
+                      나와야". 헤더 inline phone 입력 칸 — CID 자동 채움 + 사장님
+                      수동 편집. order.deliveryPhone 비면 placeholder, 있으면 파란
+                      강조로 사장님이 즉시 인지. */}
+                  <TextInput
+                    style={[
+                      styles.deliveryPhoneInput,
+                      !!(order.deliveryPhone || '').trim() && styles.deliveryPhoneInputFilled,
+                    ]}
+                    value={order.deliveryPhone || ''}
+                    onChangeText={(v) =>
+                      tableId && setDeliveryContact(tableId, v, order.deliveryAlias || null)
+                    }
+                    placeholder="📞 전화번호"
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="phone-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                    blurOnSubmit
+                    maxLength={20}
+                  />
                   <AddressChips
                     compact={isPhone}
                     inline

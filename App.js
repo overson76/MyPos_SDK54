@@ -449,8 +449,9 @@ function MainApp() {
           setCidMergeOpen(false);
           setCidMergeData(null);
         }}
-        onConfirm={({ alias, mergeIntoKey }) => {
-          const cidPhone = cidMergeData?.phoneNumber || '';
+        onConfirm={({ alias, mergeIntoKey, phone: modalPhone }) => {
+          // 2026-05-28: 모달 phone 입력 우선, 없으면 CID 의 phoneNumber.
+          const cidPhone = (modalPhone || '').trim() || cidMergeData?.phoneNumber || '';
           const cidFormatted = cidMergeData?.formattedNumber || cidPhone;
           setCidMergeOpen(false);
           setCidMergeData(null);

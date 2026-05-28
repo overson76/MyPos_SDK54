@@ -42,6 +42,9 @@ export default function AliasPromptModal({
 
   const [step, setStep] = useState('input'); // 'input' | 'similar' | 'search'
   const [alias, setAlias] = useState(initialAlias);
+  // 2026-05-28: phone 도 사장님이 직접 수정 가능 — CID 흐름 ✕ 닫고 직접 슬롯 만든
+  // 경우에도 모달에서 phone 입력해 entry sync 가능. currentPhone 자동 채움.
+  const [phone, setPhone] = useState(currentPhone);
   const [similarCandidates, setSimilarCandidates] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState(null); // { lat, lng, formatted, name } | null
@@ -52,16 +55,17 @@ export default function AliasPromptModal({
     if (visible) {
       setStep('input');
       setAlias(initialAlias || '');
+      setPhone(currentPhone || '');
       setSimilarCandidates([]);
       setSearchResult(null);
       setSearching(false);
     }
-  }, [visible, initialAlias]);
+  }, [visible, initialAlias, currentPhone]);
 
   if (!visible) return null;
 
   const handleSkip = () => {
-    onConfirm?.({ alias: null, mergeIntoKey: null, autoAddress: null });
+    onConfirm?.({ alias: null, mergeIntoKey: null, autoAddress: null, phone: phone.trim() });
   };
 
   const handleNext = () => {
@@ -80,12 +84,12 @@ export default function AliasPromptModal({
     if (!currentAddress && storeCoord) {
       runAddressSearch(a, null);
     } else {
-      onConfirm?.({ alias: a, mergeIntoKey: null, autoAddress: null });
+      onConfirm?.({ alias: a, mergeIntoKey: null, autoAddress: null, phone: phone.trim() });
     }
   };
 
   const handleSelectCandidate = (entryKey) => {
-    onConfirm?.({ alias: alias.trim(), mergeIntoKey: entryKey, autoAddress: null });
+    onConfirm?.({ alias: alias.trim(), mergeIntoKey: entryKey, autoAddress: null, phone: phone.trim() });
   };
 
   const handleNewCustomer = () => {
@@ -93,7 +97,7 @@ export default function AliasPromptModal({
     if (!currentAddress && storeCoord) {
       runAddressSearch(a, null);
     } else {
-      onConfirm?.({ alias: a, mergeIntoKey: null, autoAddress: null });
+      onConfirm?.({ alias: a, mergeIntoKey: null, autoAddress: null, phone: phone.trim() });
     }
   };
 
@@ -123,11 +127,12 @@ export default function AliasPromptModal({
       alias: alias.trim(),
       mergeIntoKey: null,
       autoAddress: searchResult?.formatted || null,
+      phone: phone.trim(),
     });
   };
 
   const handleRejectAddress = () => {
-    onConfirm?.({ alias: alias.trim(), mergeIntoKey: null, autoAddress: null });
+    onConfirm?.({ alias: alias.trim(), mergeIntoKey: null, autoAddress: null, phone: phone.trim() });
   };
 
   return (
@@ -163,9 +168,6 @@ export default function AliasPromptModal({
                     이 주문의 손님 별칭을 입력하세요. 입력하면 주소록에 자동
                     저장됩니다. 별칭이 필요 없으면 "건너뛰기".
                   </Text>
-                  {currentPhone ? (
-                    <Text style={styles.metaLine}>📞 {currentPhone}</Text>
-                  ) : null}
                   {currentAddress ? (
                     <Text style={styles.metaLine}>📍 {currentAddress}</Text>
                   ) : (
@@ -182,6 +184,18 @@ export default function AliasPromptModal({
                     placeholderTextColor="#9ca3af"
                     maxLength={30}
                     autoFocus
+                  />
+                  {/* 2026-05-28: phone 도 직접 편집. CID 자동 채움 + 사장님 수정.
+                      이 phone 으로 onConfirm 전달 → entry phone 박힘. */}
+                  <Text style={styles.phoneLabel}>📞 전화번호 (선택)</Text>
+                  <TextInput
+                    style={styles.aliasInput}
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="예) 010-1234-5678"
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="phone-pad"
+                    maxLength={20}
                   />
                   <View style={styles.actions}>
                     <TouchableOpacity style={styles.confirmBtn} onPress={handleNext}>
@@ -337,6 +351,13 @@ function makeStyles(scale = 1) {
       fontSize: fp(13),
       color: '#111827',
       fontWeight: '700',
+      marginBottom: 4,
+    },
+    phoneLabel: {
+      fontSize: fp(12),
+      color: '#374151',
+      fontWeight: '700',
+      marginTop: 4,
       marginBottom: 4,
     },
     metaWarn: {
