@@ -9,6 +9,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 
 | 날짜 | 파일 | 핵심 주제 | 커밋 |
 |---|---|---|---|
+| 2026-05-28 | [2026-05-28-2부-모래톱사고-자동청소-가드완화.md](2026-05-28-2부-모래톱사고-자동청소-가드완화.md) | "모래톱 entry 2개" 사고 — 같은 alias + 같은 phone 인데 label=alias pseudo entry 가 진짜 주소 entry 와 통합 못 함. `isPhoneOnlyLike` 강화 + `addAddress` 가드 + 부팅 청소 effect `storeCoord` 가드 완화 (절대 임계 10km 만으로 잔재 reset). 워크트리 `.env` 누락 진단 (preview "카카오 KEY 미설정" 라벨 원인). jest 556/556 (+7). deploy:web + EAS OTA 둘 다 배포 | 2381ec3 |
 | 2026-05-28 | [2026-05-28-CID풀세트-주소록자동통합-시연시스템.md](2026-05-28-CID풀세트-주소록자동통합-시연시스템.md) | 사장님 운영 사고 9종 종합 처방 — 출력물 시간/별칭, 카카오 5km, phone sync, AliasPromptModal 다단계, CID 통합 UI, Toast, 시연 시스템 풀세트 (시뮬+자동 entry+clearAllSlots), 같은 alias entry 자동 통합 ("김해시락국 2개" 320→295건). 19 commit, jest 549/549, deploy:web + EAS OTA 매번 배포 | d305b17~e36238f |
 | 2026-05-03 | [2026-05-03-q-and-a.md](2026-05-03-q-and-a.md) | 익명 UID 손실 자가복구 + 폰 지도 + 대표 가입 + CID 준비 | c523683, 37cb00d |
 | 2026-05-04 | [2026-05-04-firebase-pc-recovery-cid-map.md](2026-05-04-firebase-pc-recovery-cid-map.md) | Firebase v12 PC연동복구 + Cloudflare차단 + CID준비 + 배달지도경로 | 33f8606, d279775 |
