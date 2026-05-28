@@ -33,6 +33,7 @@ import TableSourcePicker from '../components/TableSourcePicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
+import { useToast } from '../utils/ToastContext';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -109,6 +110,7 @@ export default function OrderScreen({
   // 빈 슬롯 클릭 시 신규 추가 위치 캡처 — { category, flatIndex }
   const [menuAddTarget, setMenuAddTarget] = useState(null);
   const { storeInfo } = useStore();
+  const { showToast } = useToast();
   // sizePrompt = { items: [...], index: 0, sizeOption, value }
   const {
     width: _screenW,
@@ -486,11 +488,41 @@ export default function OrderScreen({
       setDeliveryAddress(tableId, autoAddress);
     }
 
-    // 주소록 sync
+    // 2026-05-28: 주소록 sync + Toast 알림 — 사장님 호소 "어디에 저장됐는지 알림".
+    //   기존 entry 통합 → "추가 저장", 새 entry → "신규 저장", noop → 안내.
+    const phoneText = phone || '';
     if (mergeIntoKey && phone) {
-      mergePhoneIntoEntry(mergeIntoKey, phone, alias);
+      const result = mergePhoneIntoEntry(mergeIntoKey, phone, alias);
+      if (result && typeof result === 'object') {
+        const labelText = result.finalAlias || result.finalLabel || mergeIntoKey;
+        showToast({
+          kind: 'success',
+          text: result.phoneAdded
+            ? `✓ ${phoneText} → ${labelText} 에 추가 저장되었습니다`
+            : `ℹ ${phoneText} → ${labelText} 는 이미 등록되어 있습니다`,
+        });
+      }
     } else if (finalAddress) {
-      upsertEntryFromOrder({ address: finalAddress, alias, phone });
+      const result = upsertEntryFromOrder({ address: finalAddress, alias, phone });
+      if (result && typeof result === 'object') {
+        const labelText = result.finalAlias || result.finalLabel || finalAddress;
+        if (result.action === 'created') {
+          showToast({
+            kind: 'success',
+            text: phoneText
+              ? `✓ ${phoneText} → ${labelText} 신규 저장되었습니다`
+              : `✓ ${labelText} 신규 저장되었습니다`,
+          });
+        } else if (result.action === 'updated') {
+          const parts = [];
+          if (result.phoneAdded) parts.push('전화번호');
+          if (result.aliasAdded) parts.push('별칭');
+          showToast({
+            kind: 'success',
+            text: `✓ ${labelText} 에 ${parts.join(' / ') || '정보'} 추가 저장되었습니다`,
+          });
+        }
+      }
     }
 
     // order 의 deliveryAlias 갱신 (영수증/표시/음성용)

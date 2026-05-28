@@ -37,6 +37,8 @@ import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
 import OrderTypePicker from './components/OrderTypePicker';
 import AliasPromptModal from './components/AliasPromptModal';
+import ToastBanner from './components/ToastBanner';
+import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
 // 2026-05-21: CID 자동 단골(15초 후 자동 배달 슬롯 생성) 제거 — 사장님이 메뉴 담고
@@ -181,9 +183,11 @@ export default function App() {
           {/* StoreProvider 는 web 에서도 항상 mount — useOrderFirestoreSync 등이
               useStore() 를 호출하므로 context 자체는 살아있어야 한다.
               Firebase 미설정 web 에서는 firebase.web.js 가 null 반환 → subscribe noop. */}
-          <StoreProvider>
-            {USE_GATE ? <Gate /> : <JoinedAppTree />}
-          </StoreProvider>
+          <ToastProvider>
+            <StoreProvider>
+              {USE_GATE ? <Gate /> : <JoinedAppTree />}
+            </StoreProvider>
+          </ToastProvider>
         </WebInsetsOverride>
       </SafeAreaProvider>
     </SentryErrorBoundary>
@@ -245,6 +249,7 @@ function MainApp() {
     addPhoneOnly,
     setAlias,
   } = useOrders();
+  const { showToast } = useToast();
   // 2026-05-21: CID "주문받기" 클릭 시 띄울 OrderTypePicker — App 레벨에서 관리.
   // 알림은 즉시 dismiss + picker 띄움 + 사장님 선택 시 빈 슬롯에 발신자 정보만 박고 "주문대기".
   const [callTypePickerOpen, setCallTypePickerOpen] = useState(false);
@@ -442,12 +447,22 @@ function MainApp() {
         }}
         onConfirm={({ alias, mergeIntoKey }) => {
           const cidPhone = cidMergeData?.phoneNumber || '';
+          const cidFormatted = cidMergeData?.formattedNumber || cidPhone;
           setCidMergeOpen(false);
           setCidMergeData(null);
           if (!cidPhone) return;
           if (mergeIntoKey) {
             // 기존 entry 에 phone 통합 — 사장님이 후보 선택 (사장님 의도 "같은 손님").
-            mergePhoneIntoEntry(mergeIntoKey, cidPhone, alias || '');
+            const result = mergePhoneIntoEntry(mergeIntoKey, cidPhone, alias || '');
+            if (result && typeof result === 'object') {
+              const labelText = result.finalAlias || result.finalLabel || mergeIntoKey;
+              showToast({
+                kind: 'success',
+                text: result.phoneAdded
+                  ? `✓ ${cidFormatted} → ${labelText} 에 추가 저장되었습니다`
+                  : `ℹ ${cidFormatted} → ${labelText} 는 이미 등록되어 있습니다`,
+              });
+            }
           } else if (alias) {
             // 별칭만 있는 새 phone-only entry — addPhoneOnly 가 같은 phone 가드.
             addPhoneOnly(cidPhone, alias);
@@ -455,11 +470,17 @@ function MainApp() {
             // 그 경우 setAlias 로 별칭만 추가 (key = __phone:digits).
             const digits = String(cidPhone).replace(/\D/g, '');
             if (digits) setAlias(`__phone:${digits}`, alias);
+            showToast({
+              kind: 'success',
+              text: `✓ ${cidFormatted} → ${alias} 신규 저장되었습니다`,
+            });
           }
           // alias 없고 mergeIntoKey 없으면 (skip) noop.
           dismissIncomingCall();
         }}
       />
+      {/* 2026-05-28: Toast 알림 — 주소록 저장 결과 시각 피드백. */}
+      <ToastBanner />
       {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
           배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>

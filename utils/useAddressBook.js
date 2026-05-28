@@ -519,6 +519,13 @@ export function useAddressBook() {
   // 2026-05-25 사장님 요청: 주문 확정 시 사장님이 입력한 alias/phone 가 자동으로
   // 주소 entry 에 sync. 같은 phone 의 CID phone-only entry 가 있으면 통합 (삭제).
   // alias 가 이미 채워져 있으면 덮어쓰기 X — 사장님 명시 편집으로만 변경.
+  //
+  // 2026-05-28: 반환값 확장 — 호출부가 Toast 알림 텍스트 결정에 사용.
+  //   { key, action: 'created'|'updated'|'noop', phoneAdded, aliasAdded,
+  //     finalAlias, finalLabel, finalPhone } | null
+  //   - action='created': 신규 entry 생성. 사장님 알림 "신규 저장".
+  //   - action='updated': 기존 entry 에 phone/alias 추가. "추가 저장".
+  //   - action='noop': 변경 없음 (이미 같은 정보 등록). 사장님 알림 X 또는 "이미 등록됨".
   const upsertEntryFromOrder = useCallback(({ address, alias, phone, customerRequest } = {}) => {
     const safeAddr = sanitizeDeliveryAddress(address);
     const safeAlias = String(alias || '').trim().slice(0, 30);
@@ -526,6 +533,33 @@ export function useAddressBook() {
     if (!safeAddr) return null;
     const key = normalizeAddressKey(safeAddr);
     if (!key) return null;
+
+    // closure 시점 결과 계산 — setAddressBook 콜백은 비동기라 즉시 결과 반환 어려움.
+    // 호출 시점 entries snapshot 으로 action 결정. 호출 빈도 낮아 race 위험 무시.
+    const snapEntries = addressBook?.entries || {};
+    const snapExisting = snapEntries[key];
+    let action = 'noop';
+    let phoneAdded = false;
+    let aliasAdded = false;
+    if (!snapExisting) {
+      action = 'created';
+      phoneAdded = !!digits;
+      aliasAdded = !!safeAlias;
+    } else {
+      if (safeAlias && !snapExisting.alias) {
+        aliasAdded = true;
+        action = 'updated';
+      }
+      if (digits) {
+        const exDigits = Array.isArray(snapExisting.phones)
+          ? snapExisting.phones.map((p) => String(p).replace(/\D/g, '')).filter(Boolean)
+          : (snapExisting.phone ? [String(snapExisting.phone).replace(/\D/g, '')] : []);
+        if (!exDigits.includes(digits)) {
+          phoneAdded = true;
+          action = 'updated';
+        }
+      }
+    }
 
     setAddressBook((prev) => {
       const entries = { ...prev.entries };
@@ -580,14 +614,34 @@ export function useAddressBook() {
 
       return { ...prev, entries };
     });
-    return key;
-  }, []);
+    const finalAlias = (snapExisting?.alias || safeAlias || '').trim();
+    const finalLabel = snapExisting?.label || safeAddr;
+    const finalPhone = digits || snapExisting?.phone || '';
+    return { key, action, phoneAdded, aliasAdded, finalAlias, finalLabel, finalPhone };
+  }, [addressBook]);
 
   // 사장님 "진실 → 진실보석 매칭" confirm 시 호출. 기존 entry 에 phone 추가
   // + alias 가 비어있으면 입력한 alias 로 채움 + CID phone-only entry 통합.
+  //
+  // 2026-05-28: 반환값 확장 — Toast 알림 텍스트 결정용.
+  //   { key, phoneAdded, aliasAdded, finalAlias, finalLabel } | false (targetKey 없음)
   const mergePhoneIntoEntry = useCallback((targetKey, phone, alias) => {
     const digits = String(phone || '').replace(/\D/g, '');
     if (!targetKey) return false;
+    // closure 시점 결과 계산
+    const snapEx = addressBook?.entries?.[targetKey];
+    if (!snapEx) return false;
+    const safeAlias = String(alias || '').trim().slice(0, 30);
+    let phoneAdded = false;
+    let aliasAdded = false;
+    if (digits) {
+      const exDigits = Array.isArray(snapEx.phones)
+        ? snapEx.phones.map((p) => String(p).replace(/\D/g, '')).filter(Boolean)
+        : (snapEx.phone ? [String(snapEx.phone).replace(/\D/g, '')] : []);
+      if (!exDigits.includes(digits)) phoneAdded = true;
+    }
+    if (safeAlias && !snapEx.alias) aliasAdded = true;
+
     setAddressBook((prev) => {
       const ex = prev.entries[targetKey];
       if (!ex) return prev;
@@ -602,7 +656,6 @@ export function useAddressBook() {
           if (!updated.phone) updated.phone = digits;
         }
       }
-      const safeAlias = String(alias || '').trim().slice(0, 30);
       if (safeAlias && !updated.alias) updated.alias = safeAlias;
 
       const newEntries = { ...prev.entries, [targetKey]: updated };
@@ -612,8 +665,14 @@ export function useAddressBook() {
       }
       return { ...prev, entries: newEntries };
     });
-    return true;
-  }, []);
+    return {
+      key: targetKey,
+      phoneAdded,
+      aliasAdded,
+      finalAlias: snapEx.alias || safeAlias || '',
+      finalLabel: snapEx.label || '',
+    };
+  }, [addressBook]);
 
   return {
     addressBook,
