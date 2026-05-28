@@ -284,10 +284,9 @@ function MainApp() {
   //   incomingCall 새로 들어올 때마다 timer 시작. dismiss/orderPress 시 cleanup.
   useEffect(() => {
     if (!incomingCall) return undefined;
-    // 2026-05-28: 시연(simulateCall) 알림은 자동 stash 건너뛰기. 사장님이 직접
-    // "👤 통합" / "주문받기" / ✕ 중 선택하는 흐름을 검증하므로 타이머가 흐름을
-    // 가로채면 안 됨. 실제 CID 만 자동 stash.
-    if (incomingCall.__simulated) return undefined;
+    // 2026-05-28 사장님 신고: 시뮬도 진짜 매장과 *같은 흐름* 이어야. 실제로는
+    // 사장님이 전화 통화 중이라 "주문받기" 못 누르고 10초 후 자동 stash 되는
+    // 경우가 많음 — 그 시나리오를 시뮬에서도 정확히 검증해야. __simulated skip 제거.
     if (typeof submitPendingAsType !== 'function') return undefined;
     const timer = setTimeout(() => {
       // 자동 stash — 빈 d 슬롯에 발신자 정보만 박음. PENDING cart 없으니 메뉴는
