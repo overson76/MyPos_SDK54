@@ -2205,15 +2205,17 @@ export default function OrderScreen({
                       // 2026-05-28 사장님 호소 "분명히 등록한 번호인데 새 전화로 인식 — 엉망":
                       //   가드 완화. 배달뿐 아니라 포장/예약도 단골 식별 필요.
                       //   CID phone 없는 매장 직접 손님도 별칭 등록받아 다음에 매칭.
-                      // 2026-05-28 사장님 호소 "단골인데도 모달 떠 — 그냥 주문만 들어가면 되잖아":
-                      //   식별 정보가 어디에든 있으면 모달 skip. 신규 손님 (완전 미상) 만 모달.
-                      //   - order.deliveryAlias (단골 자동 stash)
+                      // 2026-05-28 사장님 호소 (반복) "단골인데도 모달 떠 — 그냥 주문만 들어가면 되잖아":
+                      //   식별 정보가 *어디에든* 있으면 모달 skip. 신규 손님 (완전 미상) 만 모달.
+                      //   - order.deliveryAlias / order.deliveryPhone (슬롯에 박힌 데이터)
                       //   - 주소록 entry alias (address 기반 lookup)
-                      //   - order.deliveryPhone (CID 알림 phone 박힌 모든 경우)
+                      //   - 글로벌 lastCallPhone (CID 알림 5분 TTL — 사장님이 옛 슬롯 진입했어도 시뮬 phone 인식)
                       //   confirmOrder 자동 sync 가 어차피 entry 만듦. 사장님이 별칭 추가 원하면 ✏️.
                       const tType = table?.type;
                       const aliasFromOrder = (order?.deliveryAlias || '').trim();
                       const phoneFromOrder = (order?.deliveryPhone || '').trim();
+                      const phoneFromLastCall = getLastCallPhone();
+                      const phoneAny = phoneFromOrder || phoneFromLastCall;
                       let aliasFromBook = '';
                       if (!aliasFromOrder && order?.deliveryAddress) {
                         const key = normalizeAddressKey(order.deliveryAddress);
@@ -2226,7 +2228,7 @@ export default function OrderScreen({
                           tType === 'reservation') &&
                         !aliasFromOrder &&
                         !aliasFromBook &&
-                        !phoneFromOrder;
+                        !phoneAny;
                       if (needsAliasPrompt) {
                         setAliasPromptOpen(true);
                         return;
