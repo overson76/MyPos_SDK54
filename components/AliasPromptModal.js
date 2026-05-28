@@ -200,23 +200,34 @@ export default function AliasPromptModal({
                     입력한 "{alias}" 과 비슷한 별칭의 손님이 이미 있어요. 같은
                     손님이면 선택 → 이 전화번호를 그 손님에 추가합니다.
                   </Text>
-                  {similarCandidates.map((c) => (
-                    <TouchableOpacity
-                      key={c.key}
-                      style={styles.candidate}
-                      onPress={() => handleSelectCandidate(c.key)}
-                    >
-                      <Text style={styles.candidateAlias}>👤 {c.alias}</Text>
-                      {c.label ? (
-                        <Text style={styles.candidateAddr} numberOfLines={1}>
-                          📍 {c.label}
-                        </Text>
-                      ) : null}
-                      {c.count > 0 ? (
-                        <Text style={styles.candidateCount}>×{c.count}회 주문</Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
+                  {similarCandidates.map((c) => {
+                    // 2026-05-28: alias 비면 label 을 식별자로 표시 — findSimilarAliases 가
+                    // 이제 label 도 매칭하므로 alias 없는 entry 도 후보로 들어옴.
+                    const headLabel = (c.alias || '').trim() || (c.label || '').trim();
+                    const phoneText = c.phone || (Array.isArray(c.phones) ? c.phones[0] : '');
+                    return (
+                      <TouchableOpacity
+                        key={c.key}
+                        style={styles.candidate}
+                        onPress={() => handleSelectCandidate(c.key)}
+                      >
+                        <Text style={styles.candidateAlias}>👤 {headLabel}</Text>
+                        {c.label && c.label !== headLabel ? (
+                          <Text style={styles.candidateAddr} numberOfLines={1}>
+                            📍 {c.label}
+                          </Text>
+                        ) : null}
+                        {phoneText ? (
+                          <Text style={styles.candidateAddr} numberOfLines={1}>
+                            ☎ {phoneText}
+                          </Text>
+                        ) : null}
+                        {c.count > 0 ? (
+                          <Text style={styles.candidateCount}>×{c.count}회 주문</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
                   <TouchableOpacity style={styles.newCustomerBtn} onPress={handleNewCustomer}>
                     <Text style={styles.newCustomerText}>+ 새 손님 (모두 다름)</Text>
                   </TouchableOpacity>

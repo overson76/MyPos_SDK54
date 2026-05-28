@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sanitizeDeliveryAddress } from './validate';
 import { localDateString, normalizeAddressKey } from './orderHelpers';
-import { geocodeAddress, isGeocodingAvailable } from './geocode';
+import {
+  geocodeAddress,
+  isGeocodingAvailable,
+  isCoordNearCenter,
+  isDrivingMSane,
+  distanceKm,
+  MAX_DELIVERY_RADIUS_KM,
+} from './geocode';
+import { useStore } from './StoreContext';
 import {
   hasPhoneDigitsAnywhere,
   mergeOrphanPhoneOnlyEntries,
@@ -54,6 +62,18 @@ export function useAddressBook() {
   // ── 좌표 자동 변환 (lazy + fire-and-forget) ─────────────────────
   // entry 에 lat 없으면 백그라운드로 카카오 호출 → 결과 저장.
   // inFlight: 중복 호출 방지. failed: 일시 실패 마킹 — 메모리 only 라 앱 재시작 시 재시도.
+  //
+  // 2026-05-28: 카카오 응답 좌표 검증 — 매장 좌표 기준 30 km 초과면 reject.
+  // 사장님 신고 "엄마선지 300km" 사고: "엄마선지" 만 입력하면 카카오 keyword 검색이
+  // 충청도 동명 매장 좌표 (lat 36.97/lng 126.92) 를 반환해 매장(부산)에서 347km 가
+  // 정확히 계산돼 박힘. 좌표 단에서 막아야 Firestore 잠복 entry 가 안 생긴다.
+  const { storeInfo } = useStore();
+  const storeCoord = useMemo(() => {
+    if (typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number') {
+      return { lat: storeInfo.lat, lng: storeInfo.lng };
+    }
+    return null;
+  }, [storeInfo?.lat, storeInfo?.lng]);
   const inFlightRef = useRef(new Set());
   const failedRef = useRef(new Set());
   useEffect(() => {
@@ -73,20 +93,99 @@ export function useAddressBook() {
           failedRef.current.add(entry.key);
           return;
         }
+        // 매장 좌표 기준 합리 반경 검증. 매장 좌표 미설정이면 skip (true).
+        if (!isCoordNearCenter(result, storeCoord, MAX_DELIVERY_RADIUS_KM)) {
+          failedRef.current.add(entry.key);
+          if (typeof console !== 'undefined') {
+            console.warn(
+              `[useAddressBook] geocode 응답 ${MAX_DELIVERY_RADIUS_KM}km 반경 초과 — reject`,
+              { key: entry.key, label: entry.label, result, storeCoord }
+            );
+          }
+          return;
+        }
         setAddressBook((prev) => {
           const ex = prev.entries[entry.key];
           if (!ex || typeof ex.lat === 'number') return prev;
+          // 좌표 채울 때 옛 drivingM 잔재(이전 좌표 기준) 도 같이 무효화.
+          // 보통 lat 없는 entry 에 drivingM 없지만 마이그레이션/수동 편집 잔재 대응.
+          const next = { ...ex, lat: result.lat, lng: result.lng };
+          delete next.drivingM;
+          delete next.drivingDurationSec;
+          delete next.drivingFromLat;
+          delete next.drivingFromLng;
           return {
             ...prev,
-            entries: {
-              ...prev.entries,
-              [entry.key]: { ...ex, lat: result.lat, lng: result.lng },
-            },
+            entries: { ...prev.entries, [entry.key]: next },
           };
         });
       });
     }
-  }, [addressBook.entries]);
+  }, [addressBook.entries, storeCoord]);
+
+  // 매장 좌표 변경 시 in-flight/failed 캐시 리셋 — 새 좌표 기준으로 재시도.
+  useEffect(() => {
+    inFlightRef.current.clear();
+    failedRef.current.clear();
+  }, [storeCoord?.lat, storeCoord?.lng]);
+
+  // 2026-05-28: 부팅 1회 — 잠복 비정상 좌표/거리 자동 청소.
+  // 사장님 매장 사례:
+  //   ① "엄마선지" entry 좌표가 충청도(36.97, 126.92) 로 잘못 매칭돼
+  //      부산 매장↔충청도 = 347km 가 drivingM 으로 박힘.
+  //   ② 같은 alias 의 *부산 정상 좌표* entry 에도 옛 잘못된 drivingM 잔재.
+  // 부팅 시 한 번에:
+  //   - 매장 30km 반경 벗어난 좌표 → lat/lng/drivingM 모두 reset.
+  //     사용자가 entry 편집해서 정확한 도로명 입력하면 useAddressBook 의 lazy
+  //     geocode 가 정상 좌표로 다시 잡음.
+  //   - 좌표는 정상인데 drivingM 만 비정상 → drivingM 만 reset.
+  //     AddressBookPanel 의 lazy fetch 가 다음 마운트 때 카카오 모빌리티 재호출.
+  // 한 번 실행 마크 후 종료 — 영업 중 새로 박히는 잘못된 값은 위 effect 가드가 차단.
+  const drivingCleanupRanRef = useRef(false);
+  useEffect(() => {
+    if (drivingCleanupRanRef.current) return;
+    if (!storeCoord) return;
+    const entries = addressBook.entries;
+    if (!entries || Object.keys(entries).length === 0) return;
+    let cleaned = null;
+    for (const [k, ex] of Object.entries(entries)) {
+      const hasCoord = typeof ex.lat === 'number' && typeof ex.lng === 'number';
+      const coordInRange = hasCoord
+        ? isCoordNearCenter({ lat: ex.lat, lng: ex.lng }, storeCoord, MAX_DELIVERY_RADIUS_KM)
+        : true;
+      const straightKm = hasCoord && coordInRange
+        ? distanceKm(storeCoord, { lat: ex.lat, lng: ex.lng })
+        : null;
+      const drivingBad =
+        typeof ex.drivingM === 'number' && !isDrivingMSane(ex.drivingM, straightKm);
+      if (coordInRange && !drivingBad) continue;
+      if (!cleaned) cleaned = { ...entries };
+      const next = { ...ex };
+      if (!coordInRange) {
+        delete next.lat;
+        delete next.lng;
+      }
+      delete next.drivingM;
+      delete next.drivingDurationSec;
+      delete next.drivingFromLat;
+      delete next.drivingFromLng;
+      cleaned[k] = next;
+      if (typeof console !== 'undefined') {
+        console.warn('[useAddressBook] 잠복 비정상 entry 청소', {
+          key: k,
+          coordInRange,
+          drivingM: ex.drivingM,
+          straightKm,
+        });
+      }
+    }
+    if (cleaned) {
+      setAddressBook((prev) =>
+        prev.entries === entries ? { ...prev, entries: cleaned } : prev
+      );
+    }
+    drivingCleanupRanRef.current = true;
+  }, [addressBook.entries, storeCoord]);
 
   // 주문이 cleared 될 때(또는 사용자가 주소를 확정 입력했을 때) 카운트 증가.
   // autoRemember=false 면 noop. 빈 문자열은 무시.

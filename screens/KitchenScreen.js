@@ -70,7 +70,14 @@ export default function KitchenScreen() {
         .map((oid) => OPTIONS_CATALOG.find((opt) => opt.id === oid)?.label)
         .filter(Boolean),
     }));
-    const isDeliveryReceipt = o.table?.type === 'delivery';
+    // 2026-05-28: 영수증 시간/타입 누락 fix — 사장님 신고 "출력문에 시간이 안 나와".
+    // orderType 이 없으면 빌더가 reservation/takeout 의 예약/픽업시각을 절대 안 찍음.
+    // delivery 의 출발시각도 같이 누락 → 모든 타입에 시간/메타 풀세트 전달.
+    const orderType = o.table?.type || 'regular';
+    const isDeliveryReceipt = orderType === 'delivery';
+    const addrEntry = isDeliveryReceipt
+      ? findAddressEntry(addressBook, o.deliveryAddress)
+      : null;
     const receiptText = buildReceiptText({
       storeName: storeInfo?.name || 'MyPos',
       storePhone: storeInfo?.phone || '',
@@ -87,6 +94,19 @@ export default function KitchenScreen() {
       customerRequest: isDeliveryReceipt
         ? getCustomerRequest(addressBook, o.deliveryAddress)
         : '',
+      orderType,
+      scheduledTime: o.deliveryTime || '',
+      scheduledTimeIsPM: o.deliveryTimeIsPM ?? true,
+      // 2026-05-28: order 자체의 alias/phone 도 fallback — entry 없거나 phone 누락 case 방어.
+      // 빌더의 우선순위(별칭→전번→주소) 가 정상 동작하려면 customerAlias/Phone 가 채워져야.
+      customerAlias: addrEntry?.alias || o.deliveryAlias || '',
+      customerPhone: addrEntry?.phone || o.deliveryPhone || '',
+      drivingDistanceM:
+        typeof addrEntry?.drivingM === 'number' ? addrEntry.drivingM : null,
+      drivingDurationSec:
+        typeof addrEntry?.drivingDurationSec === 'number'
+          ? addrEntry.drivingDurationSec
+          : null,
       printedAt: Date.now(),
     });
     printReceipt({ rawText: receiptText }).catch(() => {});

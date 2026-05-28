@@ -27,6 +27,7 @@ import {
   resolveTableForAlert,
 } from './orderHelpers';
 import { resolveDeliveryIdentity } from './addressBookLookup';
+import { isDrivingMSane, distanceKm } from './geocode';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
 import { setNotifyAddressBook } from './notify';
@@ -40,6 +41,7 @@ import { useOrderFirestoreSync } from './useOrderFirestoreSync';
 import { useDeliveryAlerts } from './useDeliveryAlerts';
 import { useAutoClearDelivery } from './useAutoClearDelivery';
 import { useAddressBook } from './useAddressBook';
+import { useStore } from './StoreContext';
 import { useRevenue } from './useRevenue';
 import { useSplits } from './useSplits';
 import { useGroups } from './useGroups';
@@ -98,6 +100,20 @@ export function OrderProvider({ children }) {
     upsertEntryFromOrder,
     mergePhoneIntoEntry,
   } = useAddressBook();
+
+  // 2026-05-28: drivingM sanity check 용 매장 좌표. StoreProvider 가 OrderProvider
+  // 위에 mount 됨 (App.js JoinedAppTree). storeInfo.lat/lng 미설정이면 null —
+  // isDrivingMSane 가 직선거리 모르면 절대값만 검증 (50km 상한).
+  const { storeInfo: storeInfoForGuard } = useStore();
+  const storeCoordForGuard = useMemo(() => {
+    if (
+      typeof storeInfoForGuard?.lat === 'number' &&
+      typeof storeInfoForGuard?.lng === 'number'
+    ) {
+      return { lat: storeInfoForGuard.lat, lng: storeInfoForGuard.lng };
+    }
+    return null;
+  }, [storeInfoForGuard?.lat, storeInfoForGuard?.lng]);
 
   useOrderPersistence({
     orders,
@@ -253,6 +269,7 @@ export function OrderProvider({ children }) {
               deliveryPhone: ident.phone,
               deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
+              deliveryTimeIsPM: existing.deliveryTimeIsPM ?? true,
               paymentStatus: existing.paymentStatus,
               paymentMethod: paymentMethod || existing.paymentMethod || null,
               total,
@@ -264,6 +281,17 @@ export function OrderProvider({ children }) {
           const tbl = resolveTableForAlert(targetId);
           if (tbl && tbl.type === 'delivery') {
             bumpAddress(existing.deliveryAddress);
+          }
+          // 2026-05-28: 결제완료 시점 안전망 — confirmOrder 시점 sync 가 어떤 이유로
+          // 누락된 경우 (CID stash 슬롯과 작업 슬롯 어긋남, deliveryPhone 일시 누락 등)
+          // 마지막으로 한 번 더 sync. upsertEntryFromOrder 는 멱등 — 이미 박힌 entry
+          // 면 phones 중복 X, alias 빈 경우만 채움. delivery/takeout/reservation 모두.
+          if (tbl && (tbl.type === 'delivery' || tbl.type === 'takeout' || tbl.type === 'reservation')) {
+            upsertEntryFromOrder({
+              address: existing.deliveryAddress,
+              alias: existing.deliveryAlias || '',
+              phone: existing.deliveryPhone || '',
+            });
           }
         }
       }
@@ -328,6 +356,7 @@ export function OrderProvider({ children }) {
               deliveryPhone: ident.phone,
               deliveryPhones: ident.phones,
               deliveryTime: existing.deliveryTime,
+              deliveryTimeIsPM: existing.deliveryTimeIsPM ?? true,
               paymentStatus: 'paid',
               paymentMethod,
               total,
@@ -560,26 +589,34 @@ export function OrderProvider({ children }) {
       // 새 phone 이 entry.phones 에 자동 통합. 다음 같은 phone 전화 시 매칭 OK.
       // upsertEntryFromOrder 의 정책: 기존 entry 있으면 phones 추가 (중복 X) + alias
       // 빈 경우만 채움 (덮어쓰기 X), 새 entry 면 생성 + CID __phone:digits 자동 통합.
+      //
+      // 2026-05-28: 사장님 신고 "310-603 entry 에 phone 안 박힘" — phone 가드가
+      // 너무 빡빡해서 deliveryPhone 슬롯이 어떤 이유로든 비면 entry 생성 자체가
+      // 안 됐음. 사장님 시나리오 = CID 알림 떴고 주소만 짧게 입력. CID stash 슬롯
+      // 안 쓰고 다른 슬롯 만들었거나 phoneNumber 가 LG U+ 일시 누락. 주소만 있어도
+      // entry 생성하도록 가드 완화 — phone 빈 채로 박혀도 다음에 사장님이 직접 채우거나
+      // 같은 주소 재주문 시 phone 통합됨.
       if (
         (tblForListener?.type === 'delivery' ||
           tblForListener?.type === 'takeout' ||
           tblForListener?.type === 'reservation') &&
-        orderSnap?.deliveryAddress &&
-        orderSnap?.deliveryPhone
+        orderSnap?.deliveryAddress
       ) {
         upsertEntryFromOrder({
           address: orderSnap.deliveryAddress,
           alias: orderSnap.deliveryAlias || '',
-          phone: orderSnap.deliveryPhone,
+          phone: orderSnap.deliveryPhone || '',
         });
       }
 
       // 1.0.44: 자동 출력 — 상황별 영수증을 위해 주소록 entry 조회로 손님번호/별칭/
       // 도로 실거리/예약시각 까지 함께 emit. 주소록은 useAddressBook 이 lat/lng/
       // drivingM 백그라운드 채움 — 처음 입력 직후 confirm 시엔 null 일 수 있음 (정상).
+      // 2026-05-28: order 자체의 deliveryPhone/Alias 도 fallback — entry 가 phone 없는
+      // 잠복 케이스에서 CID phone 이 출력물에 누락되던 사고 방어. 별칭→전번→주소 우선순위.
       const orderType = tblForListener?.type || 'regular';
-      let customerPhone = null;
-      let customerAlias = null;
+      let customerPhone = orderSnap?.deliveryPhone || null;
+      let customerAlias = orderSnap?.deliveryAlias || null;
       let drivingDistanceM = null;
       let drivingDurationSec = null;
       const addrForLookup = orderSnap?.deliveryAddress || '';
@@ -587,14 +624,27 @@ export function OrderProvider({ children }) {
         const akey = normalizeAddressKey(addrForLookup);
         const entry = akey ? addressBook?.entries?.[akey] : null;
         if (entry) {
-          customerPhone = entry.phone || null;
-          customerAlias = entry.alias || null;
-          drivingDistanceM =
-            typeof entry.drivingM === 'number' ? entry.drivingM : null;
-          drivingDurationSec =
-            typeof entry.drivingDurationSec === 'number'
-              ? entry.drivingDurationSec
+          customerPhone = entry.phone || customerPhone;
+          customerAlias = entry.alias || customerAlias;
+          // 2026-05-28: drivingM sanity check — 잠복 비정상 entry (300km+) 가
+          // 자동 출력 영수증 / 주문 emit 에 흘러가지 않도록. 매장좌표 + entry 좌표
+          // 모두 있을 때만 직선거리 비교, 없으면 절대값 가드만.
+          const straightKm =
+            storeCoordForGuard &&
+            typeof entry.lat === 'number' &&
+            typeof entry.lng === 'number'
+              ? distanceKm(storeCoordForGuard, { lat: entry.lat, lng: entry.lng })
               : null;
+          if (isDrivingMSane(entry.drivingM, straightKm)) {
+            drivingDistanceM = entry.drivingM;
+            drivingDurationSec =
+              typeof entry.drivingDurationSec === 'number'
+                ? entry.drivingDurationSec
+                : null;
+          } else {
+            drivingDistanceM = null;
+            drivingDurationSec = null;
+          }
         }
       }
 

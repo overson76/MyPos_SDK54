@@ -116,8 +116,11 @@ function headerTitle(orderType) {
 }
 
 // 거리 m → "도로 1.2km" / "도로 850m"
+// 2026-05-28: 절대값 sanity check — 잠복 비정상 drivingM (300km+) 이 영수증에
+// 흘러들지 않도록 빌더 단에서도 차단. 50km 초과 = 배달 매장 상한 초과 = 매칭 오류.
 function formatDrivingShort(m) {
   if (typeof m !== 'number' || !isFinite(m) || m < 0) return '';
+  if (m > 50 * 1000) return '';
   if (m < 1000) return `${Math.round(m)}m`;
   const km = m / 1000;
   if (km < 10) return `${km.toFixed(1)}km`;

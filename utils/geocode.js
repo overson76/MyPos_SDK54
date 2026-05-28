@@ -200,6 +200,42 @@ export function formatDrivingDistance(m) {
   return `${Math.round(km)} km`;
 }
 
+// 2026-05-28: 카카오 응답 검증 — 사장님 신고 "엄마선지 300km" 사고 처방.
+// 한 번 잘못 매칭된 좌표/거리가 Firestore 에 박혀 매번 화면에 노출되는 잠복 버그.
+//
+// 임계값 근거 — 작은 동네 배달 매장 기준:
+//   - 매장 좌표 기준 30 km 반경 = 카카오 geocode 가 *합리적으로* 인식한 주소 한계.
+//     30 km 넘으면 거의 확실히 "동명 다른 도시 매장" 으로 잘못 매칭된 경우 (충청도/서울 등).
+//   - 도로 실거리 50 km = 배달 최대 사거리 상한. 그 이상은 카카오모빌리티 응답 오류로 간주.
+//   - 도로/직선 비율 5배 = 도로 우회 일반적으로 직선의 1.3~2배. 5배 넘으면 길찾기 매칭 오류.
+export const MAX_DELIVERY_RADIUS_KM = 30;
+export const MAX_REASONABLE_DRIVING_KM = 50;
+export const MAX_DRIVING_RATIO = 5;
+
+// drivingM 이 합리적 값인지 — entry.drivingM 사용/저장 전 검증.
+// straightKm: 매장↔entry 직선거리 (haversine). 모르면 절대 임계만 검사.
+export function isDrivingMSane(drivingM, straightKm) {
+  if (typeof drivingM !== 'number' || !isFinite(drivingM) || drivingM < 0) {
+    return false;
+  }
+  if (drivingM > MAX_REASONABLE_DRIVING_KM * 1000) return false;
+  if (typeof straightKm === 'number' && isFinite(straightKm) && straightKm > 0.1) {
+    const drivingKm = drivingM / 1000;
+    if (drivingKm > straightKm * MAX_DRIVING_RATIO) return false;
+  }
+  return true;
+}
+
+// entry 좌표가 매장 좌표 기준 합리 반경 내인지 — geocode 결과 저장 전 검증.
+// center 미지정/잘못된 좌표면 검증 skip (true 반환) — 매장 좌표 미설정 환경 호환.
+export function isCoordNearCenter(coord, center, maxKm = MAX_DELIVERY_RADIUS_KM) {
+  if (!isCoord(coord)) return false;
+  if (!isCoord(center)) return true;
+  const km = distanceKm(center, coord);
+  if (km == null) return true;
+  return km <= maxKm;
+}
+
 // 소요 시간 초 → "12분" / "1시간 5분"
 export function formatDuration(sec) {
   if (typeof sec !== 'number' || !isFinite(sec) || sec < 0) return null;

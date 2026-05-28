@@ -38,6 +38,8 @@ import {
   getDrivingDistance,
   isGeocodingAvailable,
   isNaviAvailable,
+  isDrivingMSane,
+  distanceKm,
 } from '../utils/geocode';
 import { importAddresses, SEED_BUSINESS_ADDRESSES } from '../utils/seedAddresses';
 import { downloadJson, pickJsonFile } from '../utils/jsonBackup';
@@ -210,6 +212,23 @@ export default function AddressBookPanel() {
         inFlightRef.current.delete(entry.key);
         if (!result) {
           failedRef.current.add(entry.key);
+          return;
+        }
+        // 2026-05-28: 카카오모빌리티 응답 sanity check — 직선거리 대비 5배 또는 50km
+        // 초과면 reject. 사장님 신고 "엄마선지 300km" 같은 잘못된 좌표 매칭 방어.
+        const straightKm = distanceKm(
+          { lat: fromLat, lng: fromLng },
+          { lat: entry.lat, lng: entry.lng }
+        );
+        if (!isDrivingMSane(result.distanceM, straightKm)) {
+          failedRef.current.add(entry.key);
+          if (typeof console !== 'undefined') {
+            console.warn('[AddressBookPanel] drivingM 비정상 — reject', {
+              key: entry.key,
+              drivingM: result.distanceM,
+              straightKm,
+            });
+          }
           return;
         }
         setAddressBook((prev) => {
@@ -769,14 +788,23 @@ export default function AddressBookPanel() {
         >
           {items.map((it) => {
             const isEditing = editingKey === it.key;
-            const distText =
-              typeof it.drivingM === 'number' ? formatDrivingDistance(it.drivingM) : null;
+            // 2026-05-28: 잠복 비정상 drivingM (옛 잘못된 좌표 매칭) 은 화면에서 차단.
+            // 사장님 신고 "엄마선지 300km" 사례. 새 저장은 위 effect 가드가 막지만 이미
+            // Firestore 에 박힌 entry 는 사장님이 직접 편집 전까지 그대로 → 화면 가드 필수.
+            const straightKmForView =
+              storeCoord && typeof it.lat === 'number' && typeof it.lng === 'number'
+                ? distanceKm(storeCoord, { lat: it.lat, lng: it.lng })
+                : null;
+            const drivingOk = isDrivingMSane(it.drivingM, straightKmForView);
+            const distText = drivingOk ? formatDrivingDistance(it.drivingM) : null;
+            const distInvalid = !drivingOk && typeof it.drivingM === 'number';
             const durText =
-              typeof it.drivingDurationSec === 'number'
+              drivingOk && typeof it.drivingDurationSec === 'number'
                 ? formatDuration(it.drivingDurationSec)
                 : null;
             const distLoading =
               !distText &&
+              !distInvalid &&
               storeCoord &&
               typeof it.lat === 'number' &&
               typeof it.lng === 'number';
@@ -941,6 +969,10 @@ export default function AddressBookPanel() {
                       <Text style={styles.rowDist}>
                         🚗 {distText}
                         {durText ? ` · ${durText}` : ''}
+                      </Text>
+                    ) : distInvalid ? (
+                      <Text style={styles.rowDistInvalid}>
+                        ⚠️ 거리 오류 — 주소 재검색 필요
                       </Text>
                     ) : distLoading ? (
                       <Text style={styles.rowDistLoading}>🚗 계산 중…</Text>
@@ -1277,6 +1309,7 @@ function makeStyles(scale = 1) {
     rowCount: { fontSize: fp(11), color: '#dc2626', fontWeight: '700' },
     rowDist: { fontSize: fp(11), color: '#2563eb', fontWeight: '700' },
     rowDistLoading: { fontSize: fp(11), color: '#9ca3af', fontWeight: '600', fontStyle: 'italic' },
+    rowDistInvalid: { fontSize: fp(11), color: '#dc2626', fontWeight: '700' },
     rowRequest: {
       fontSize: fp(12),
       color: '#9a3412',

@@ -1357,6 +1357,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                 .filter(Boolean),
             }));
             const resolvedTbl = autoPrint ? resolveAnyTable(id) : null;
+            // 2026-05-28: 영수증 시간/타입 누락 fix — 빌더가 orderType 없으면 reservation/takeout
+            // 의 예약/픽업시각을 절대 안 찍음. delivery 의 출발시각도 같이 누락. 모든 타입에
+            // 시간/메타 풀세트 전달.
+            const baseIdForType = String(id || '').split('#')[0];
+            const tblForType = autoPrint ? resolveAnyTable(baseIdForType) : null;
+            const orderType = tblForType?.type || resolvedTbl?.type || 'regular';
+            const addrKey = autoPrint && orderSnap?.deliveryAddress
+              ? normalizeAddressKey(orderSnap.deliveryAddress)
+              : null;
+            const addrEntry = addrKey ? addressBook?.entries?.[addrKey] : null;
             const receiptData = autoPrint
               ? {
                   storeName: storeInfo?.name || 'MyPos',
@@ -1373,6 +1383,20 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   deliveryAddress: orderSnap?.deliveryAddress || '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
+                  orderType,
+                  scheduledTime: orderSnap?.deliveryTime || '',
+                  scheduledTimeIsPM: orderSnap?.deliveryTimeIsPM ?? true,
+                  // 2026-05-28: order fallback — entry 누락/phone 빈 케이스 방어.
+                  customerAlias: addrEntry?.alias || orderSnap?.deliveryAlias || '',
+                  customerPhone: addrEntry?.phone || orderSnap?.deliveryPhone || '',
+                  drivingDistanceM:
+                    typeof addrEntry?.drivingM === 'number'
+                      ? addrEntry.drivingM
+                      : null,
+                  drivingDurationSec:
+                    typeof addrEntry?.drivingDurationSec === 'number'
+                      ? addrEntry.drivingDurationSec
+                      : null,
                   // 1.0.38: 분리 결제 — 영수증 빌더가 "👤 손님" 줄 추가.
                   isSplit: !!isSplit,
                   sourceTableId: srcId || null,

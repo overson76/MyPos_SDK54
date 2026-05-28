@@ -67,8 +67,10 @@ export default function RevenueScreen() {
       }));
       const tbl = resolveAnyTable(entry.tableId);
       // 별칭/전번은 buildHistoryEntry 가 박아둔 값 사용. 옛 history 는 비어있어서 자연 fallback.
-      // orderType 도 같이 — delivery 면 영수증 빌더가 큰 글씨 본문으로 출력.
-      const isDeliveryEntry = !!entry.deliveryAddress;
+      // 2026-05-28: 영수증 시간/타입 누락 fix — reservation/takeout 도 빌더가 시간 찍도록
+      // orderType 을 테이블 type 기반으로 결정. deliveryTime/IsPM 도 history 에서 복원.
+      // (buildHistoryEntry 가 deliveryTimeIsPM 같이 저장하기 시작 — 옛 entry 는 빈값/기본값.)
+      const orderType = tbl?.type || (entry.deliveryAddress ? 'delivery' : 'regular');
       const result = await printReceipt({
         storeName: storeInfo?.name || 'MyPos',
         storePhone: storeInfo?.phone || '',
@@ -84,7 +86,9 @@ export default function RevenueScreen() {
         deliveryAddress: entry.deliveryAddress,
         customerAlias: entry.deliveryAlias || '',
         customerPhone: entry.deliveryPhone || '',
-        orderType: isDeliveryEntry ? 'delivery' : 'regular',
+        orderType,
+        scheduledTime: entry.deliveryTime || '',
+        scheduledTimeIsPM: entry.deliveryTimeIsPM ?? true,
         printedAt: Date.now(),
       });
       if (!result.ok && typeof window !== 'undefined') {

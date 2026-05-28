@@ -2130,9 +2130,15 @@ export default function OrderScreen({
                       }
                       // 2026-05-25 사장님 요청: 배달 주문 + 전화 있고 별칭 없으면
                       // AliasPromptModal 띄움 → 사장님 입력 후 자동 sync + confirmOrder.
+                      // 2026-05-28 사장님 호소 "분명히 등록한 번호인데 새 전화로 인식 — 엉망":
+                      //   가드 완화. 배달뿐 아니라 포장/예약도 단골 식별 필요.
+                      //   CID phone 없는 매장 직접 손님도 별칭 등록받아 다음에 매칭.
+                      //   alias 없으면 항상 트리거 (사장님이 "건너뛰기" 1초로 닫을 수 있음).
+                      const tType = table?.type;
                       const needsAliasPrompt =
-                        table?.type === 'delivery' &&
-                        !!order?.deliveryPhone &&
+                        (tType === 'delivery' ||
+                          tType === 'takeout' ||
+                          tType === 'reservation') &&
                         !(order?.deliveryAlias || '').trim();
                       if (needsAliasPrompt) {
                         setAliasPromptOpen(true);
@@ -2335,6 +2341,14 @@ export default function OrderScreen({
                 .filter(Boolean),
             }));
             const tbl = autoPrint ? table : null;
+            // 2026-05-28: 영수증 시간/타입 누락 fix — 빌더가 orderType 없으면 reservation/takeout
+            // 의 예약/픽업시각을 절대 안 찍음. delivery 의 출발시각도 같이 누락. 모든 타입에
+            // 시간/메타 풀세트 전달.
+            const orderType = tbl?.type || 'regular';
+            const addrKey = autoPrint && orderSnap?.deliveryAddress
+              ? normalizeAddressKey(orderSnap.deliveryAddress)
+              : null;
+            const addrEntry = addrKey ? addressBook?.entries?.[addrKey] : null;
             const receiptData = autoPrint
               ? {
                   storeName: storeInfo?.name || 'MyPos',
@@ -2354,6 +2368,20 @@ export default function OrderScreen({
                     : '',
                   kisApproval: kisApproval || null,
                   printedAt: Date.now(),
+                  orderType,
+                  scheduledTime: orderSnap?.deliveryTime || '',
+                  scheduledTimeIsPM: orderSnap?.deliveryTimeIsPM ?? true,
+                  // 2026-05-28: order fallback — entry 누락/phone 빈 케이스 방어.
+                  customerAlias: addrEntry?.alias || orderSnap?.deliveryAlias || '',
+                  customerPhone: addrEntry?.phone || orderSnap?.deliveryPhone || '',
+                  drivingDistanceM:
+                    typeof addrEntry?.drivingM === 'number'
+                      ? addrEntry.drivingM
+                      : null,
+                  drivingDurationSec:
+                    typeof addrEntry?.drivingDurationSec === 'number'
+                      ? addrEntry.drivingDurationSec
+                      : null,
                   isSplit: !!isSplit,
                   sourceTableId: srcId || null,
                   sourceTableLabel: srcId
@@ -2482,9 +2510,15 @@ export default function OrderScreen({
       ) : null}
 
       {/* 2026-05-25: 배달 주문 확정 직전 별칭 입력 + 유사 매칭 + 자동 주소 검색 */}
+      {/* 2026-05-28: initialAlias 가 alias 비면 deliveryAddress 로 fallback —
+          사장님이 라벨 칸에 "신규추가" 같은 식별자 입력했으면 그게 별칭 입력 칸에도
+          미리 채워져 사장님이 ✓ 한 번에 등록 가능. 비슷한 별칭/주소 검색은 그 텍스트로 자동. */}
       <AliasPromptModal
         visible={aliasPromptOpen}
-        initialAlias={order?.deliveryAlias || ''}
+        initialAlias={
+          (order?.deliveryAlias || '').trim() ||
+          (order?.deliveryAddress || '').trim()
+        }
         currentPhone={order?.deliveryPhone || ''}
         currentAddress={order?.deliveryAddress || ''}
         addressBook={addressBook}

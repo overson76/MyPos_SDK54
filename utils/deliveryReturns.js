@@ -27,6 +27,7 @@
 
 import { normalizeAddressKey } from './orderHelpers';
 import { formatDeliveryLabel } from './addressBookLookup';
+import { isDrivingMSane } from './geocode';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -141,15 +142,20 @@ export function computeDeliveryReturns({
     let distanceM = null;
     let isDrivingDistance = false;
     if (validStoreCoord && trustCoord) {
+      const straightM = haversineM(storeCoord, { lat: entry.lat, lng: entry.lng });
+      const straightKm = typeof straightM === 'number' ? straightM / 1000 : null;
       const cachedDriving =
         typeof entry.drivingM === 'number' &&
         entry.drivingFromLat === storeCoord.lat &&
-        entry.drivingFromLng === storeCoord.lng;
+        entry.drivingFromLng === storeCoord.lng &&
+        // 2026-05-28: 잠복 비정상 drivingM 차단 — 회수 정렬 / 지도 fitBounds 가
+        // 300km+ 이상치로 망가지는 사고 방어. "엄마선지 347km" 사례.
+        isDrivingMSane(entry.drivingM, straightKm);
       if (cachedDriving) {
         distanceM = entry.drivingM;
         isDrivingDistance = true;
       } else {
-        distanceM = haversineM(storeCoord, { lat: entry.lat, lng: entry.lng });
+        distanceM = straightM;
       }
     }
     const totalDishes = g.menuSummary.reduce((s, m) => s + m.qty, 0);

@@ -96,25 +96,40 @@ export function listAddressBookEntries(addressBook) {
 //   - 대소문자 무시
 //   - 정확 일치는 제외 (호출부가 별도 매칭으로 처리)
 //   - 최대 3건
+//
+// 2026-05-28: 사장님 호소 "같은 별칭이나 주소지인데 다른 번호로 전화가 왔다면 자동으로
+// 비슷한 별칭 검색해서 필터" — alias 뿐 아니라 label(주소) 도 검색 대상에 포함.
+// 사장님이 라벨 칸에 "신규추가" 같은 식별자를 적은 entry, 또는 alias 없고 label 만
+// 있는 entry 도 매칭. 매칭 결과의 alias 가 비면 label 을 alias 자리로 표시 (모달 UX).
 export function findSimilarAliases(query, addressBook) {
   const q = String(query || '').trim().toLowerCase();
   if (q.length < 1) return [];
   const all = listAddressBookEntries(addressBook);
   const out = [];
+  const seenKeys = new Set();
   for (const e of all) {
+    if (seenKeys.has(e.key)) continue;
     const a = String(e?.alias || '').trim().toLowerCase();
-    if (!a) continue;
-    if (a === q) continue; // 정확 매칭 제외
-    if (a.includes(q) || q.includes(a)) {
+    const l = String(e?.label || '').trim().toLowerCase();
+    let matched = false;
+    // alias 매칭 (옛 정책)
+    if (a && a !== q && (a.includes(q) || q.includes(a))) matched = true;
+    // 2026-05-28: label(주소) 매칭 추가 — alias 비어도 사장님이 라벨에 식별자 적은 entry 잡음.
+    // CID phone-only entry (__phone:digits / label="(주소 미입력) ...") 는 제외 — 노이즈.
+    if (!matched && l && l !== q && !l.startsWith('(주소 미입력)')) {
+      if (l.includes(q) || q.includes(l)) matched = true;
+    }
+    if (matched) {
+      seenKeys.add(e.key);
       out.push(e);
     }
   }
-  // 사용 횟수 / 길이 차이 기준 가까운 순
+  // 사용 횟수 / 길이 차이 기준 가까운 순. 비교 대상이 alias 우선, 없으면 label.
   out.sort((x, y) => {
-    const xa = (x.alias || '').length;
-    const ya = (y.alias || '').length;
-    const xDiff = Math.abs(xa - q.length);
-    const yDiff = Math.abs(ya - q.length);
+    const xs = (x.alias || x.label || '').length;
+    const ys = (y.alias || y.label || '').length;
+    const xDiff = Math.abs(xs - q.length);
+    const yDiff = Math.abs(ys - q.length);
     if (xDiff !== yDiff) return xDiff - yDiff;
     return (y.count || 0) - (x.count || 0);
   });
