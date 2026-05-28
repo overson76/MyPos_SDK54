@@ -159,21 +159,31 @@ export function useAddressBook() {
   //   - 좌표는 정상인데 drivingM 만 비정상 → drivingM 만 reset.
   //     AddressBookPanel 의 lazy fetch 가 다음 마운트 때 카카오 모빌리티 재호출.
   // 한 번 실행 마크 후 종료 — 영업 중 새로 박히는 잘못된 값은 위 effect 가드가 차단.
+  // 2026-05-28 (2부): 사장님 신고 "주소 확실한데도 거리 오류 표시. 일일이 수정 못함".
+  //   원인: 매장 좌표 미설정 (storeInfo.lat/lng 빈 값) → 옛 가드 `if (!storeCoord) return;`
+  //   로 effect 가 즉시 종료 → 잘못된 drivingM 잔재가 영구 박혀있음.
+  //
+  //   처방: storeCoord 없어도 drivingM 절대 임계 (isDrivingMSane 의 10km 한도) 만으로
+  //   reset. 좌표 자체는 매장 좌표 없으면 정상성 판단 불가 → 그대로 둠. drivingM 만
+  //   비우면 AddressBookPanel 의 lazy fetch 가 다음 마운트 때 카카오 모빌리티 재호출.
+  //   (단 카카오 KEY 도 미설정이면 재호출 자체 안 됨 — 사장님이 매장 좌표 + 카카오
+  //   KEY 둘 다 설정해야 재계산 완성.)
   const drivingCleanupRanRef = useRef(false);
   useEffect(() => {
     if (drivingCleanupRanRef.current) return;
-    if (!storeCoord) return;
     const entries = addressBook.entries;
     if (!entries || Object.keys(entries).length === 0) return;
     let cleaned = null;
     for (const [k, ex] of Object.entries(entries)) {
       const hasCoord = typeof ex.lat === 'number' && typeof ex.lng === 'number';
-      const coordInRange = hasCoord
+      // storeCoord 없으면 coordInRange 판단 불가 → 좌표는 정상 가정 (변경 X).
+      const coordInRange = hasCoord && storeCoord
         ? isCoordNearCenter({ lat: ex.lat, lng: ex.lng }, storeCoord, MAX_DELIVERY_RADIUS_KM)
         : true;
-      const straightKm = hasCoord && coordInRange
+      const straightKm = hasCoord && coordInRange && storeCoord
         ? distanceKm(storeCoord, { lat: ex.lat, lng: ex.lng })
         : null;
+      // storeCoord 없어도 isDrivingMSane 는 절대 임계 (10km) 검사 — 잔재 정리 가능.
       const drivingBad =
         typeof ex.drivingM === 'number' && !isDrivingMSane(ex.drivingM, straightKm);
       if (coordInRange && !drivingBad) continue;
@@ -302,14 +312,55 @@ export function useAddressBook() {
 
   // 수동 주소 추가 — 배달 완료 없이도 미리 등록 가능.
   // label 필수. alias, phone, customerRequest 는 선택.
+  //
+  // 2026-05-28 (2부): 사장님 신고 "모래톱 entry 2개". 사장님이 + 추가 폼의 주소 칸에
+  //   별칭만 입력 → label=alias 박힌 pseudo-phone-only entry 생성. 같은 alias 의
+  //   진짜 주소 entry 와 공존 사고.
+  //
+  //   가드: label === alias 호출이고, 같은 alias 의 *진짜 주소* entry (label !== alias)
+  //   이미 존재하면, 신규 생성 X. 대신 phone digits 가 있으면 기존 entry 에 phones
+  //   array 로 추가 + customerRequest 도 비어있으면 채움. 사장님 의도 ("같은 손님
+  //   추가 정보 등록") 흡수.
   const addAddress = useCallback((label, alias, phone, customerRequest) => {
     const safe = sanitizeDeliveryAddress(label);
     if (!safe) return false;
     const key = normalizeAddressKey(safe);
     if (!key) return false;
     const digits = (phone || '').replace(/\D/g, '');
+    const safeAlias = (alias || '').trim();
+    const safeRequest = (customerRequest || '').trim();
     setAddressBook((prev) => {
       if (prev.entries[key]) return prev; // 이미 존재하면 무시
+      // 신규 차단: label=alias 이고 같은 alias 의 진짜 주소 entry 가 있으면
+      // 그 entry 에 phone/request 만 추가, pseudo entry 신규 생성 X.
+      if (safeAlias && safe === safeAlias) {
+        for (const exKey of Object.keys(prev.entries)) {
+          const ex = prev.entries[exKey];
+          if (!ex || (ex.alias || '').trim() !== safeAlias) continue;
+          if ((ex.label || '').trim() === safeAlias) continue; // 그 entry 도 pseudo — 통합 대상 아님
+          // 진짜 주소 entry 발견 → 정보만 흡수
+          const next = { ...ex };
+          if (digits) {
+            const phones = Array.isArray(next.phones)
+              ? next.phones.map((p) => String(p).replace(/\D/g, '')).filter(Boolean)
+              : (next.phone ? [String(next.phone).replace(/\D/g, '')] : []);
+            if (!phones.includes(digits)) {
+              phones.push(digits);
+              next.phones = phones;
+              if (!next.phone) next.phone = digits;
+            }
+          }
+          if (safeRequest && !next.customerRequest) {
+            next.customerRequest = safeRequest.slice(0, 100);
+          }
+          if (typeof console !== 'undefined') {
+            console.warn(
+              `[useAddressBook] addAddress 차단 — label=alias "${safeAlias}" 의 진짜 주소 entry "${ex.label}" 에 정보 흡수`
+            );
+          }
+          return { ...prev, entries: { ...prev.entries, [exKey]: next } };
+        }
+      }
       const entry = {
         key,
         label: safe,
@@ -318,9 +369,9 @@ export function useAddressBook() {
         firstSeenAt: Date.now(),
         lastUsedAt: Date.now(),
       };
-      if (alias?.trim()) entry.alias = alias.trim();
+      if (safeAlias) entry.alias = safeAlias;
       if (digits) entry.phone = digits;
-      if (customerRequest?.trim()) entry.customerRequest = customerRequest.trim();
+      if (safeRequest) entry.customerRequest = safeRequest;
       return { ...prev, entries: { ...prev.entries, [key]: entry } };
     });
     return true;

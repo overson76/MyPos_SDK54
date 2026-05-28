@@ -98,13 +98,24 @@ export function hasPhoneDigitsAnywhere(entries, digits) {
 //     phone-only 의 phone digits 를 정식 entry 의 phones array 에 추가 + phone-only 삭제.
 //   - 정식 entry 둘 (둘 다 주소 entry) 의 alias 같음 — 그대로 유지. 사장님이
 //     "집 주소 + 회사 주소" 처럼 의도적으로 다른 주소 등록한 케이스일 수 있음.
-// phone-only entry 식별 — __phone: key prefix 또는 "(주소 미입력)" label.
-//   옛 데이터에 두 형식 모두 잔재. 둘 다 검사해야 사장님 매장 (수동 생성
-//   잔재 포함) 의 phone-only 모두 통합.
+// phone-only entry 식별 — __phone: key prefix 또는 "(주소 미입력)" label,
+//   또는 label 이 alias 와 같음 (진짜 주소 아님).
+//
+// 2026-05-28 (2부): 사장님 신고 "모래톱 entry 2개 — label='모래톱'/alias='모래톱'
+// 하나 + label='부산 사하구 비봉로54번안길 26-1'/alias='모래톱' 하나".
+//   원인: addAddress 의 label 칸에 사장님이 별칭만 입력 → label=alias 박힌
+//   pseudo-phone-only entry 가 따로 생성. 같은 alias 의 진짜 주소 entry 와 공존.
+//
+//   label === alias 인 entry 는 "주소 정보가 사실상 없음" — phone-only-like 로
+//   취급 후 진짜 주소 entry 와 통합. 단 mergeSameAliasPhoneOnlyEntries 가
+//   "같은 alias 의 정식 entry 가 있을 때만 통합" 정책이라, 한 곳뿐인 가게
+//   ("모래톱" 가게 단독 등록) 는 그대로 유지 — 사장님 의도 보호.
 function isPhoneOnlyLike(key, entry) {
   if (typeof key === 'string' && key.startsWith('__phone:')) return true;
   const label = (entry?.label || '').trim();
   if (label.startsWith('(주소 미입력)')) return true;
+  const alias = (entry?.alias || '').trim();
+  if (alias && label === alias) return true;
   return false;
 }
 

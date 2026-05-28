@@ -1,5 +1,6 @@
 import {
   mergeOrphanPhoneOnlyEntries,
+  mergeSameAliasPhoneOnlyEntries,
   hasPhoneDigitsAnywhere,
   collectPhoneDigits,
 } from '../utils/addressBookMigrations';
@@ -172,5 +173,121 @@ describe('mergeOrphanPhoneOnlyEntries', () => {
     };
     const next = mergeOrphanPhoneOnlyEntries(entries);
     expect(next['__phone:01012345678']).toBeUndefined();
+  });
+});
+
+describe('mergeSameAliasPhoneOnlyEntries', () => {
+  test('label="(주소 미입력) ..." entry + 같은 alias 의 진짜 주소 entry → 통합', () => {
+    const entries = {
+      'addr:집': {
+        key: 'addr:집',
+        label: '부산 사하구 비봉로54번안길 26-1',
+        alias: '단골',
+        phones: ['01011112222'],
+      },
+      'addr:plh': {
+        key: 'addr:plh',
+        label: '(주소 미입력) 010-9999-8888',
+        alias: '단골',
+        phone: '01099998888',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next['addr:plh']).toBeUndefined();
+    expect(next['addr:집'].phones).toEqual(['01011112222', '01099998888']);
+  });
+
+  test('label=alias 인 pseudo entry + 같은 alias 의 진짜 주소 entry → 통합 (모래톱 케이스)', () => {
+    const entries = {
+      'addr:부산사하구비봉로54번안길26-1': {
+        key: 'addr:부산사하구비봉로54번안길26-1',
+        label: '부산 사하구 비봉로54번안길 26-1',
+        alias: '모래톱',
+        phone: '01072790779',
+        phones: ['01072790779'],
+      },
+      'addr:모래톱': {
+        key: 'addr:모래톱',
+        label: '모래톱',
+        alias: '모래톱',
+        phone: '01072790779',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next['addr:모래톱']).toBeUndefined();
+    expect(next['addr:부산사하구비봉로54번안길26-1']).toBeDefined();
+    // 같은 digits 라 phones 변경 없음
+    expect(next['addr:부산사하구비봉로54번안길26-1'].phones).toEqual(['01072790779']);
+  });
+
+  test('같은 alias 의 정식 entry 가 없으면 유지 (한 곳뿐인 가게 의도 보호)', () => {
+    const entries = {
+      'addr:모래톱': {
+        key: 'addr:모래톱',
+        label: '모래톱',
+        alias: '모래톱',
+        phone: '01072790779',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next).toBe(entries); // 변경 없음
+    expect(next['addr:모래톱']).toBeDefined();
+  });
+
+  test('양쪽 다 label=alias 인 pseudo entry → 통합 안 함 (의도 모호)', () => {
+    const entries = {
+      'addr:모래톱1': {
+        key: 'addr:모래톱1',
+        label: '모래톱',
+        alias: '모래톱',
+        phone: '01011112222',
+      },
+      'addr:모래톱2': {
+        key: 'addr:모래톱2',
+        label: '모래톱',
+        alias: '모래톱',
+        phone: '01099998888',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next).toBe(entries); // 둘 다 phone-only-like → regularByAlias 비어있음 → noop
+  });
+
+  test('phone-only 새 digits → 정식 entry 의 phones 에 추가', () => {
+    const entries = {
+      'addr:집': {
+        key: 'addr:집',
+        label: '부산시 사상구 학장로 123',
+        alias: '단골김',
+        phones: ['01011112222'],
+      },
+      'addr:단골김': {
+        key: 'addr:단골김',
+        label: '단골김',
+        alias: '단골김',
+        phone: '01077778888',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next['addr:단골김']).toBeUndefined();
+    expect(next['addr:집'].phones).toEqual(['01011112222', '01077778888']);
+  });
+
+  test('빈 entries / null', () => {
+    expect(mergeSameAliasPhoneOnlyEntries({})).toEqual({});
+    expect(mergeSameAliasPhoneOnlyEntries(null)).toBe(null);
+  });
+
+  test('alias 없는 entry 는 그룹화 X → 통합 안 함', () => {
+    const entries = {
+      'addr:집': { key: 'addr:집', label: '부산 어딘가', phone: '01011112222' },
+      '__phone:01099998888': {
+        key: '__phone:01099998888',
+        label: '(주소 미입력) 010-9999-8888',
+        phone: '01099998888',
+      },
+    };
+    const next = mergeSameAliasPhoneOnlyEntries(entries);
+    expect(next).toBe(entries);
   });
 });
