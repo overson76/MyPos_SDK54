@@ -8,6 +8,32 @@ import { getFirestore } from './firebase';
 // 옛 stale 이벤트(앱 부팅 전 또는 매우 오래된 incomingCall 문서) 차단용 — 화면 자동 사라짐과 무관.
 const STALE_AGE_MS = 15_000;
 
+// 2026-05-28: 사장님 호소 "AliasPromptModal 전화번호 칸 빈" 처방.
+//   사장님 시나리오 — 시연/실CID 알림 떴는데 사장님이 직접 (다른) 슬롯 만들거나
+//   ✕ 닫고 슬롯 만들면, 그 슬롯 deliveryPhone 없어 모달 currentPhone 도 빈.
+//   최근 활성 CID phone 을 module-level 로 보관 → 5분 안에 만든 슬롯/모달의
+//   fallback. 모든 매장 운영 흐름에서 자동 채움.
+const LAST_CALL_TTL_MS = 5 * 60 * 1000;
+let _lastCallPhone = '';
+let _lastCallFormatted = '';
+let _lastCallTs = 0;
+
+export function recordLastCallPhone(phoneNumber, formattedNumber) {
+  _lastCallPhone = String(phoneNumber || '').trim();
+  _lastCallFormatted = String(formattedNumber || phoneNumber || '').trim();
+  _lastCallTs = Date.now();
+}
+
+export function getLastCallPhone() {
+  if (Date.now() - _lastCallTs > LAST_CALL_TTL_MS) return '';
+  return _lastCallPhone;
+}
+
+export function getLastCallFormatted() {
+  if (Date.now() - _lastCallTs > LAST_CALL_TTL_MS) return '';
+  return _lastCallFormatted;
+}
+
 // 반환 시그니처: { call, dismiss }
 //   - call: null | { phoneNumber, formattedNumber, address, orderCount, alias, ... }
 //   - dismiss: 외부에서 알림을 즉시 숨기는 함수 (주문 확정 또는 ✕ 클릭 시).
@@ -44,6 +70,10 @@ export function useIncomingCall(storeId) {
         setCall(null);
         return;
       }
+      // 2026-05-28: 최근 CID phone 글로벌 fallback 갱신 (5분 TTL).
+      if (data.phoneNumber) {
+        recordLastCallPhone(data.phoneNumber, data.formattedNumber || data.phoneNumber);
+      }
       setCall(data);
     });
 
@@ -55,9 +85,12 @@ export function useIncomingCall(storeId) {
   // 2026-05-28: 시연 / 검증용 — Firestore 안 거치고 로컬 state 만. 라이브 데이터 영향 0.
   // 가상 CID 호출로 IncomingCallBanner → AliasPromptModal → Toast 흐름 즉시 검증.
   const simulateCall = useCallback((data = {}) => {
+    const phoneNumber = data.phoneNumber || '01099998888';
+    const formattedNumber = data.formattedNumber || data.phoneNumber || '010-9999-8888';
+    recordLastCallPhone(phoneNumber, formattedNumber);
     setCall({
-      phoneNumber: data.phoneNumber || '01099998888',
-      formattedNumber: data.formattedNumber || data.phoneNumber || '010-9999-8888',
+      phoneNumber,
+      formattedNumber,
       address: data.address || null,
       alias: data.alias || null,
       orderCount: data.orderCount || 0,

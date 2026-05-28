@@ -34,6 +34,7 @@ import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
 import { useToast } from '../utils/ToastContext';
+import { getLastCallPhone } from '../utils/useIncomingCall';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -2570,14 +2571,16 @@ export default function OrderScreen({
       {/* 2026-05-25: 배달 주문 확정 직전 별칭 입력 + 유사 매칭 + 자동 주소 검색 */}
       {/* 2026-05-28: initialAlias 가 alias 비면 deliveryAddress 로 fallback —
           사장님이 라벨 칸에 "신규추가" 같은 식별자 입력했으면 그게 별칭 입력 칸에도
-          미리 채워져 사장님이 ✓ 한 번에 등록 가능. 비슷한 별칭/주소 검색은 그 텍스트로 자동. */}
+          미리 채워져 사장님이 ✓ 한 번에 등록 가능. 비슷한 별칭/주소 검색은 그 텍스트로 자동.
+          currentPhone 도 order.deliveryPhone → 최근 CID phone (5분 TTL) 순 fallback —
+          사장님이 시연/실CID 알림 떴는데 ✕ 닫고 직접 슬롯 만든 케이스도 자동 채움. */}
       <AliasPromptModal
         visible={aliasPromptOpen}
         initialAlias={
           (order?.deliveryAlias || '').trim() ||
           (order?.deliveryAddress || '').trim()
         }
-        currentPhone={order?.deliveryPhone || ''}
+        currentPhone={order?.deliveryPhone || getLastCallPhone()}
         currentAddress={order?.deliveryAddress || ''}
         addressBook={addressBook}
         storeCoord={

@@ -68,3 +68,8 @@ export function useIncomingCall(storeId) {
 
   return { call, dismiss, simulateCall };
 }
+
+// 네이티브 no-op (네이티브는 폰 CID 직접 처리 X — Firestore 만 수신).
+export function recordLastCallPhone() {}
+export function getLastCallPhone() { return ''; }
+export function getLastCallFormatted() { return ''; }
