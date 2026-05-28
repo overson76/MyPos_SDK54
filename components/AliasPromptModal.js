@@ -143,6 +143,8 @@ export default function AliasPromptModal({
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // 2026-05-28 (2부): 모달 헤더 보정 — landscape 키보드 가림 처방.
+          keyboardVerticalOffset={60}
           style={styles.kavWrap}
         >
           <Pressable style={styles.sheet} onPress={() => {}}>

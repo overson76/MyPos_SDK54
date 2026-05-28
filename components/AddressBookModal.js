@@ -350,6 +350,9 @@ export default function AddressBookModal({ visible, onClose, onSelect }) {
             iOS=padding / Android=height. KAV 가 키보드 영역만큼 컨텐츠 위로 밀어올림. */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // 2026-05-28 (2부): 모달 헤더 + SafeArea top 만큼 보정. landscape 폰
+          // 키보드가 입력칸 가리는 사고 처방 — iOS 가로 키보드 화면 50% 덮어 행 깔림.
+          keyboardVerticalOffset={60}
           style={styles.keyboardAvoidWrap}
         >
         <Pressable

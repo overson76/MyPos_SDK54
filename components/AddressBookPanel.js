@@ -782,7 +782,12 @@ export default function AddressBookPanel() {
         <ScrollView
           ref={listRef}
           style={styles.list}
-          contentContainerStyle={styles.listContent}
+          // 2026-05-28 (2부): 인라인 row 편집 시 마지막 entry 키보드 아래 깔림 처방.
+          // 편집 중일 때만 paddingBottom 300 — 일반 스크롤 시 빈 공간 영향 X.
+          contentContainerStyle={[
+            styles.listContent,
+            editingKey && { paddingBottom: 300 },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >

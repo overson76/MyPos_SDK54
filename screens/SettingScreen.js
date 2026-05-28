@@ -229,6 +229,8 @@ export default function SettingScreen() {
         <Modal transparent animationType="fade" visible>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            // 2026-05-28 (2부): 모달 헤더 보정 — landscape 키보드 가림 처방.
+            keyboardVerticalOffset={60}
             style={styles.modalBackdrop}
           >
             <ScrollView
@@ -387,6 +389,13 @@ export default function SettingScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 2026-05-28 (2부): MemoTemplatesEditor 의 TextInput 키보드 가림 처방.
+          메인 list ScrollView 만 KAV 로 감쌈 — 모달은 별도 root 라 영향 X. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={50}
+      >
       <ScrollView
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
@@ -534,6 +543,7 @@ export default function SettingScreen() {
         {/* 자주 쓰는 메모 칩 편집 — 주문 메모 모달에 노출됨 */}
         <MemoTemplatesEditor />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

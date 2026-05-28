@@ -585,6 +585,8 @@ function StoreAddressModal({ storeInfo, onClose, onDone }) {
       <Pressable style={modalStyles.backdrop} onPress={onClose}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // 2026-05-28 (2부): 모달 헤더 보정 — landscape 키보드 가림 처방.
+          keyboardVerticalOffset={60}
           style={modalStyles.keyboardAvoidWrap}
         >
         <Pressable style={[modalStyles.card, { width: 420 }]} onPress={() => {}}>

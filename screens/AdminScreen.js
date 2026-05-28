@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -271,6 +272,13 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
 
   return (
     <>
+    {/* 2026-05-28 (2부): 시연 섹션 CID 직접 입력 TextInput 키보드 가림 처방.
+        root ScrollView 위에 KAV 감쌈 — DeliveryRouteDemo 모달은 별도라 영향 X. */}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={50}
+    >
     <ScrollView
       style={sysStyles.container}
       contentContainerStyle={{ paddingBottom: 24 }}
@@ -830,6 +838,7 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
 
       {/* (1.0.24: PinManageModal 은 AdminSettingsView 로 이동) */}
     </ScrollView>
+    </KeyboardAvoidingView>
     {demoVisible && (
       <DeliveryRouteDemo
         visible={routeDemoOpen}

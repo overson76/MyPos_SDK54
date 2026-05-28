@@ -218,6 +218,8 @@ export default function AuthScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // 2026-05-28 (2부): SafeArea top inset 보정 — landscape 키보드 가림 처방.
+        keyboardVerticalOffset={50}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
