@@ -264,7 +264,7 @@ function MainApp() {
   useCidHandler(storeId);
   // 모든 기기: Firebase 착신 이벤트 수신 → 팝업 표시
   // dismiss: 주문 확정 시 즉시 알림 사라지게 — 15초 대기 안 함
-  const { call: incomingCall, dismiss: dismissIncomingCall } = useIncomingCall(storeId);
+  const { call: incomingCall, dismiss: dismissIncomingCall, simulateCall: simulateIncomingCall } = useIncomingCall(storeId);
 
   // CID 알림은 평소 10초 후 자동 사라짐. 사장님이 메뉴 선택하고 "주문" 누른 순간엔
   // 이미 손님 정보 다 받은 상태 — 알림 막대가 화면 위에 남아있을 이유 없음.
@@ -283,6 +283,10 @@ function MainApp() {
   //   incomingCall 새로 들어올 때마다 timer 시작. dismiss/orderPress 시 cleanup.
   useEffect(() => {
     if (!incomingCall) return undefined;
+    // 2026-05-28: 시연(simulateCall) 알림은 자동 stash 건너뛰기. 사장님이 직접
+    // "👤 통합" / "주문받기" / ✕ 중 선택하는 흐름을 검증하므로 타이머가 흐름을
+    // 가로채면 안 됨. 실제 CID 만 자동 stash.
+    if (incomingCall.__simulated) return undefined;
     if (typeof submitPendingAsType !== 'function') return undefined;
     const timer = setTimeout(() => {
       // 자동 stash — 빈 d 슬롯에 발신자 정보만 박음. PENDING cart 없으니 메뉴는
@@ -566,7 +570,7 @@ function MainApp() {
             <View
               style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
             >
-              <AdminScreen />
+              <AdminScreen onSimulateCall={simulateIncomingCall} />
             </View>
           </View>
         </View>

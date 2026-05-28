@@ -51,5 +51,20 @@ export function useIncomingCall(storeId) {
   }, [storeId]);
 
   const dismiss = useCallback(() => setCall(null), []);
-  return { call, dismiss };
+
+  // 2026-05-28: 시연 / 검증용 — Firestore 안 거치고 로컬 state 만. 라이브 영향 0.
+  const simulateCall = useCallback((data = {}) => {
+    setCall({
+      phoneNumber: data.phoneNumber || '01099998888',
+      formattedNumber: data.formattedNumber || data.phoneNumber || '010-9999-8888',
+      address: data.address || null,
+      alias: data.alias || null,
+      orderCount: data.orderCount || 0,
+      isNewNumber: data.isNewNumber ?? !data.alias,
+      ts: { toMillis: () => Date.now() },
+      __simulated: true,
+    });
+  }, []);
+
+  return { call, dismiss, simulateCall };
 }

@@ -42,7 +42,10 @@ function makeStyles(scale = 1) {
   const fp = (n) => Math.round(n * scale);
   return StyleSheet.create({
     overlay: {
-      position: 'absolute',
+      // 웹은 fixed (스크롤과 무관하게 viewport 상단 고정) — 사장님이 어떤 화면 어느
+      // 스크롤 위치든 Toast 가 즉시 보임. 네이티브는 absolute 그대로 (App.js 안에서
+      // SafeAreaView 의 상대 위치).
+      position: Platform.OS === 'web' ? 'fixed' : 'absolute',
       top: Platform.OS === 'ios' ? 100 : 60,
       left: 0,
       right: 0,

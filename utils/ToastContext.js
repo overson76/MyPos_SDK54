@@ -16,7 +16,7 @@ const ToastContext = createContext({
   dismissToast: () => {},
 });
 
-const DEFAULT_DURATION_MS = 4000;
+const DEFAULT_DURATION_MS = 5000;
 
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null);

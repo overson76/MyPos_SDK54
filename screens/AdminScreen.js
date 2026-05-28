@@ -74,7 +74,7 @@ const SECTIONS = [
 // 1.0.24: PinManageModal + PIN_LENGTH 는 components/PinManageModal.js 로 이동
 // (AdminSettingsView 와 공유). 아래에서 import.
 
-function SystemSettingsView() {
+function SystemSettingsView({ onSimulateCall } = {}) {
   const { scale } = useResponsive();
   const sysStyles = useMemo(() => makeSysStyles(scale), [scale]);
   const lock = useLock();
@@ -601,6 +601,58 @@ function SystemSettingsView() {
               <Text style={sysStyles.btnSecondaryText}>🛵 시연 보기</Text>
             </TouchableOpacity>
           </View>
+
+          {/* 2026-05-28: CID 신규 전화 시연 — 라이브 Firestore 안 건드림 (로컬 state).
+              "📞 신규" 누르면 처음 보는 번호처럼 알림 뜸 → "👤 통합" 버튼으로 별칭 입력
+              → AliasPromptModal → 비슷한 별칭 후보 → Toast 알림 흐름 풀세트 검증. */}
+          {onSimulateCall ? (
+            <>
+              <View style={sysStyles.row}>
+                <View style={sysStyles.rowText}>
+                  <Text style={sysStyles.label}>CID 신규 전화 시연</Text>
+                  <Text style={sysStyles.helper}>
+                    처음 보는 번호 010-9999-8888 가상 알림. "👤 통합" 또는
+                    "주문받기" 흐름 + AliasPromptModal + Toast 알림 검증.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={sysStyles.btnSecondary}
+                  onPress={() =>
+                    onSimulateCall({
+                      phoneNumber: '01099998888',
+                      formattedNumber: '010-9999-8888',
+                    })
+                  }
+                >
+                  <Text style={sysStyles.btnSecondaryText}>📞 신규</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={sysStyles.row}>
+                <View style={sysStyles.rowText}>
+                  <Text style={sysStyles.label}>CID 단골 매칭 시연</Text>
+                  <Text style={sysStyles.helper}>
+                    매칭된 단골 손님 알림 (alias / address 포함). 옛 흐름과 비교
+                    확인용. 통합 버튼 안 뜨고 주문받기만 보임.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={sysStyles.btnSecondary}
+                  onPress={() =>
+                    onSimulateCall({
+                      phoneNumber: '01077776666',
+                      formattedNumber: '010-7777-6666',
+                      alias: '진실보석',
+                      address: '부산 사하구 하신중앙로 240',
+                      orderCount: 5,
+                      isNewNumber: false,
+                    })
+                  }
+                >
+                  <Text style={sysStyles.btnSecondaryText}>📞 단골</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
         </>
       )}
 
@@ -686,7 +738,7 @@ function SystemSettingsView() {
   );
 }
 
-export default function AdminScreen() {
+export default function AdminScreen({ onSimulateCall } = {}) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [section, setSection] = useState('returns');
@@ -781,7 +833,7 @@ export default function AdminScreen() {
         ) : section === 'settings' ? (
           <AdminSettingsView />
         ) : (
-          <SystemSettingsView />
+          <SystemSettingsView onSimulateCall={onSimulateCall} />
         )}
       </View>
     </View>
