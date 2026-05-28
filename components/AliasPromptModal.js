@@ -123,8 +123,11 @@ export default function AliasPromptModal({
   };
 
   const handleAcceptAddress = () => {
+    // 2026-05-28: 사장님 신고 "진실 입력했는데 진실의옷장으로 등록 안 됐다".
+    //   카카오 검색 결과 name (정확 가게명) 우선 — 사장님 입력은 *검색 키워드*
+    //   였을 뿐, "맞아요 (등록)" 클릭 = "이 가게 정보 그대로 사용" 의도.
     onConfirm?.({
-      alias: alias.trim(),
+      alias: (searchResult?.name || alias).trim(),
       mergeIntoKey: null,
       autoAddress: searchResult?.formatted || null,
       phone: phone.trim(),
