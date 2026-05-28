@@ -2205,13 +2205,23 @@ export default function OrderScreen({
                       // 2026-05-28 사장님 호소 "분명히 등록한 번호인데 새 전화로 인식 — 엉망":
                       //   가드 완화. 배달뿐 아니라 포장/예약도 단골 식별 필요.
                       //   CID phone 없는 매장 직접 손님도 별칭 등록받아 다음에 매칭.
-                      //   alias 없으면 항상 트리거 (사장님이 "건너뛰기" 1초로 닫을 수 있음).
+                      // 2026-05-28 사장님 호소 "단골인데도 모달 떠 — 그냥 주문만 들어가면 되잖아":
+                      //   order.deliveryAlias 비어있어도 주소록 entry 에 alias 있으면 단골 인식.
+                      //   즉 *식별 정보가 어디에든 있으면* 모달 skip. 신규 손님 (어디에도 없음) 만 모달.
                       const tType = table?.type;
+                      const aliasFromOrder = (order?.deliveryAlias || '').trim();
+                      let aliasFromBook = '';
+                      if (!aliasFromOrder && order?.deliveryAddress) {
+                        const key = normalizeAddressKey(order.deliveryAddress);
+                        const entry = key ? addressBook?.entries?.[key] : null;
+                        aliasFromBook = (entry?.alias || '').trim();
+                      }
                       const needsAliasPrompt =
                         (tType === 'delivery' ||
                           tType === 'takeout' ||
                           tType === 'reservation') &&
-                        !(order?.deliveryAlias || '').trim();
+                        !aliasFromOrder &&
+                        !aliasFromBook;
                       if (needsAliasPrompt) {
                         setAliasPromptOpen(true);
                         return;
