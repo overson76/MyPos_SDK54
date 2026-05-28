@@ -86,3 +86,77 @@ export function hasPhoneDigitsAnywhere(entries, digits) {
   }
   return false;
 }
+
+// 2026-05-28: 사장님 신고 "김해시락국 entry 가 2개. 별칭 같은데 통합 안 됨".
+//   같은 alias 의 정식 entry + phone-only entry 가 *별개로* 박혀있는 케이스.
+//   원인: 사장님이 시뮬/CID 통합 흐름에서 phone-only entry 생성 → 옛 정식
+//   entry 와 phone 다른 케이스 → mergeOrphanPhoneOnlyEntries (phone 매칭 기준)
+//   는 안 잡음.
+//
+// 정책:
+//   - 같은 alias 의 정식 entry (label = 주소) + phone-only entry 가 있으면,
+//     phone-only 의 phone digits 를 정식 entry 의 phones array 에 추가 + phone-only 삭제.
+//   - 정식 entry 둘 (둘 다 주소 entry) 의 alias 같음 — 그대로 유지. 사장님이
+//     "집 주소 + 회사 주소" 처럼 의도적으로 다른 주소 등록한 케이스일 수 있음.
+export function mergeSameAliasPhoneOnlyEntries(entries) {
+  if (!entries || typeof entries !== 'object') return entries;
+
+  // alias → [정식 entry key 들]
+  const regularByAlias = {};
+  // alias → [phone-only entry key 들]
+  const phoneOnlyByAlias = {};
+
+  for (const key of Object.keys(entries)) {
+    const entry = entries[key];
+    if (!entry) continue;
+    const alias = (entry.alias || '').trim();
+    if (!alias) continue;
+    if (typeof key === 'string' && key.startsWith('__phone:')) {
+      (phoneOnlyByAlias[alias] = phoneOnlyByAlias[alias] || []).push(key);
+    } else {
+      (regularByAlias[alias] = regularByAlias[alias] || []).push(key);
+    }
+  }
+
+  // 통합 대상 — alias 가 정식 entry 에도 있고 phone-only 에도 있는 경우
+  const toDelete = new Set();
+  const phonesToAdd = {}; // 정식 key → [추가할 digits]
+  for (const alias of Object.keys(phoneOnlyByAlias)) {
+    const regularKeys = regularByAlias[alias];
+    if (!regularKeys || regularKeys.length === 0) continue;
+    // 첫 정식 entry 가 주 entry
+    const targetKey = regularKeys[0];
+    for (const orphanKey of phoneOnlyByAlias[alias]) {
+      const orphan = entries[orphanKey];
+      const digits = String(orphan?.phone || '').replace(/\D/g, '');
+      if (digits) {
+        (phonesToAdd[targetKey] = phonesToAdd[targetKey] || []).push(digits);
+      }
+      toDelete.add(orphanKey);
+    }
+  }
+
+  if (toDelete.size === 0) return entries;
+
+  const next = {};
+  for (const key of Object.keys(entries)) {
+    if (toDelete.has(key)) continue;
+    const entry = entries[key];
+    const addDigits = phonesToAdd[key];
+    if (addDigits && addDigits.length > 0) {
+      const existing = collectPhoneDigits(entry);
+      const merged = [...existing];
+      for (const d of addDigits) {
+        if (!merged.includes(d)) merged.push(d);
+      }
+      next[key] = {
+        ...entry,
+        phones: merged,
+        phone: merged[0] || entry.phone || null,
+      };
+    } else {
+      next[key] = entry;
+    }
+  }
+  return next;
+}

@@ -13,6 +13,7 @@ import { useStore } from './StoreContext';
 import {
   hasPhoneDigitsAnywhere,
   mergeOrphanPhoneOnlyEntries,
+  mergeSameAliasPhoneOnlyEntries,
 } from './addressBookMigrations';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
@@ -50,7 +51,11 @@ export function useAddressBook() {
     if (migrationRanRef.current) return;
     const entries = addressBook.entries;
     if (!entries || Object.keys(entries).length === 0) return;
-    const merged = mergeOrphanPhoneOnlyEntries(entries);
+    // 1단계: phone 매칭 기준 orphan phone-only 통합 (옛 가드 결함 잔재)
+    let merged = mergeOrphanPhoneOnlyEntries(entries);
+    // 2단계: alias 매칭 기준 phone-only → 정식 entry 통합 (사장님 신고
+    // "김해시락국 2개" 사고 — alias 같은데 phone 달라 1단계가 못 잡은 케이스)
+    merged = mergeSameAliasPhoneOnlyEntries(merged);
     if (merged !== entries) {
       setAddressBook((prev) =>
         prev.entries === entries ? { ...prev, entries: merged } : prev
