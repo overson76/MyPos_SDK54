@@ -9,6 +9,7 @@ Claude Code 에서 "날짜 세션 보여줘" 또는 "주제명 관련 정리 있
 
 | 날짜 | 파일 | 핵심 주제 | 커밋 |
 |---|---|---|---|
+| 2026-05-28 | [2026-05-28-CID풀세트-주소록자동통합-시연시스템.md](2026-05-28-CID풀세트-주소록자동통합-시연시스템.md) | 사장님 운영 사고 9종 종합 처방 — 출력물 시간/별칭, 카카오 5km, phone sync, AliasPromptModal 다단계, CID 통합 UI, Toast, 시연 시스템 풀세트 (시뮬+자동 entry+clearAllSlots), 같은 alias entry 자동 통합 ("김해시락국 2개" 320→295건). 19 commit, jest 549/549, deploy:web + EAS OTA 매번 배포 | d305b17~e36238f |
 | 2026-05-03 | [2026-05-03-q-and-a.md](2026-05-03-q-and-a.md) | 익명 UID 손실 자가복구 + 폰 지도 + 대표 가입 + CID 준비 | c523683, 37cb00d |
 | 2026-05-04 | [2026-05-04-firebase-pc-recovery-cid-map.md](2026-05-04-firebase-pc-recovery-cid-map.md) | Firebase v12 PC연동복구 + Cloudflare차단 + CID준비 + 배달지도경로 | 33f8606, d279775 |
 | 2026-05-06 | [2026-05-06-KIS카드결제-자동업데이트개선-CID진단.md](2026-05-06-KIS카드결제-자동업데이트개선-CID진단.md) | KIS 카드결제 Phase5 + 자동업데이트 개선(1.0.3→1.0.8) + CID 진단 + UI 개선 | 08794ef, 16c6838, eefc4f6 |
