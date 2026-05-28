@@ -36,6 +36,7 @@ import { useCidHandler } from './utils/useCidHandler';
 import { useIncomingCall } from './utils/useIncomingCall';
 import IncomingCallBanner from './components/IncomingCallBanner';
 import OrderTypePicker from './components/OrderTypePicker';
+import AliasPromptModal from './components/AliasPromptModal';
 import { resolveAnyTable } from './utils/tableData';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
 // 2026-05-21: CID 자동 단골(15초 후 자동 배달 슬롯 생성) 제거 — 사장님이 메뉴 담고
@@ -239,11 +240,20 @@ function MainApp() {
     setDeliveryContact,
     subscribeConfirmed,
     submitPendingAsType,
+    addressBook,
+    mergePhoneIntoEntry,
+    addPhoneOnly,
+    setAlias,
   } = useOrders();
   // 2026-05-21: CID "주문받기" 클릭 시 띄울 OrderTypePicker — App 레벨에서 관리.
   // 알림은 즉시 dismiss + picker 띄움 + 사장님 선택 시 빈 슬롯에 발신자 정보만 박고 "주문대기".
   const [callTypePickerOpen, setCallTypePickerOpen] = useState(false);
   const [callTypePickerData, setCallTypePickerData] = useState(null); // dismiss 후에도 alias/phone 보존
+  // 2026-05-28: 사장님 호소 "분명히 저장된 번호인데 새 전화로 인식" 영구 처방.
+  //   CID 매칭 X → 알림 "👤 통합" 버튼 → 이 모달 → 사장님이 별칭 입력 →
+  //   findSimilarAliases 자동 후보 → 클릭 한 번에 phone 통합 (mergePhoneIntoEntry).
+  const [cidMergeOpen, setCidMergeOpen] = useState(false);
+  const [cidMergeData, setCidMergeData] = useState(null);
 
   // CID — Electron PC 에서 SIP 착신 → Firebase 기록 (다른 기기도 동시 수신)
   useCidHandler(storeId);
@@ -374,6 +384,16 @@ function MainApp() {
           dismissIncomingCall();
           setCallTypePickerOpen(true);
         }}
+        onMergePress={() => {
+          // 2026-05-28: CID 매칭 X 시 사장님이 "이거 단골 손님인데" 알면 통합 모달.
+          //   formattedNumber 또는 phoneNumber 를 모달 currentPhone 에 전달 →
+          //   사장님이 별칭 입력 → findSimilarAliases 자동 추천 → 통합.
+          setCidMergeData({
+            phoneNumber: incomingCall?.phoneNumber || '',
+            formattedNumber: incomingCall?.formattedNumber || incomingCall?.phoneNumber || '',
+          });
+          setCidMergeOpen(true);
+        }}
       />
       {/* 2026-05-21: 주문받기 클릭 직후 띄우는 OrderTypePicker — App 레벨 (어느 탭에서든 보임) */}
       {callTypePickerOpen ? (
@@ -402,6 +422,44 @@ function MainApp() {
           }}
         />
       ) : null}
+      {/* 2026-05-28: CID 매칭 X → 사장님 "👤 통합" 클릭 → 이 모달.
+          사장님이 별칭 입력 → findSimilarAliases 자동 후보 → 클릭 한 번에 phone 통합.
+          mergeIntoKey 있으면 기존 entry 에 phone 통합, 없으면 별칭 있는 새 phone-only entry. */}
+      <AliasPromptModal
+        visible={cidMergeOpen}
+        initialAlias=""
+        currentPhone={cidMergeData?.formattedNumber || cidMergeData?.phoneNumber || ''}
+        currentAddress=""
+        addressBook={addressBook}
+        storeCoord={
+          typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number'
+            ? { lat: storeInfo.lat, lng: storeInfo.lng }
+            : null
+        }
+        onCancel={() => {
+          setCidMergeOpen(false);
+          setCidMergeData(null);
+        }}
+        onConfirm={({ alias, mergeIntoKey }) => {
+          const cidPhone = cidMergeData?.phoneNumber || '';
+          setCidMergeOpen(false);
+          setCidMergeData(null);
+          if (!cidPhone) return;
+          if (mergeIntoKey) {
+            // 기존 entry 에 phone 통합 — 사장님이 후보 선택 (사장님 의도 "같은 손님").
+            mergePhoneIntoEntry(mergeIntoKey, cidPhone, alias || '');
+          } else if (alias) {
+            // 별칭만 있는 새 phone-only entry — addPhoneOnly 가 같은 phone 가드.
+            addPhoneOnly(cidPhone, alias);
+            // addPhoneOnly 가 alias 옵션 받지만 이미 phone-only entry 있으면 무시(가드).
+            // 그 경우 setAlias 로 별칭만 추가 (key = __phone:digits).
+            const digits = String(cidPhone).replace(/\D/g, '');
+            if (digits) setAlias(`__phone:${digits}`, alias);
+          }
+          // alias 없고 mergeIntoKey 없으면 (skip) noop.
+          dismissIncomingCall();
+        }}
+      />
       {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
           배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>

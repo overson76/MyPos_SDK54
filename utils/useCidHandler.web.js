@@ -62,6 +62,43 @@ export function useCidHandler(storeId) {
         ? entries.find((e) => phoneDigitsOf(e).includes(digits))
         : null;
 
+      // 2026-05-28: 사장님 호소 "분명히 저장된 번호인데 새 전화로 인식" 진단.
+      //   매칭 실패 시 후보 entries (digits 부분 일치) 를 추출해 Firestore 에 박음.
+      //   사장님이 *매장에서 즉시* 어디서 끊겼는지 식별 가능.
+      let debugSuffixCandidates = null;
+      if (!match && digits) {
+        const last4 = digits.slice(-4);
+        const last7 = digits.slice(-7);
+        const candidates = [];
+        for (const e of entries) {
+          const eDigits = phoneDigitsOf(e);
+          for (const ed of eDigits) {
+            const matchedLast4 = last4.length === 4 && ed.endsWith(last4);
+            const matchedLast7 = last7.length === 7 && ed.endsWith(last7);
+            if (matchedLast4 || matchedLast7) {
+              candidates.push({
+                key: e.key,
+                alias: e.alias || null,
+                label: e.label || null,
+                phones: eDigits,
+                matchedLast7,
+                matchedLast4,
+              });
+              break;
+            }
+          }
+          if (candidates.length >= 5) break;
+        }
+        debugSuffixCandidates = candidates.length > 0 ? candidates : null;
+        if (typeof console !== 'undefined') {
+          console.warn('[cid] 매칭 실패 진단', {
+            cidDigits: digits,
+            totalEntries: entries.length,
+            suffixCandidates: debugSuffixCandidates,
+          });
+        }
+      }
+
       const alias = match?.alias || null;
       const address = match?.label || null;
       const orderCount = match?.count || 0;
@@ -94,6 +131,10 @@ export function useCidHandler(storeId) {
             // (또는 관리자 화면 향후) 에서 매칭 시도 결과 직접 확인 가능.
             debugDigits: digits || null,
             debugEntryCount: entries.length,
+            // 2026-05-28: 매칭 실패 시 suffix 부분 일치 후보 (사장님 매장 진단용).
+            //   사장님이 "분명히 저장된 번호" 라 하면 이 필드에 후보 entry 가 떠야 정상.
+            //   비어있으면 정말로 어디에도 그 phone 이 없다는 뜻.
+            debugSuffixCandidates: debugSuffixCandidates || null,
             ts: new Date(),
           });
       } catch (e) {

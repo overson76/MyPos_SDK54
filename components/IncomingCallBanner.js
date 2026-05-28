@@ -13,11 +13,18 @@ import {
 } from 'react-native';
 import { useResponsive } from '../utils/useResponsive';
 
-export default function IncomingCallBanner({ call, onOrderPress, onDismiss }) {
+// 2026-05-28: 사장님 호소 "분명히 저장된 번호인데 새 전화로 인식 — 엉망".
+// CID 매칭 X (isNewNumber=true) 일 때 알림에 "👤 통합" 버튼 추가 — 사장님이
+// 즉시 별칭 입력 → 비슷한 별칭/주소 entry 자동 추천 → 클릭 한 번에 phone 통합.
+// 사장님이 매장에서 휴대폰/대표번호 여러 번호 같은 손님 통합하는 흐름.
+export default function IncomingCallBanner({ call, onOrderPress, onMergePress, onDismiss }) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
   if (!call) return null;
+
+  // 매칭 안 된 신규 번호일 때만 "통합" 버튼 보여줌 — 매칭된 단골은 이미 식별됨.
+  const showMergeBtn = !!onMergePress && !call.alias && !call.address;
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
@@ -43,6 +50,11 @@ export default function IncomingCallBanner({ call, onOrderPress, onDismiss }) {
           ) : null}
         </View>
         <View style={styles.right}>
+          {showMergeBtn ? (
+            <TouchableOpacity style={styles.mergeBtn} onPress={onMergePress}>
+              <Text style={styles.mergeBtnText}>👤 통합</Text>
+            </TouchableOpacity>
+          ) : null}
           {onOrderPress ? (
             <TouchableOpacity style={styles.orderBtn} onPress={onOrderPress}>
               <Text style={styles.orderBtnText}>주문받기</Text>
@@ -125,6 +137,17 @@ function makeStyles(scale = 1) {
     orderBtnText: {
       color: '#fff',
       fontSize: fp(16),
+      fontWeight: '800',
+    },
+    mergeBtn: {
+      backgroundColor: '#2563eb',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    mergeBtnText: {
+      color: '#fff',
+      fontSize: fp(14),
       fontWeight: '800',
     },
     dismissBtn: {
