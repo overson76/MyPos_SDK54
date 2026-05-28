@@ -82,6 +82,10 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
   const [pinModal, setPinModal] = useState(null); // 'set' | 'change' | 'clear' | null
   const [routeDemoOpen, setRouteDemoOpen] = useState(false);
+  // 2026-05-28: 시연 직접 입력 — 자유 시나리오 검증.
+  const [demoPhone, setDemoPhone] = useState('');
+  const [demoAlias, setDemoAlias] = useState('');
+  const [demoAddr, setDemoAddr] = useState('');
 
   // 🎬 시연 모드 — 평소엔 시뮬레이션 섹션 숨김(일반 사장님 혼란 방지).
   // 외부 손님/투자자/신입 교육 시 사장님이 토글 ON → 섹션 노출.
@@ -602,37 +606,52 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
             </TouchableOpacity>
           </View>
 
-          {/* 2026-05-28: CID 신규 전화 시연 — 라이브 Firestore 안 건드림 (로컬 state).
-              "📞 신규" 누르면 처음 보는 번호처럼 알림 뜸 → "👤 통합" 버튼으로 별칭 입력
-              → AliasPromptModal → 비슷한 별칭 후보 → Toast 알림 흐름 풀세트 검증. */}
+          {/* 2026-05-28: CID 시뮬 다양화 — 사장님 호소 "같은 번호만 반복이면 검증 불가".
+              4개 프리셋 (다른 phone 들) + 직접 입력 칸 — 같은번호/다른번호/비슷별칭/
+              매칭/미매칭 모든 변수 시뮬. 라이브 Firestore 안 건드림 (로컬 state). */}
           {onSimulateCall ? (
             <>
               <View style={sysStyles.row}>
                 <View style={sysStyles.rowText}>
-                  <Text style={sysStyles.label}>CID 신규 전화 시연</Text>
-                  <Text style={sysStyles.helper}>
-                    처음 보는 번호 010-9999-8888 가상 알림. "👤 통합" 또는
-                    "주문받기" 흐름 + AliasPromptModal + Toast 알림 검증.
-                  </Text>
+                  <Text style={sysStyles.label}>CID 시뮬 — 신규 A</Text>
+                  <Text style={sysStyles.helper}>처음 보는 번호 010-9999-8888.</Text>
                 </View>
                 <TouchableOpacity
                   style={sysStyles.btnSecondary}
-                  onPress={() =>
-                    onSimulateCall({
-                      phoneNumber: '01099998888',
-                      formattedNumber: '010-9999-8888',
-                    })
-                  }
+                  onPress={() => onSimulateCall({ phoneNumber: '01099998888', formattedNumber: '010-9999-8888' })}
                 >
-                  <Text style={sysStyles.btnSecondaryText}>📞 신규</Text>
+                  <Text style={sysStyles.btnSecondaryText}>📞 신규 A</Text>
                 </TouchableOpacity>
               </View>
               <View style={sysStyles.row}>
                 <View style={sysStyles.rowText}>
-                  <Text style={sysStyles.label}>CID 단골 매칭 시연</Text>
+                  <Text style={sysStyles.label}>CID 시뮬 — 신규 B</Text>
+                  <Text style={sysStyles.helper}>다른 번호 010-5555-4444. 신규 A 와 비교 검증.</Text>
+                </View>
+                <TouchableOpacity
+                  style={sysStyles.btnSecondary}
+                  onPress={() => onSimulateCall({ phoneNumber: '01055554444', formattedNumber: '010-5555-4444' })}
+                >
+                  <Text style={sysStyles.btnSecondaryText}>📞 신규 B</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={sysStyles.row}>
+                <View style={sysStyles.rowText}>
+                  <Text style={sysStyles.label}>CID 시뮬 — 신규 C</Text>
+                  <Text style={sysStyles.helper}>또 다른 번호 010-3333-2222.</Text>
+                </View>
+                <TouchableOpacity
+                  style={sysStyles.btnSecondary}
+                  onPress={() => onSimulateCall({ phoneNumber: '01033332222', formattedNumber: '010-3333-2222' })}
+                >
+                  <Text style={sysStyles.btnSecondaryText}>📞 신규 C</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={sysStyles.row}>
+                <View style={sysStyles.rowText}>
+                  <Text style={sysStyles.label}>CID 시뮬 — 단골 (매칭됨)</Text>
                   <Text style={sysStyles.helper}>
-                    매칭된 단골 손님 알림 (alias / address 포함). 옛 흐름과 비교
-                    확인용. 통합 버튼 안 뜨고 주문받기만 보임.
+                    010-7777-6666 + 별칭 "진실보석" + 주소 자동. 통합 버튼 안 뜨고 주문받기만 — 매칭된 단골 흐름.
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -650,6 +669,61 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
                 >
                   <Text style={sysStyles.btnSecondaryText}>📞 단골</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* 직접 입력 — 사장님이 phone/alias 자유 조합 검증.
+                  같은 phone 다른 alias / 같은 alias 다른 phone / 비슷 alias 등 모든 변수. */}
+              <View style={[sysStyles.row, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                <View style={sysStyles.rowText}>
+                  <Text style={sysStyles.label}>CID 시뮬 — 직접 입력</Text>
+                  <Text style={sysStyles.helper}>
+                    phone (필수) + 별칭/주소 (선택) 자유 입력 → "📞 호출".
+                    같은번호 다른 alias 검증, 비슷 alias 매칭 검증 등 자유 시나리오.
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  <TextInput
+                    style={[sysStyles.sysInput, { flex: 1, minWidth: 140 }]}
+                    value={demoPhone}
+                    onChangeText={setDemoPhone}
+                    placeholder="010-1234-5678"
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="phone-pad"
+                    maxLength={20}
+                  />
+                  <TextInput
+                    style={[sysStyles.sysInput, { flex: 1, minWidth: 120 }]}
+                    value={demoAlias}
+                    onChangeText={setDemoAlias}
+                    placeholder="별칭 (선택)"
+                    placeholderTextColor="#9ca3af"
+                    maxLength={30}
+                  />
+                  <TextInput
+                    style={[sysStyles.sysInput, { flex: 1.4, minWidth: 160 }]}
+                    value={demoAddr}
+                    onChangeText={setDemoAddr}
+                    placeholder="주소 (선택, 매칭 단골)"
+                    placeholderTextColor="#9ca3af"
+                    maxLength={100}
+                  />
+                  <TouchableOpacity
+                    style={sysStyles.btnSecondary}
+                    onPress={() => {
+                      const digits = (demoPhone || '').replace(/\D/g, '');
+                      if (!digits) return;
+                      onSimulateCall({
+                        phoneNumber: digits,
+                        formattedNumber: demoPhone,
+                        alias: demoAlias.trim() || null,
+                        address: demoAddr.trim() || null,
+                        isNewNumber: !demoAlias.trim() && !demoAddr.trim(),
+                      });
+                    }}
+                  >
+                    <Text style={sysStyles.btnSecondaryText}>📞 호출</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           ) : null}
@@ -970,6 +1044,16 @@ function makeSysStyles(scale = 1) {
       borderColor: '#d1d5db',
     },
     btnSecondaryText: { color: '#374151', fontSize: fp(13), fontWeight: '600' },
+    sysInput: {
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: fp(13),
+      color: '#111827',
+      backgroundColor: '#fff',
+    },
     note: {
       marginTop: 16,
       padding: 12,
