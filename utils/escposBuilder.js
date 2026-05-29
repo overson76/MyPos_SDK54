@@ -188,10 +188,11 @@ function formatScheduledTime(rawTime, isPM) {
 //
 // 1.0.38: 분리 결제 영수증은 헤더에 "(분리 결제 — 손님: <라벨>)" 한 줄 추가.
 // 1.0.44: 상황별 헤더 + 배달 본문 큰 글씨 + 예약/포장 시각 출력.
-//   - delivery: 주소(가로+세로 큰글씨) / 별칭 / 손님번호 / 도로거리 / 배달요청 시각 모두 큰글씨
-//   - reservation: 예약시각 큰글씨
-//   - takeout: 픽업시각 큰글씨
+//   - delivery: 주소(가로+세로 큰글씨) / 별칭 / 손님번호 / 도로거리 큰글씨
+//   - reservation/takeout: 라벨 큰글씨
 //   - regular: 기존 그대로
+// 2026-05-29: 사장님 요청 — 시각(출발/예약시각/픽업시각) 폰트는 본문(wide) 의
+//   절반(normal) 으로. 라벨/주소/도로 등 식별 본문은 wide 유지.
 // ESC/POS 명령(ESC ! n, ESC a n) 을 텍스트 string 안에 inline. EUC-KR 인코더가
 // ASCII 범위 그대로 보존 → 한글만 변환되고 명령은 그대로 프린터로 전달.
 //
@@ -254,7 +255,8 @@ export function buildReceiptText(receipt) {
     }
     const schedDelivery = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (schedDelivery) {
-      lines.push(bigLeft(`출발   ${schedDelivery}`, 'wide'));
+      // 2026-05-29: 사장님 요청 — 시간 폰트 절반. wide(가로2배) → normal(1배).
+      lines.push(bigLeft(`출발   ${schedDelivery}`, 'normal'));
     }
     if (r.customerRequest) {
       lines.push(bigLeft(`요청   ${r.customerRequest}`, 'wide'));
@@ -265,14 +267,16 @@ export function buildReceiptText(receipt) {
     if (label) lines.push(bigLeft(label, 'wide'));
     const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (sched) {
-      lines.push(bigLeft(`예약시각 ${sched}`, 'wide'));
+      // 2026-05-29: 사장님 요청 — 시간 폰트 절반. wide → normal.
+      lines.push(bigLeft(`예약시각 ${sched}`, 'normal'));
     }
   } else if (orderType === 'takeout') {
     const label = resolveDeliveryLabel(r);
     if (label) lines.push(bigLeft(label, 'wide'));
     const sched = formatScheduledTime(r.scheduledTime, r.scheduledTimeIsPM);
     if (sched) {
-      lines.push(bigLeft(`픽업시각 ${sched}`, 'wide'));
+      // 2026-05-29: 사장님 요청 — 시간 폰트 절반. wide → normal.
+      lines.push(bigLeft(`픽업시각 ${sched}`, 'normal'));
     }
   } else if (r.deliveryAddress) {
     // regular 인데 deliveryAddress 가 있으면 (호환 — orderType 미지정 옛 호출부)
