@@ -26,6 +26,7 @@ import GroupModePicker from '../components/GroupModePicker';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
+import { findEntryByPhone } from '../utils/addressBookLookup';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
 // 2026-05-27: deliveryTime 은 문자열("420") 로 저장 — parseDeliveryTime 으로 객체화 후 formatShort12h 호출.
 import { formatShort12h, parseDeliveryTime } from '../utils/timeUtil';
@@ -438,7 +439,14 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     // 예약/포장 단골은 order.deliveryAlias/Phone 에 박혀있어야 (CID PENDING → submitPendingAsType).
     if (isDelivery && deliveryAddr) {
       const key = normalizeAddressKey(deliveryAddr);
-      const entry = key ? addressBook?.entries?.[key] : null;
+      let entry = key ? addressBook?.entries?.[key] : null;
+      // 2026-05-29: 주소 key 로 못 찾으면 전화번호로 재시도 — CID phone-only 슬롯
+      //   (deliveryAddr="(주소 미입력) ...") 에서 사장님이 그 번호에 별칭("아가맘")을
+      //   저장한 entry 는 다른 key 라 주소 매칭이 실패. 전번으로 찾으면 별칭 잡힘.
+      //   (사장님 신고 "아가맘 저장했는데 전번만 노출")
+      if (!entry && deliveryPhoneFromOrder) {
+        entry = findEntryByPhone(addressBook, deliveryPhoneFromOrder);
+      }
       deliveryAliasFromBook = entry?.alias || null;
       deliveryPhoneFromBook = entry?.phone || null;
       customerRequestFromBook = (entry?.customerRequest || '').trim();

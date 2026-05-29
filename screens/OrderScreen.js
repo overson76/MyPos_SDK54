@@ -22,7 +22,7 @@ import {
   recommendationsToGrid,
   RECOMMENDATION_CATEGORY,
 } from '../utils/recommendations';
-import { getCustomerRequest } from '../utils/addressBookLookup';
+import { getCustomerRequest, findEntryByPhone } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import AddressChips from '../components/AddressChips';
 import OrderTypePicker from '../components/OrderTypePicker';
@@ -2222,13 +2222,25 @@ export default function OrderScreen({
                         const entry = key ? addressBook?.entries?.[key] : null;
                         aliasFromBook = (entry?.alias || '').trim();
                       }
+                      // 2026-05-29: 사장님 신고 "새 번호 전화인데 별칭 입력 모달 안 떠".
+                      //   옛 로직(!phoneAny)은 phone 만 있으면 무조건 skip → 별칭 없는
+                      //   *신규* 번호도 모달을 건너뛰어 사장님이 별칭 등록 기회 상실.
+                      //   2026-05-28 "단골인데 모달 떠" 요구와 충돌하던 것.
+                      //   해결: phone 으로 주소록 entry 의 별칭을 확인 →
+                      //     - 별칭 있음(=단골) → skip (2026-05-28 요구 충족)
+                      //     - 별칭 없음(=신규 번호) → 모달 (오늘 요구 충족)
+                      let aliasFromPhone = '';
+                      if (!aliasFromOrder && !aliasFromBook && phoneAny) {
+                        const e = findEntryByPhone(addressBook, phoneAny);
+                        aliasFromPhone = (e?.alias || '').trim();
+                      }
+                      const knownAlias =
+                        aliasFromOrder || aliasFromBook || aliasFromPhone;
                       const needsAliasPrompt =
                         (tType === 'delivery' ||
                           tType === 'takeout' ||
                           tType === 'reservation') &&
-                        !aliasFromOrder &&
-                        !aliasFromBook &&
-                        !phoneAny;
+                        !knownAlias;
                       if (needsAliasPrompt) {
                         setAliasPromptOpen(true);
                         return;

@@ -188,7 +188,14 @@ export function findEntryByPhone(addressBook, phone) {
 // 우선순위: order 객체에 명시 저장된 fallback.alias/phone (orderReducer 가 보존) > 주소록 entry.
 // 매출 history 빌더 / 영수증 재출력 / 라벨 표기 모든 곳이 같은 식별값을 쓰도록.
 export function resolveDeliveryIdentity(addressBook, deliveryAddress, fallback = {}) {
-  const entry = findAddressEntry(addressBook, deliveryAddress);
+  let entry = findAddressEntry(addressBook, deliveryAddress);
+  // 2026-05-29: 주소 key 로 못 찾으면 전화번호로 재시도 — CID phone-only 슬롯
+  //   (deliveryAddress="(주소 미입력) ...") 에서 사장님이 그 번호에 별칭("아가맘")을
+  //   저장한 entry 가 다른 key(__phone:digits / 진짜 주소) 라 주소 매칭이 실패하던
+  //   사고. 전화번호로 찾으면 alias 가 잡힌다. (사장님 신고 "아가맘인데 전번만 뜸")
+  if (!entry && (fallback.phone || '').trim()) {
+    entry = findEntryByPhone(addressBook, fallback.phone);
+  }
   const alias =
     (fallback.alias || '').trim() ||
     (entry?.alias || '').trim();
