@@ -508,10 +508,26 @@ export default function AddressBookPanel() {
             onChangeText={setQuery}
             placeholder="주소 · 별칭 · 전화 검색"
             placeholderTextColor="#9ca3af"
+            // 2026-05-29: 사장님 신고 "검색 결과가 키보드에 가림". 키보드의
+            // 검색키(엔터) 누르면 키보드 닫힘 → 결과 전체 영역 복구. landscape
+            // 좁은 화면에서 가장 확실한 처방 (동적 paddingBottom 보조).
+            returnKeyType="search"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
               <Text style={styles.clearBtn}>×</Text>
+            </TouchableOpacity>
+          )}
+          {/* 키보드 떠있을 때만 — 누르면 키보드 닫고 검색 결과 전체 표시.
+              사장님이 직접 제안한 "명시적 닫기 액션". */}
+          {kbHeight > 0 && (
+            <TouchableOpacity
+              style={styles.searchDoneBtn}
+              onPress={() => Keyboard.dismiss()}
+              accessibilityLabel="키보드 닫고 검색 결과 보기"
+            >
+              <Text style={styles.searchDoneText}>✓ 완료</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1150,6 +1166,15 @@ function makeStyles(scale = 1) {
       color: '#9ca3af',
       paddingHorizontal: 4,
     },
+    // 2026-05-29: 키보드 떠있을 때 검색칸 우측 "완료" 버튼 — 누르면 키보드 닫힘.
+    searchDoneBtn: {
+      backgroundColor: '#2563eb',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      marginLeft: 6,
+    },
+    searchDoneText: { color: '#fff', fontWeight: '700', fontSize: fp(13) },
 
     toolbarBtns: {
       flexDirection: 'row',
