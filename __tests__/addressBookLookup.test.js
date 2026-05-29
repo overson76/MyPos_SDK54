@@ -2,6 +2,7 @@ import {
   findAddressEntry,
   getCustomerRequest,
   getAddressAlias,
+  resolveDeliveryIdentity,
 } from '../utils/addressBookLookup';
 
 const BOOK_OBJECT = {
@@ -94,5 +95,50 @@ describe('getAddressAlias', () => {
       entries: { 'a': { key: 'a', label: 'a' } },
     };
     expect(getAddressAlias(book, 'a')).toBe('');
+  });
+});
+
+describe('resolveDeliveryIdentity — phone fallback (아가맘 사고)', () => {
+  // 사장님이 "아가맘" 을 번호에 저장 → entry key 는 진짜 주소.
+  // 배달 슬롯 deliveryAddress 는 "(주소 미입력) 010-..." placeholder.
+  const BOOK = {
+    entries: {
+      'addr:아가맘집': {
+        key: 'addr:아가맘집',
+        label: '부산 사하구 어딘가 12-3',
+        alias: '아가맘',
+        phones: ['01027724064'],
+      },
+    },
+  };
+
+  test('주소 key 로 못 찾아도 전화번호로 별칭(아가맘) 찾음', () => {
+    const id = resolveDeliveryIdentity(
+      BOOK,
+      '(주소 미입력) 010-2772-4064', // 주소 매칭 실패하는 placeholder
+      { phone: '010-2772-4064' }
+    );
+    expect(id.alias).toBe('아가맘'); // 핵심 — 전번으로 별칭 찾음
+    expect(id.phone).toBe('010-2772-4064'); // fallback.phone 우선 (입력 형태 보존)
+  });
+
+  test('fallback.alias 가 있으면 그대로 우선 (lookup 불필요)', () => {
+    const id = resolveDeliveryIdentity(BOOK, '(주소 미입력) 010-2772-4064', {
+      alias: '직접입력별칭',
+      phone: '010-2772-4064',
+    });
+    expect(id.alias).toBe('직접입력별칭');
+  });
+
+  test('주소로 바로 찾으면 phone fallback 불필요', () => {
+    const id = resolveDeliveryIdentity(BOOK_OBJECT, '부산 사하구 하신번영로 25', {});
+    expect(id.alias).toBe('진실보석');
+  });
+
+  test('phone 도 주소도 매칭 안 되면 빈 별칭', () => {
+    const id = resolveDeliveryIdentity(BOOK, '(주소 미입력) 010-9999-0000', {
+      phone: '010-9999-0000',
+    });
+    expect(id.alias).toBe('');
   });
 });
