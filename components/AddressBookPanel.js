@@ -89,6 +89,22 @@ export default function AddressBookPanel() {
   const [newPhone, setNewPhone] = useState('');
   const [newCustomerRequest, setNewCustomerRequest] = useState('');
   const [showImport, setShowImport] = useState(false);
+  // 2026-05-29: 사장님 신고 "주소록 검색 시 결과 목록이 키보드에 다 가려짐".
+  //   검색칸은 상단 toolbar 라 보이지만, 검색 결과 entry 들이 키보드 아래 깔림.
+  //   landscape iPhone 에서 KeyboardAvoidingView(padding) 가 키보드 높이를 부정확
+  //   하게 측정하는 알려진 이슈 → 리스트가 안 줄어듦. 키보드 높이를 직접 구독해서
+  //   리스트 ScrollView 하단에 그만큼 paddingBottom → 스크롤로 모든 결과 키보드 위 확인.
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    const onShow = (e) => setKbHeight(e?.endCoordinates?.height || 0);
+    const onHide = () => setKbHeight(0);
+    const s = Keyboard.addListener('keyboardDidShow', onShow);
+    const h = Keyboard.addListener('keyboardDidHide', onHide);
+    return () => {
+      s.remove();
+      h.remove();
+    };
+  }, []);
   // 백업 / 복원 핸들러 — 2026-05-16 추가.
   // Export: 현재 addressBook.entries 전체를 JSON 다운로드 (사장님 컴퓨터에 저장).
   // Import: 파일 선택 → 병합(default) 또는 교체(주의). 사장님 의도 — 데이터 안전 보장.
@@ -783,10 +799,13 @@ export default function AddressBookPanel() {
           ref={listRef}
           style={styles.list}
           // 2026-05-28 (2부): 인라인 row 편집 시 마지막 entry 키보드 아래 깔림 처방.
-          // 편집 중일 때만 paddingBottom 300 — 일반 스크롤 시 빈 공간 영향 X.
+          // 2026-05-29: 검색 시 결과 목록 가림 처방 — 키보드 높이만큼 하단 여백 추가
+          //   → 스크롤로 모든 결과 키보드 위 확인. kbHeight 가 인라인 편집(300)보다
+          //   크면 그 값 우선. 키보드 없으면 기본 listContent(24).
           contentContainerStyle={[
             styles.listContent,
-            editingKey && { paddingBottom: 300 },
+            kbHeight > 0 && { paddingBottom: kbHeight + 24 },
+            editingKey && kbHeight === 0 && { paddingBottom: 300 },
           ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
