@@ -15,7 +15,6 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
-import { useOrders } from '../utils/OrderContext';
 import MemoTemplatesEditor from '../components/MemoTemplatesEditor';
 
 // 웹: <input type=file> + FileReader → data URL
@@ -111,8 +110,6 @@ export default function SettingScreen() {
     placeFavoriteAt,
     removeFromFavorite,
   } = useMenu();
-  const { addressBook, setAutoRemember } = useOrders();
-  const addressCount = Object.keys(addressBook?.entries || {}).length;
 
   const [filter, setFilter] = useState('전체');
   const [addModal, setAddModal] = useState(null);

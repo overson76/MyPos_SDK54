@@ -42,9 +42,7 @@ function quitElectron() {
 export default function AdminSettingsView() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { addressBook, setAutoRemember } = useOrders();
   const lock = useLock();
-  const addressCount = Object.keys(addressBook?.entries || {}).length;
   const electron = isElectron();
 
   const [speakAddr, setSpeakAddrState] = useState(() => getSpeakAddress());
@@ -182,32 +180,9 @@ export default function AdminSettingsView() {
         />
       </View>
 
-      {/* === 배달 주소 자동 기억 === */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>📍 배달 주소</Text>
-      <View style={styles.row}>
-        <View style={styles.rowText}>
-          <Text style={styles.label}>배달 주소 자동 기억</Text>
-          <Text style={styles.helper}>
-            배달이 완료되면 주소를 주소록에 자동 저장합니다 · 현재 {addressCount}개
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.toggleTrack,
-            addressBook?.autoRemember && styles.toggleTrackOn,
-          ]}
-          onPress={() => setAutoRemember(!addressBook?.autoRemember)}
-          activeOpacity={0.7}
-          accessibilityLabel="배달 주소 자동 기억"
-        >
-          <View
-            style={[
-              styles.toggleKnob,
-              addressBook?.autoRemember && styles.toggleKnobOn,
-            ]}
-          />
-        </TouchableOpacity>
-      </View>
+      {/* 2026-05-29: "배달 주소 자동 기억" 토글 제거 — 주소는 주문 확정 시 항상
+          등록되고(upsertEntryFromOrder) 주문 횟수도 항상 카운트. 토글은 잔재였음.
+          주소록 개수는 주소록 화면 상단("전체 N건")에 이미 보임. */}
 
       {/* === 주문지 출력 정책 === */}
       <PrintPolicySection />

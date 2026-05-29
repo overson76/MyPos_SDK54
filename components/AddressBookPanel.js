@@ -23,7 +23,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -65,7 +64,6 @@ export default function AddressBookPanel() {
     setCustomerRequest,
     addAddress,
     editLabel,
-    setAutoRemember,
   } = useOrders();
   const { storeInfo } = useStore();
 
@@ -593,16 +591,8 @@ export default function AddressBookPanel() {
             </>
           )}
         </Text>
-
-        <View style={styles.autoRow}>
-          <Text style={styles.autoLabel}>자동 기억</Text>
-          <Switch
-            value={!!addressBook.autoRemember}
-            onValueChange={setAutoRemember}
-            trackColor={{ true: '#2563eb', false: '#d1d5db' }}
-            thumbColor="#fff"
-          />
-        </View>
+        {/* 2026-05-29: "자동 기억" 토글 제거 — 주소는 주문 확정 시 항상 등록되고
+            (upsertEntryFromOrder), 주문 횟수도 항상 카운트. 토글은 헷갈림만 줬음. */}
       </View>
 
       {/* ── 정렬 칩 ──────────────────────────────────────── */}
@@ -1210,8 +1200,6 @@ function makeStyles(scale = 1) {
     statusPending: { color: '#d97706', fontWeight: '800' },
     statusWarn: { color: '#dc2626', fontWeight: '700' },
     statusHint: { color: '#0891b2', fontWeight: '700' },
-    autoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    autoLabel: { fontSize: fp(12), color: '#374151', fontWeight: '700' },
 
     sortBar: {
       flexDirection: 'row',

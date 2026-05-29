@@ -216,23 +216,16 @@ export function useAddressBook() {
   }, [addressBook.entries, storeCoord]);
 
   // 주문이 cleared 될 때(또는 사용자가 주소를 확정 입력했을 때) 카운트 증가.
-  // autoRemember=false 면 noop. 빈 문자열은 무시.
+  // 2026-05-29: 사장님 결정 — "자동 기억" 토글 제거 + 항상 카운트.
+  //   옛 autoRemember off 분기(카운트 안 늘림) 제거. 주소 자체는 upsertEntryFromOrder
+  //   가 주문 확정 시 항상 등록하므로, 토글은 "주문 횟수 카운트" 만 제어하던 잔재였음.
+  //   이제 항상 카운트 → "×N회" + "주문횟수" 정렬이 늘 의미 있음.
   const bumpAddress = useCallback((label) => {
     const safe = sanitizeDeliveryAddress(label);
     if (!safe) return;
     const key = normalizeAddressKey(safe);
     if (!key) return;
     setAddressBook((prev) => {
-      if (!prev.autoRemember) {
-        // 자동 기억 off — 카운트는 안 늘리지만 todayDelivered 표시는 함
-        // (이미 등록된 항목이라면 회색 처리에 사용)
-        if (!prev.entries[key]) return prev;
-        if (prev.todayDeliveredKeys.includes(key)) return prev;
-        return {
-          ...prev,
-          todayDeliveredKeys: [...prev.todayDeliveredKeys, key],
-        };
-      }
       const now = Date.now();
       const today = localDateString(now);
       const existing = prev.entries[key];
