@@ -24,7 +24,6 @@ import {
 } from '../utils/recommendations';
 import { getCustomerRequest, findEntryByPhone } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
-import AddressChips from '../components/AddressChips';
 import OrderTypePicker from '../components/OrderTypePicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import AliasPromptModal from '../components/AliasPromptModal';
@@ -1298,12 +1297,9 @@ export default function OrderScreen({
                     blurOnSubmit
                     maxLength={20}
                   />
-                  <AddressChips
-                    compact={isPhone}
-                    inline
-                    max={12}
-                    onSelect={(label) => tableId && setDeliveryAddress(tableId, label)}
-                  />
+                  {/* 2026-05-29: "자주" 칩(AddressChips) 제거 — CID 구축으로 전화 오면
+                      자동 식별되므로 자주 주소 단축칩 불필요. 사장님 요청. 그 공간을
+                      주소칸/전화칸에 넘겨 "(주소 미입력) 전번" 라벨이 짤리지 않게. */}
                   {phoneRegisterTarget && (
                     <TouchableOpacity
                       style={styles.phoneRegisterChip}

@@ -57,13 +57,15 @@ export default function makeStyles(scale = 1) {
     color: '#111827',
   },
   deliveryInputFlex: { flex: 1, minWidth: 120 },
-  // 헤더 인라인용 — 5~7글자 + 여유. 자주 칩이 옆에 들어갈 공간 확보.
+  // 2026-05-29: "자주" 칩 제거로 생긴 공간을 주소칸이 흡수 — width 130 고정 →
+  //   flex. "(주소 미입력) 010-3006-2422" 짤림 해소. 최소 160 보장 + 글씨 한 단계 크게.
   deliveryInputCompact: {
-    width: 130,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 160,
+    flexShrink: 1,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    fontSize: fp(12),
+    fontSize: fp(13),
   },
   deliveryTimeInputCompact: {
     width: 60,
@@ -80,10 +82,11 @@ export default function makeStyles(scale = 1) {
     backgroundColor: '#fff',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    fontSize: fp(12),
+    // 2026-05-29: 전번 11자리("010-3006-2422") 다 보이게 width 130→165 + 글씨 키움.
+    fontSize: fp(13),
     color: '#1e3a8a',
     fontWeight: '700',
-    width: 130,
+    width: 165,
     flexShrink: 0,
     marginLeft: 6,
   },
