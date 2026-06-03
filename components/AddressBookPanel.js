@@ -42,6 +42,9 @@ import {
 } from '../utils/geocode';
 import { importAddresses, SEED_BUSINESS_ADDRESSES } from '../utils/seedAddresses';
 import { downloadJson, pickJsonFile } from '../utils/jsonBackup';
+import AddressBookCleanupModal from './AddressBookCleanupModal';
+import { applyMerges } from '../utils/addressBookCleanup';
+import { useToast } from '../utils/ToastContext';
 
 const SORT_MODES = [
   { key: 'recent', label: '최근' },
@@ -66,6 +69,7 @@ export default function AddressBookPanel() {
     editLabel,
   } = useOrders();
   const { storeInfo } = useStore();
+  const { showToast } = useToast();
 
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState('pending');
@@ -87,6 +91,21 @@ export default function AddressBookPanel() {
   const [newPhone, setNewPhone] = useState('');
   const [newCustomerRequest, setNewCustomerRequest] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showCleanup, setShowCleanup] = useState(false);
+  // 2026-06-04: 주소록 자동 정리 적용 — 선택된 통합 그룹들을 entries 에 반영.
+  const handleCleanupApply = (merges) => {
+    setShowCleanup(false);
+    if (!merges || merges.length === 0) return;
+    const before = Object.keys(addressBook?.entries || {}).length;
+    const merged = applyMerges(addressBook?.entries || {}, merges);
+    const after = Object.keys(merged).length;
+    setAddressBook((prev) => ({ ...prev, entries: merged }));
+    const removed = before - after;
+    showToast?.({
+      kind: 'success',
+      text: removed > 0 ? `✓ 주소록 ${removed}건 정리 완료` : '변경 사항 없음',
+    });
+  };
   // 2026-05-29: 사장님 신고 "주소록 검색 시 결과 목록이 키보드에 다 가려짐".
   //   검색칸은 상단 toolbar 라 보이지만, 검색 결과 entry 들이 키보드 아래 깔림.
   //   landscape iPhone 에서 KeyboardAvoidingView(padding) 가 키보드 높이를 부정확
@@ -556,6 +575,14 @@ export default function AddressBookPanel() {
             onPress={() => setShowImport(true)}
           >
             <Text style={styles.btnSecondaryText}>📦 75개 시드</Text>
+          </TouchableOpacity>
+          {/* 2026-06-04: 사장님 요청 — 클릭 한 번으로 중복/오타 정리. */}
+          <TouchableOpacity
+            style={[styles.btn, styles.btnCleanup]}
+            onPress={() => setShowCleanup(true)}
+            accessibilityLabel="주소록 중복 자동 정리"
+          >
+            <Text style={styles.btnCleanupText}>🧹 정리</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1050,6 +1077,14 @@ export default function AddressBookPanel() {
       </>
       )}
 
+      {/* ── 정리 모달 ──────────────────────────────────── */}
+      <AddressBookCleanupModal
+        visible={showCleanup}
+        entries={addressBook?.entries || {}}
+        onApply={handleCleanupApply}
+        onClose={() => setShowCleanup(false)}
+      />
+
       {/* ── 임포트 모달 ──────────────────────────────────── */}
       {showImport && (
         <View style={styles.importOverlay} pointerEvents="auto">
@@ -1182,6 +1217,8 @@ function makeStyles(scale = 1) {
     btnPrimaryText: { color: '#fff', fontSize: fp(13), fontWeight: '800' },
     btnSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db' },
     btnSecondaryText: { color: '#374151', fontSize: fp(13), fontWeight: '700' },
+    btnCleanup: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#10b981' },
+    btnCleanupText: { color: '#047857', fontSize: fp(13), fontWeight: '800' },
 
     statusBar: {
       flexDirection: 'row',
