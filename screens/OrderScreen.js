@@ -2613,17 +2613,32 @@ export default function OrderScreen({
       {/* 2026-05-25: 배달 주문 확정 직전 별칭 입력 + 유사 매칭 + 자동 주소 검색 */}
       {/* 2026-05-28: initialAlias 가 alias 비면 deliveryAddress 로 fallback —
           사장님이 라벨 칸에 "신규추가" 같은 식별자 입력했으면 그게 별칭 입력 칸에도
-          미리 채워져 사장님이 ✓ 한 번에 등록 가능. 비슷한 별칭/주소 검색은 그 텍스트로 자동.
-          currentPhone 도 order.deliveryPhone → 최근 CID phone (5분 TTL) 순 fallback —
-          사장님이 시연/실CID 알림 떴는데 ✕ 닫고 직접 슬롯 만든 케이스도 자동 채움. */}
+          미리 채워져 사장님이 ✓ 한 번에 등록 가능.
+          2026-05-29: 사장님 신고 "별칭칸에 (주소 미입력) 010-... 가 들어가 있다".
+            CID phone-only 슬롯의 deliveryAddress 는 "(주소 미입력) 전번" placeholder —
+            이건 *주소도 별칭도 아님*. 별칭칸에 넣지 말고, 거기 박힌 전번은 전화칸으로.
+            → placeholder 면 initialAlias 빈 값 + currentPhone 에 placeholder digits fallback
+            (deliveryPhone 누락 케이스 방어). 진짜 주소/식별자일 때만 별칭 seed 유지. */}
       <AliasPromptModal
         visible={aliasPromptOpen}
         initialAlias={
           (order?.deliveryAlias || '').trim() ||
-          (order?.deliveryAddress || '').trim()
+          ((order?.deliveryAddress || '').trim().startsWith('(주소 미입력)')
+            ? ''
+            : (order?.deliveryAddress || '').trim())
         }
-        currentPhone={order?.deliveryPhone || getLastCallPhone()}
-        currentAddress={order?.deliveryAddress || ''}
+        currentPhone={
+          (order?.deliveryPhone || '').trim() ||
+          ((order?.deliveryAddress || '').trim().startsWith('(주소 미입력)')
+            ? (order?.deliveryAddress || '').replace(/\D/g, '')
+            : '') ||
+          getLastCallPhone()
+        }
+        currentAddress={
+          (order?.deliveryAddress || '').trim().startsWith('(주소 미입력)')
+            ? ''
+            : (order?.deliveryAddress || '')
+        }
         addressBook={addressBook}
         storeCoord={
           typeof storeInfo?.lat === 'number' && typeof storeInfo?.lng === 'number'
