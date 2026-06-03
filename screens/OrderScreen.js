@@ -214,6 +214,11 @@ export default function OrderScreen({
   const selectedSlotId = selectedRowKey
     ? selectedRowKey.split('#')[0]
     : null;
+  // 2026-06-04: 행 키의 portion('large'/'normal'/'only') 으로 대 portion 선택 여부.
+  //   옵션 분리 시 대/보통을 정확히 가르기 위함 (팥죽 대→면적게가 보통에 박히던 버그).
+  const selectedIsLarge = selectedRowKey
+    ? selectedRowKey.split('#')[1] === 'large'
+    : false;
 
   // 1.0.36: 단체(group, 묶음) 손님 선택 모달. leader 테이블에 메뉴 추가 시
   // 어느 손님 거인지 받아서 sourceTableId 박음. lastSourceByGroup 으로 마지막
@@ -898,14 +903,15 @@ export default function OrderScreen({
 
   const confirmSizePrompt = () => {
     if (!sizePrompt || !tableId) return;
-    const { items, index, value, sizeOption, mode } = sizePrompt;
+    const { items, index, value, sizeOption, mode, isLarge } = sizePrompt;
     const item = items[index];
     if (mode === 'option') {
       splitOffWithOptionToggle(
         tableId,
         item.slotId,
         value,
-        sizeOption.id
+        sizeOption.id,
+        isLarge
       );
     } else {
       setItemLargeQty(tableId, item.slotId || item.id, value);
@@ -1239,10 +1245,18 @@ export default function OrderScreen({
                   </Text>
                   <TextInput
                     style={[styles.deliveryInput, styles.deliveryInputCompact]}
-                    value={order.deliveryAddress || ''}
+                    // 2026-06-04: CID phone-only 슬롯의 "(주소 미입력) 전번" 은
+                    //   직접 기입할 게 아니라 [주문] → 별칭/전번 팝업이 처리. 그래서
+                    //   placeholder 일 때는 값 대신 안내 문구를 띄움 (사장님 요청).
+                    //   실제 주소면 그대로 표시 + 직접 편집도 여전히 가능.
+                    value={
+                      (order.deliveryAddress || '').startsWith('(주소 미입력)')
+                        ? ''
+                        : order.deliveryAddress || ''
+                    }
                     onChangeText={(v) => tableId && setDeliveryAddress(tableId, v)}
-                    placeholder={tType === 'delivery' ? '주소' : '주소 (선택)'}
-                    placeholderTextColor="#9ca3af"
+                    placeholder="👉 [주문] 누르면 별칭·발신전화번호 입력창이 팝업됩니다"
+                    placeholderTextColor="#2563eb"
                     returnKeyType="done"
                     onSubmitEditing={() => Keyboard.dismiss()}
                     blurOnSubmit
@@ -1276,30 +1290,10 @@ export default function OrderScreen({
                   >
                     <Text style={styles.addressBookBtnText}>▼</Text>
                   </TouchableOpacity>
-                  {/* 2026-05-28: 사장님 신고 "배달1 클릭 시 손님 전화번호도 화면에
-                      나와야". 헤더 inline phone 입력 칸 — CID 자동 채움 + 사장님
-                      수동 편집. order.deliveryPhone 비면 placeholder, 있으면 파란
-                      강조로 사장님이 즉시 인지. */}
-                  <TextInput
-                    style={[
-                      styles.deliveryPhoneInput,
-                      !!(order.deliveryPhone || '').trim() && styles.deliveryPhoneInputFilled,
-                    ]}
-                    value={order.deliveryPhone || ''}
-                    onChangeText={(v) =>
-                      tableId && setDeliveryContact(tableId, v, order.deliveryAlias || null)
-                    }
-                    placeholder="📞 전화번호"
-                    placeholderTextColor="#9ca3af"
-                    keyboardType="phone-pad"
-                    returnKeyType="done"
-                    onSubmitEditing={() => Keyboard.dismiss()}
-                    blurOnSubmit
-                    maxLength={20}
-                  />
-                  {/* 2026-05-29: "자주" 칩(AddressChips) 제거 — CID 구축으로 전화 오면
-                      자동 식별되므로 자주 주소 단축칩 불필요. 사장님 요청. 그 공간을
-                      주소칸/전화칸에 넘겨 "(주소 미입력) 전번" 라벨이 짤리지 않게. */}
+                  {/* 2026-06-04: 헤더 inline 전화번호 칸 제거 — 사장님 요청.
+                      전번은 ① 주소칸 placeholder/CID 슬롯 ② [주문] 후 별칭 팝업에
+                      이미 자동 표시되어 중복. (2026-05-28 추가 → 6/4 제거)
+                      2026-05-29: "자주" 칩도 CID 구축으로 불필요해 제거됨. */}
                   {phoneRegisterTarget && (
                     <TouchableOpacity
                       style={styles.phoneRegisterChip}
@@ -1868,12 +1862,14 @@ export default function OrderScreen({
                           return;
                         }
                         // qty > 1 + 옵션 신규 적용 → 수량 분리 모달
+                        // isLarge: 대 행에서 골랐으면 대 portion 에 옵션 적용.
                         setSizePrompt({
                           items: [selectedItem],
                           index: 0,
                           sizeOption: opt,
                           value: 1,
                           mode: 'option',
+                          isLarge: selectedIsLarge,
                         });
                         return;
                       }

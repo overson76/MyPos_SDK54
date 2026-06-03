@@ -523,13 +523,21 @@ export function orderReducer(state, action) {
     }
 
     case 'orders/splitOffWithOptionToggle': {
-      const { tableId, slotId, count, optionId } = action;
+      // 2026-06-04: 사장님 신고 "팥죽 대에 면적게 선택하면 보통에 박힌다".
+      //   옛 코드는 분리 slot 을 항상 largeQty:0(보통) 으로 만들어, 대(large)
+      //   portion 에서 옵션 떼도 보통으로 떨어졌음. isLarge 를 받아 분리 대상
+      //   portion(대/보통) 을 정확히 가른다.
+      const { tableId, slotId, count, optionId, isLarge } = action;
       const existing = state[tableId];
       if (!existing) return state;
       const cart = cartFromExisting(existing);
       const source = cart.find((i) => i.slotId === slotId);
       if (!source) return state;
-      const n = Math.max(0, Math.min(source.qty, parseInt(count, 10) || 0));
+      // 분리 가능 수량 — 대면 largeQty, 보통이면 normalQty 한도.
+      const lqSrc = source.largeQty || 0;
+      const nqSrc = source.qty - lqSrc;
+      const maxN = isLarge ? lqSrc : nqSrc;
+      const n = Math.max(0, Math.min(maxN, parseInt(count, 10) || 0));
       if (n === 0) return state;
       const sourceOpts = source.options || [];
       const hasOpt = sourceOpts.includes(optionId);
@@ -542,7 +550,8 @@ export function orderReducer(state, action) {
         qty: n,
         options: newOpts,
         cookState: 'pending',
-        largeQty: 0,
+        // 대 portion 에서 분리하면 새 slot 도 대로 유지.
+        largeQty: isLarge ? n : 0,
       };
       delete newSlot.cookStateNormal;
       delete newSlot.cookStateLarge;
@@ -550,7 +559,10 @@ export function orderReducer(state, action) {
         .map((i) => {
           if (i.slotId !== slotId) return i;
           const newQty = i.qty - n;
-          const newLarge = Math.min(i.largeQty || 0, Math.max(0, newQty));
+          // 대 분리면 원래 largeQty 에서 n 차감, 보통 분리면 largeQty 보존(잔여 qty 한도).
+          const newLarge = isLarge
+            ? Math.max(0, lqSrc - n)
+            : Math.min(lqSrc, Math.max(0, newQty));
           return { ...i, qty: newQty, largeQty: newLarge };
         })
         .filter((i) => i.qty > 0);

@@ -1214,3 +1214,77 @@ describe('orderReducer · hydrateCartFromItems (재진입 시 카트 동기화)'
     expect(s.t1.items[0].qty).toBe(2);
   });
 });
+
+describe('orderReducer · splitOffWithOptionToggle (대/보통 portion)', () => {
+  // 팥죽 대1 + 보통1 (qty 2, largeQty 1)
+  const baseState = () => ({
+    t1: {
+      items: [],
+      cartItems: [
+        {
+          slotId: 's1',
+          id: 'patjuk',
+          name: '팥죽',
+          qty: 2,
+          largeQty: 1,
+          options: [],
+          price: 11000,
+          sizeUpcharge: 2000,
+        },
+      ],
+      confirmedItems: [],
+    },
+  });
+
+  // 2026-06-04 사장님 신고: "팥죽 대에 면적게 선택하면 보통에 박힌다".
+  test('대 portion 에 옵션 분리 → 대1(옵션) + 보통1 (버그 처방)', () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/splitOffWithOptionToggle',
+      tableId: 't1',
+      slotId: 's1',
+      count: 1,
+      optionId: 'opt_myeon',
+      isLarge: true,
+    });
+    const cart = next.t1.cartItems;
+    const withOpt = cart.find((i) => (i.options || []).includes('opt_myeon'));
+    const without = cart.find((i) => !(i.options || []).includes('opt_myeon'));
+    expect(withOpt).toBeTruthy();
+    expect(withOpt.largeQty).toBe(1); // 대에 옵션이 붙어야!
+    expect(withOpt.qty).toBe(1);
+    expect(without.largeQty).toBe(0); // 보통 잔여
+    expect(without.qty).toBe(1);
+  });
+
+  test('보통 portion 에 옵션 분리 → 보통1(옵션) + 대1 유지', () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/splitOffWithOptionToggle',
+      tableId: 't1',
+      slotId: 's1',
+      count: 1,
+      optionId: 'opt_myeon',
+      isLarge: false,
+    });
+    const cart = next.t1.cartItems;
+    const withOpt = cart.find((i) => (i.options || []).includes('opt_myeon'));
+    const without = cart.find((i) => !(i.options || []).includes('opt_myeon'));
+    expect(withOpt.largeQty).toBe(0); // 보통에 옵션
+    expect(without.largeQty).toBe(1); // 대 잔여
+  });
+
+  test('isLarge 인데 count 가 large 수량 초과 → large 한도로 clamp', () => {
+    // 대 1개뿐인데 2개 분리 시도 → n = min(largeQty 1, 2) = 1
+    const next = orderReducer(baseState(), {
+      type: 'orders/splitOffWithOptionToggle',
+      tableId: 't1',
+      slotId: 's1',
+      count: 2,
+      optionId: 'opt_myeon',
+      isLarge: true,
+    });
+    const cart = next.t1.cartItems;
+    const withOpt = cart.find((i) => (i.options || []).includes('opt_myeon'));
+    expect(withOpt.qty).toBe(1);
+    expect(withOpt.largeQty).toBe(1);
+  });
+});

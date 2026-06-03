@@ -512,13 +512,14 @@ export function OrderProvider({ children }) {
       });
     };
 
-    const splitOffWithOptionToggle = (tableId, slotId, count, optionId) => {
+    const splitOffWithOptionToggle = (tableId, slotId, count, optionId, isLarge) => {
       dispatch({
         type: 'orders/splitOffWithOptionToggle',
         tableId,
         slotId,
         count,
         optionId,
+        isLarge: !!isLarge,
       });
     };
 
