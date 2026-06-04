@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -37,7 +38,7 @@ export default function AliasPromptModal({
   onConfirm,
   onCancel,
 }) {
-  const { scale } = useResponsive();
+  const { scale, height: viewportH } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
   const [step, setStep] = useState('input'); // 'input' | 'similar' | 'search'
@@ -49,6 +50,11 @@ export default function AliasPromptModal({
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState(null); // { lat, lng, formatted, name } | null
   const aliasRef = useRef(null);
+  const phoneRef = useRef(null);
+  // 2026-06-04: landscape(가로) 폰에서 키보드가 입력칸/버튼을 덮는 사고 처방 —
+  // 키보드 높이를 직접 구독해 sheet maxHeight 를 키보드 위 영역으로 제한 + 상단 정렬.
+  // KeyboardAvoidingView offset 만으론 landscape 에서 부족(메모리 2026-05-29 교훈).
+  const [kbHeight, setKbHeight] = useState(0);
 
   // visible 변경 시 초기화
   useEffect(() => {
@@ -62,7 +68,28 @@ export default function AliasPromptModal({
     }
   }, [visible, initialAlias, currentPhone]);
 
+  // 키보드 높이 구독 — iOS 는 will* (애니메이션 시작 시점) 로 더 빠르게 반응.
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e) => setKbHeight(e?.endCoordinates?.height || 0);
+    const onHide = () => setKbHeight(0);
+    const s = Keyboard.addListener(showEvt, onShow);
+    const h = Keyboard.addListener(hideEvt, onHide);
+    return () => {
+      s.remove();
+      h.remove();
+    };
+  }, []);
+
   if (!visible) return null;
+
+  // 키보드 열림 시 sheet 를 키보드 위 영역으로 제한 + 상단 정렬 → 내부 ScrollView 스크롤로
+  // 입력칸·버튼 모두 접근 가능. 닫힘 시엔 화면 비율 기반 maxHeight (세로 PC / 가로 폰 공통).
+  const kbOpen = kbHeight > 0;
+  const sheetMaxH = kbOpen
+    ? Math.max(180, viewportH - kbHeight - 24)
+    : Math.round((viewportH - 32) * (viewportH < 500 ? 0.92 : 0.88));
 
   const handleSkip = () => {
     onConfirm?.({ alias: null, mergeIntoKey: null, autoAddress: null, phone: phone.trim() });
@@ -140,14 +167,17 @@ export default function AliasPromptModal({
 
   return (
     <View style={styles.overlay} pointerEvents="auto">
-      <Pressable style={styles.backdrop} onPress={onCancel}>
+      <Pressable
+        style={[styles.backdrop, kbOpen && styles.backdropTop]}
+        onPress={onCancel}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          // 2026-05-28 (2부): 모달 헤더 보정 — landscape 키보드 가림 처방.
-          keyboardVerticalOffset={60}
+          // 2026-06-04: 키보드 열림 시 상단 정렬이라 offset 불필요. 닫힘 시 헤더 보정만.
+          keyboardVerticalOffset={kbOpen ? 0 : 60}
           style={styles.kavWrap}
         >
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { maxHeight: sheetMaxH }]} onPress={() => {}}>
             <View style={styles.header}>
               <Text style={styles.title}>
                 {step === 'input'
@@ -162,8 +192,8 @@ export default function AliasPromptModal({
             </View>
 
             <ScrollView
-              style={{ flexGrow: 1, minHeight: 200 }}
-              contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
+              style={{ flexGrow: 1, flexShrink: 1 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
@@ -188,12 +218,19 @@ export default function AliasPromptModal({
                     placeholder="예) 진실보석, 김사장"
                     placeholderTextColor="#9ca3af"
                     maxLength={30}
-                    autoFocus
+                    // PC(RN-Web/Electron)에서 autoFocus 가 부모 Pressable/KAV 마운트와
+                    // 충돌해 포커스가 잡혔다 풀려 "타이핑 안 먹힘" 사고 → web 만 끔.
+                    // 폰(native)은 자동 포커스 유지(키보드 바로 뜸).
+                    autoFocus={Platform.OS !== 'web'}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => phoneRef.current?.focus?.()}
                   />
                   {/* 2026-05-28: phone 도 직접 편집. CID 자동 채움 + 사장님 수정.
                       이 phone 으로 onConfirm 전달 → entry phone 박힘. */}
                   <Text style={styles.phoneLabel}>📞 전화번호 (선택)</Text>
                   <TextInput
+                    ref={phoneRef}
                     style={styles.aliasInput}
                     value={phone}
                     onChangeText={setPhone}
@@ -201,6 +238,8 @@ export default function AliasPromptModal({
                     placeholderTextColor="#9ca3af"
                     keyboardType="phone-pad"
                     maxLength={20}
+                    returnKeyType="done"
+                    onSubmitEditing={handleNext}
                   />
                   <View style={styles.actions}>
                     <TouchableOpacity style={styles.confirmBtn} onPress={handleNext}>
@@ -317,6 +356,11 @@ function makeStyles(scale = 1) {
       justifyContent: 'center',
       alignItems: 'center',
       padding: 16,
+    },
+    // 키보드 열림 시 상단 정렬 — sheet 가 키보드 위 영역에 안착(가로 폰 가림 처방).
+    backdropTop: {
+      justifyContent: 'flex-start',
+      paddingTop: 8,
     },
     kavWrap: {
       width: '100%',
