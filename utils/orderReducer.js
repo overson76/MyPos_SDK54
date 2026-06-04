@@ -17,6 +17,8 @@ export const emptyOrder = {
   paymentStatus: 'unpaid',
   options: [],
   deliveryAddress: '',
+  deliveryAlias: '',  // CID 발신자 별칭 — 배달/포장/예약 공통 (자리이동 후에도 보존)
+  deliveryPhone: '',  // CID 발신자 전번 — 배달/포장/예약 공통
   deliveryTime: '',
   deliveryTimeIsPM: true, // 기본 오후
   deliveryAlerted10: false,
@@ -127,6 +129,11 @@ export function orderReducer(state, action) {
           paymentStatus: existing?.paymentStatus ?? 'unpaid',
           options: existing?.options ?? [],
           deliveryAddress: existing?.deliveryAddress ?? '',
+          // 2026-06-04: 별칭/전번 보존 — 옛 코드는 여기서 누락돼 메뉴 담는 순간
+          //   CID 별칭/전번이 사라짐. 배달은 주소록 재조회로 가렸지만 포장/예약은
+          //   조회가 없어 자리이동 후 별칭 증발 (사장님 신고).
+          deliveryAlias: existing?.deliveryAlias ?? '',
+          deliveryPhone: existing?.deliveryPhone ?? '',
           deliveryTime: existing?.deliveryTime ?? '',
           deliveryTimeIsPM: existing?.deliveryTimeIsPM ?? true,
           deliveryAlerted: existing?.deliveryAlerted ?? false,

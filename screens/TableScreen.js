@@ -435,10 +435,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     let deliveryAliasFromBook = null;
     let deliveryPhoneFromBook = null;
     let customerRequestFromBook = '';
-    // 주소록 lookup 은 *주소 키* 기반 — 배달 슬롯에서만 (예약/포장은 주소 없는 경우 일반).
-    // 예약/포장 단골은 order.deliveryAlias/Phone 에 박혀있어야 (CID PENDING → submitPendingAsType).
-    if (isDelivery && deliveryAddr) {
-      const key = normalizeAddressKey(deliveryAddr);
+    // 주소록 lookup — 배달은 주소 key 우선, 예약/포장은 주소 없으니 전화번호로.
+    // 2026-06-04: 예약/포장도 배달처럼 주소록 별칭을 보여줌 (사장님: "배달→포장 자리이동
+    //   하면 별칭이 사라진다 / 포장·예약도 배달표와 같은 식으로 움직여야"). 옛 코드는
+    //   isDelivery 일 때만 조회해서 포장/예약 카드는 order.deliveryAlias 없으면 텅 비었음.
+    if (deliveryAddr || deliveryPhoneFromOrder) {
+      const key = deliveryAddr ? normalizeAddressKey(deliveryAddr) : null;
       let entry = key ? addressBook?.entries?.[key] : null;
       // 2026-05-29: 주소 key 로 못 찾으면 전화번호로 재시도 — CID phone-only 슬롯
       //   (deliveryAddr="(주소 미입력) ...") 에서 사장님이 그 번호에 별칭("아가맘")을
