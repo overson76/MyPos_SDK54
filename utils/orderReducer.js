@@ -23,6 +23,8 @@ export const emptyOrder = {
   deliveryTimeIsPM: true, // 기본 오후
   deliveryAlerted10: false,
   deliveryAlerted5: false,
+  // 예약 인원 — 메뉴 없이 "인원 + 시간"만으로 예약 슬롯을 채울 때 사용 (0 = 미지정).
+  partySize: 0,
   readyAt: null,
 };
 
@@ -369,6 +371,33 @@ export function orderReducer(state, action) {
         [tableId]: {
           ...existing,
           deliveryTimeIsPM: !!isPM,
+          deliveryAlerted10: false,
+          deliveryAlerted5: false,
+        },
+      };
+    }
+
+    // 예약 빠른 등록 — 메뉴 없이 인원 + 시간만으로 예약 슬롯을 채움.
+    // 2026-06-04 사장님 요청: "예약은 메뉴 안 정하고 인원·시간만 잡는 경우가 많다".
+    // existing 없으면 빈 주문(items=[]) 을 새로 만들어 슬롯을 점유 → TableScreen 이
+    // confirmedItems 없이도 '예약됨' 으로 표시. 손님이 오면 그 슬롯에서 메뉴 추가.
+    case 'orders/setReservationInfo': {
+      const { tableId, partySize, safeTime, isPM } = action;
+      if (!tableId) return state;
+      const existing = state[tableId];
+      const base = existing || { ...emptyOrder, createdAt: Date.now() };
+      return {
+        ...state,
+        [tableId]: {
+          ...base,
+          partySize:
+            typeof partySize === 'number' && partySize >= 0
+              ? partySize
+              : base.partySize || 0,
+          deliveryTime: safeTime != null ? safeTime : base.deliveryTime,
+          deliveryTimeIsPM:
+            typeof isPM === 'boolean' ? isPM : base.deliveryTimeIsPM,
+          // 시간 변경 시 알림 플래그 리셋 (setDeliveryTime 과 동일 정책).
           deliveryAlerted10: false,
           deliveryAlerted5: false,
         },

@@ -23,6 +23,7 @@ import SlotStrip from '../components/SlotStrip';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import GroupModePicker from '../components/GroupModePicker';
+import ReservationQuickModal from '../components/ReservationQuickModal';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
@@ -92,6 +93,8 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [mapInfo, setMapInfo] = useState(null);
+  // 예약 빠른 등록 모달 — { tableId, label, partySize, time, isPM, hasMenu } | null (2026-06-04).
+  const [reservationModal, setReservationModal] = useState(null);
   const [routeOptOpen, setRouteOptOpen] = useState(false);
   // 모든 화면을 한 화면에 Fit — 항상 5 × 4 그리드로 표시
   const isCompact = width < 1200 || height < 700;
@@ -120,6 +123,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     dissolveGroup,
     getGroupFor,
     markPaid,
+    setReservationInfo,
     addressBook,
   } = useOrders();
   const { storeInfo } = useStore();
@@ -323,6 +327,23 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       onSelectTable?.({ ...tableObj, inGroup: true, groupMode });
       return;
     }
+    // 예약 슬롯 + 메뉴 미확정 → 인원·시간 빠른 입력 모달 (메뉴 없이 예약 가능).
+    // 2026-06-04 사장님 요청. 메뉴가 이미 담긴 예약은 기존처럼 주문 화면으로.
+    if (tableObj.type === 'reservation') {
+      const o = getOrder(tableObj.id);
+      if ((o.confirmedItems || []).length === 0) {
+        setReservationModal({
+          tableId: tableObj.id,
+          label: tableObj.label,
+          partySize: o.partySize || 0,
+          time: o.deliveryTime || '',
+          isPM: o.deliveryTimeIsPM ?? true,
+          hasMenu:
+            (o.items || []).length > 0 || (o.cartItems || []).length > 0,
+        });
+        return;
+      }
+    }
     onSelectTable?.(tableObj);
   };
 
@@ -374,6 +395,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     const total = getOrderTotal(readTableId);
     const qty = getOrderQty(readTableId);
     const hasOrder = (order.confirmedItems || []).length > 0;
+    // 메뉴 없이 인원·시간만 잡은 예약 — 슬롯을 "예약됨" 으로 표시 (2026-06-04).
+    const hasReservationInfo =
+      t.type === 'reservation' &&
+      !hasOrder &&
+      ((order.partySize || 0) > 0 || !!order.deliveryTime);
     // 주문중 = 장바구니에 담긴 것이 있고 아직 주방(items)에 커밋 안 된 상태
     const cartOnly =
       (order.cartItems || []).length > 0 &&
@@ -518,7 +544,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           isSplitPart ? styles.tilePart : styles.tile,
           isCompact && (isSplitPart ? styles.tilePartPhone : styles.tilePhone),
           { borderColor },
-          hasOrder ? styles.tileWithOrder : (isCompact ? styles.tileEmptyPhone : styles.tileEmpty),
+          (hasOrder || hasReservationInfo) ? styles.tileWithOrder : (isCompact ? styles.tileEmptyPhone : styles.tileEmpty),
           // 셀 내부 flex:1 로 가용 공간 채우기 (스크롤 없이 한 화면에 맞춤)
           !isSplitPart && { flex: 1, alignSelf: 'stretch' },
           isReady && !isPaid && !isOutForDelivery && styles.tileReady,
@@ -850,6 +876,34 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   {deliveryIcon} {deliveryPrimary}
                 </Text>
               ) : null}
+            </View>
+          ) : hasReservationInfo ? (
+            <View style={styles.tilePendingCallWrap}>
+              <Text style={styles.tileReservationBadge}>📅 예약</Text>
+              <Text
+                style={isSplitPart ? styles.tileLabelTiny : styles.tileLabel}
+                numberOfLines={1}
+              >
+                {displayLabel}
+              </Text>
+              {(order.partySize || 0) > 0 ? (
+                <Text style={styles.tileReservationInfo} numberOfLines={1}>
+                  👥 {order.partySize}명
+                </Text>
+              ) : null}
+              {order.deliveryTime
+                ? (() => {
+                    const pt = parseDeliveryTime(
+                      order.deliveryTime,
+                      order.deliveryTimeIsPM ?? true,
+                    );
+                    return pt ? (
+                      <Text style={styles.tileReservationInfo} numberOfLines={1}>
+                        📅 {formatShort12h(pt)}
+                      </Text>
+                    ) : null;
+                  })()
+                : null}
             </View>
           ) : (
             <View style={styles.tileEmptyWrap}>
@@ -1487,6 +1541,30 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         onClose={() => setMapInfo(null)}
         storeCoord={mapInfo?.storeCoord}
         deliveries={mapInfo?.deliveries || []}
+      />
+
+      {/* 예약 빠른 등록 — 빈 예약 슬롯 탭 시. 메뉴 없이 인원·시간만 (2026-06-04). */}
+      <ReservationQuickModal
+        visible={!!reservationModal}
+        tableLabel={reservationModal?.label || ''}
+        initialPartySize={reservationModal?.partySize || 0}
+        initialTime={reservationModal?.time || ''}
+        initialIsPM={reservationModal?.isPM ?? true}
+        hasMenu={reservationModal?.hasMenu}
+        onCancel={() => setReservationModal(null)}
+        onSubmit={({ partySize, time, isPM, alsoMenu }) => {
+          const tid = reservationModal?.tableId;
+          if (!tid) {
+            setReservationModal(null);
+            return;
+          }
+          setReservationInfo(tid, { partySize, time, isPM });
+          setReservationModal(null);
+          if (alsoMenu) {
+            const tobj = resolveAnyTable(tid);
+            if (tobj) onSelectTable?.(tobj);
+          }
+        }}
       />
 
       {/* 배달 경로 최적화 모달 — 2026-05-16 KitchenScreen 에서 이동.

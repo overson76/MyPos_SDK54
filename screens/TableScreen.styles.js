@@ -368,6 +368,23 @@ export default function makeStyles(scale = 1) {
     fontWeight: '700',
     textAlign: 'center',
   },
+  // 예약(메뉴 없이 인원·시간만) 슬롯 — amber 배지 + 정보 텍스트 (2026-06-04).
+  tileReservationBadge: {
+    fontSize: fp(8),
+    color: '#fff',
+    fontWeight: '800',
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tileReservationInfo: {
+    fontSize: fp(11),
+    color: '#b45309',
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   tileGroupBadge: {
     fontSize: fp(8),
     color: '#fff',

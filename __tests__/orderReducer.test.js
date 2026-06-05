@@ -1288,3 +1288,80 @@ describe('orderReducer · splitOffWithOptionToggle (대/보통 portion)', () => 
     expect(withOpt.largeQty).toBe(1);
   });
 });
+
+describe('orderReducer · setReservationInfo (예약 빠른 등록)', () => {
+  test('빈 슬롯에 인원+시간 → 메뉴 없이 새 예약 order 생성', () => {
+    const next = orderReducer(
+      {},
+      {
+        type: 'orders/setReservationInfo',
+        tableId: 'y1',
+        partySize: 4,
+        safeTime: '700',
+        isPM: true,
+      }
+    );
+    expect(next.y1).toBeTruthy();
+    expect(next.y1.partySize).toBe(4);
+    expect(next.y1.deliveryTime).toBe('700');
+    expect(next.y1.deliveryTimeIsPM).toBe(true);
+    expect(next.y1.items).toEqual([]);
+    expect(next.y1.confirmedItems).toEqual([]);
+    expect(typeof next.y1.createdAt).toBe('number');
+  });
+
+  test('시간만 변경 — 인원은 기존값 유지', () => {
+    const s = {
+      y1: makeOrder({ partySize: 2, deliveryTime: '600', deliveryTimeIsPM: false }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setReservationInfo',
+      tableId: 'y1',
+      partySize: undefined,
+      safeTime: '730',
+      isPM: true,
+    });
+    expect(next.y1.partySize).toBe(2);
+    expect(next.y1.deliveryTime).toBe('730');
+    expect(next.y1.deliveryTimeIsPM).toBe(true);
+  });
+
+  test('safeTime null 이면 기존 시간 유지 (인원만 갱신)', () => {
+    const s = {
+      y1: makeOrder({ partySize: 0, deliveryTime: '500', deliveryTimeIsPM: true }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setReservationInfo',
+      tableId: 'y1',
+      partySize: 5,
+      safeTime: null,
+      isPM: undefined,
+    });
+    expect(next.y1.partySize).toBe(5);
+    expect(next.y1.deliveryTime).toBe('500');
+    expect(next.y1.deliveryTimeIsPM).toBe(true);
+  });
+
+  test('기존 메뉴 있는 예약에 정보 추가 — 메뉴 보존', () => {
+    const s = {
+      y1: makeOrder({
+        confirmedItems: [{ id: 'm1', qty: 1 }],
+        items: [{ id: 'm1', qty: 1 }],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setReservationInfo',
+      tableId: 'y1',
+      partySize: 3,
+      safeTime: '800',
+      isPM: true,
+    });
+    expect(next.y1.partySize).toBe(3);
+    expect(next.y1.confirmedItems).toHaveLength(1);
+  });
+
+  test('tableId 없으면 state 동일 참조', () => {
+    const s = { y1: makeOrder() };
+    expect(orderReducer(s, { type: 'orders/setReservationInfo' })).toBe(s);
+  });
+});

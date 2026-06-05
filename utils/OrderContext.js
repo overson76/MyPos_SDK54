@@ -461,6 +461,19 @@ export function OrderProvider({ children }) {
       });
     };
 
+    // 예약 빠른 등록 — 메뉴 없이 인원 + 시간만으로 예약 슬롯 점유 (2026-06-04 사장님 요청).
+    // partySize / time / isPM 중 주어진 값만 반영 (나머지는 reducer 가 기존값 유지).
+    const setReservationInfo = (tableId, { partySize, time, isPM } = {}) => {
+      const safeTime = time != null ? sanitizeDeliveryTimeRaw(time) : null;
+      dispatch({
+        type: 'orders/setReservationInfo',
+        tableId,
+        partySize: typeof partySize === 'number' ? partySize : undefined,
+        safeTime,
+        isPM: typeof isPM === 'boolean' ? isPM : undefined,
+      });
+    };
+
     const moveOrder = (fromId, toId) => {
       if (!fromId || !toId || fromId === toId) return false;
       const src = orders[fromId];
@@ -886,6 +899,7 @@ export function OrderProvider({ children }) {
       setDeliveryContact,
       setDeliveryTime,
       setDeliveryTimeIsPM,
+      setReservationInfo,
       moveOrder,
       toggleSplit,
       getOrder,
@@ -936,7 +950,7 @@ const ORDERS_FALLBACK = {
   cycleItemCookState: noop, cycleItemCookStatePortion: noop,
   toggleItemOption: noop, incrementSlotQty: noop,
   splitOffWithOptionToggle: noop, setItemLargeQty: noop, setItemMemo: noop,
-  setDeliveryAddress: noop, setDeliveryContact: noop, setDeliveryTime: noop, setDeliveryTimeIsPM: noop,
+  setDeliveryAddress: noop, setDeliveryContact: noop, setDeliveryTime: noop, setDeliveryTimeIsPM: noop, setReservationInfo: noop,
   moveOrder: noop, toggleSplit: noop,
   getOrder: () => ({ items: [], cartItems: [], confirmedItems: [] }),
   getOrderTotal: () => 0, getOrderQty: () => 0,
