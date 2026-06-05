@@ -60,6 +60,7 @@ export function useOrderFirestoreSync({
     todayDate: addressBook.todayDate,
     todayDeliveredKeys: addressBook.todayDeliveredKeys,
     autoRemember: addressBook.autoRemember,
+    ignoredSimilarPairs: addressBook.ignoredSimilarPairs,
   });
 
   const ordersDebounceRef = useRef(null);
@@ -182,11 +183,15 @@ export function useOrderFirestoreSync({
               typeof meta.autoRemember === 'boolean'
                 ? meta.autoRemember
                 : prev.autoRemember,
+            ignoredSimilarPairs: Array.isArray(meta.ignoredSimilarPairs)
+              ? meta.ignoredSimilarPairs
+              : prev.ignoredSimilarPairs,
           }));
           lastSyncedAddressMetaRef.current = {
             todayDate: meta.todayDate,
             todayDeliveredKeys: meta.todayDeliveredKeys,
             autoRemember: meta.autoRemember,
+            ignoredSimilarPairs: meta.ignoredSimilarPairs,
           };
         },
         (err) => reportError(err, { ctx: 'addressBookMeta.listener' })
@@ -396,7 +401,8 @@ export function useOrderFirestoreSync({
       synced &&
       synced.todayDate === addressBook.todayDate &&
       synced.todayDeliveredKeys === addressBook.todayDeliveredKeys &&
-      synced.autoRemember === addressBook.autoRemember
+      synced.autoRemember === addressBook.autoRemember &&
+      synced.ignoredSimilarPairs === addressBook.ignoredSimilarPairs
     ) {
       return;
     }
@@ -406,6 +412,7 @@ export function useOrderFirestoreSync({
       todayDate: addressBook.todayDate,
       todayDeliveredKeys: addressBook.todayDeliveredKeys,
       autoRemember: addressBook.autoRemember,
+      ignoredSimilarPairs: addressBook.ignoredSimilarPairs || [],
     };
     db.collection('stores')
       .doc(storeId)
@@ -418,6 +425,7 @@ export function useOrderFirestoreSync({
     addressBook.todayDate,
     addressBook.todayDeliveredKeys,
     addressBook.autoRemember,
+    addressBook.ignoredSimilarPairs,
     storeId,
   ]);
 }

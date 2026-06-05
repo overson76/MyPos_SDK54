@@ -86,10 +86,22 @@ export function findPhoneDuplicates(entries) {
   return groups;
 }
 
+// 비슷한 상호 쌍의 안정 키 — 두 entry key 를 정렬해 조합(순서 무관).
+// "다른 가게" 무시 목록 / 후보 매칭에 공통 사용.
+export function similarPairKey(keyA, keyB) {
+  return [keyA, keyB].sort().join('||');
+}
+
 // ── B. 비슷한 상호 쌍 (부분 포함, 정확 일치 제외) ──
 // 반환: [{ a, b, keyA, keyB, survivorKey, mergeKey }] — survivor 는 점수 높은 쪽.
-export function findSimilarAliasPairs(entries) {
+// 2026-06-05: ignoredPairKeys — 사장님이 "다른 가게" 로 확정한 쌍은 후보에서 제외
+//   (계속 다시 뜨던 문제 처방). 배열 또는 Set 둘 다 허용.
+export function findSimilarAliasPairs(entries, ignoredPairKeys) {
   if (!entries || typeof entries !== 'object') return [];
+  const ignored =
+    ignoredPairKeys instanceof Set
+      ? ignoredPairKeys
+      : new Set(ignoredPairKeys || []);
   // alias → 대표 key (점수 최고 1개)
   const aliasKey = {};
   for (const k of Object.keys(entries)) {
@@ -111,6 +123,7 @@ export function findSimilarAliasPairs(entries) {
       if (la.includes(lb) || lb.includes(la)) {
         const keyA = aliasKey[a];
         const keyB = aliasKey[b];
+        if (ignored.has(similarPairKey(keyA, keyB))) continue; // "다른 가게" 확정 — 숨김
         // survivor = 점수 높은 쪽 (보통 주소/주문 많은 정식 entry)
         const aWins = entryScore(keyA, entries[keyA]) >= entryScore(keyB, entries[keyB]);
         pairs.push({

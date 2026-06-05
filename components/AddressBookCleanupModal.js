@@ -31,7 +31,7 @@ function fmtPhone(d) {
   return s;
 }
 
-export default function AddressBookCleanupModal({ visible, entries, onApply, onClose }) {
+export default function AddressBookCleanupModal({ visible, entries, ignoredPairs, onApply, onIgnore, onClose }) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
@@ -40,8 +40,8 @@ export default function AddressBookCleanupModal({ visible, entries, onApply, onC
     [visible, entries]
   );
   const aliasPairs = useMemo(
-    () => (visible ? findSimilarAliasPairs(entries || {}) : []),
-    [visible, entries]
+    () => (visible ? findSimilarAliasPairs(entries || {}, ignoredPairs) : []),
+    [visible, entries, ignoredPairs]
   );
 
   // 선택 상태 — phone 그룹 기본 ON(undefined=ON), alias 쌍 기본 OFF.
@@ -140,7 +140,7 @@ export default function AddressBookCleanupModal({ visible, entries, onApply, onC
                   🏪 비슷한 상호 — {aliasPairs.length}건
                 </Text>
                 <Text style={styles.sectionHint}>
-                  같은 가게면 체크하세요. 다른 가게면 그대로 두세요 (기본 OFF).
+                  같은 가게면 체크 → 합침. 다른 가게면 "다른 가게" 를 눌러 다음부터 숨김.
                 </Text>
                 {aliasPairs.map((p, i) => {
                   const on = !!aliasOn[i];
@@ -158,6 +158,13 @@ export default function AddressBookCleanupModal({ visible, entries, onApply, onC
                         <Text style={styles.pairText}>
                           {p.a}　↔　{p.b}
                         </Text>
+                        <TouchableOpacity
+                          style={styles.otherStoreBtn}
+                          onPress={() => onIgnore?.(p.keyA, p.keyB)}
+                          hitSlop={6}
+                        >
+                          <Text style={styles.otherStoreBtnText}>다른 가게</Text>
+                        </TouchableOpacity>
                       </View>
                       {on && (
                         <Text style={styles.survivorText}>
@@ -245,6 +252,15 @@ function makeStyles(scale = 1) {
     checkOnAmber: { color: '#d97706' },
     cardPhone: { fontSize: fp(15), fontWeight: '800', color: '#111827' },
     pairText: { fontSize: fp(14), fontWeight: '700', color: '#111827', flex: 1 },
+    // "다른 가게" 버튼 — 누르면 그 쌍 무시 목록에 → 다음부터 후보에서 숨김.
+    otherStoreBtn: {
+      borderWidth: 1,
+      borderColor: '#9ca3af',
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    otherStoreBtnText: { fontSize: fp(11), color: '#6b7280', fontWeight: '800' },
     survivorText: { fontSize: fp(12), color: '#15803d', fontWeight: '700', marginLeft: 26 },
     survivorName: { fontWeight: '900' },
     mergeText: { fontSize: fp(11), color: '#b91c1c', marginLeft: 26 },

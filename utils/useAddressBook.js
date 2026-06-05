@@ -26,6 +26,9 @@ export function useAddressBook() {
     todayDate: localDateString(),
     todayDeliveredKeys: [],
     autoRemember: true,
+    // 2026-06-05: "비슷한 상호" 후보 중 사장님이 "다른 가게" 로 확정한 쌍 키 목록.
+    //   findSimilarAliasPairs 가 제외 → 다음부터 안 뜸. 매장 공용(Firestore sync).
+    ignoredSimilarPairs: [],
   });
 
   useEffect(() => {
@@ -456,6 +459,20 @@ export function useAddressBook() {
     );
   }, []);
 
+  // 2026-06-05: "비슷한 상호" 후보를 "다른 가게" 로 확정 → 무시 목록에 추가.
+  //   findSimilarAliasPairs 가 제외하므로 다음 정리부터 안 뜸. 쌍 키 = 정렬 조합.
+  const ignoreSimilarPair = useCallback((keyA, keyB) => {
+    if (!keyA || !keyB) return;
+    const pairKey = [keyA, keyB].sort().join('||');
+    setAddressBook((prev) => {
+      const cur = Array.isArray(prev.ignoredSimilarPairs)
+        ? prev.ignoredSimilarPairs
+        : [];
+      if (cur.includes(pairKey)) return prev;
+      return { ...prev, ignoredSimilarPairs: [...cur, pairKey] };
+    });
+  }, []);
+
   // 별칭 설정 — 빈 문자열이면 필드 제거
   const setAlias = useCallback((key, alias) => {
     setAddressBook((prev) => {
@@ -744,6 +761,7 @@ export function useAddressBook() {
     pinAddress,
     deleteAddress,
     setAutoRemember,
+    ignoreSimilarPair,
     setAlias,
     setPhone,
     setPhones,

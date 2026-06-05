@@ -67,6 +67,7 @@ export default function AddressBookPanel() {
     setCustomerRequest,
     addAddress,
     addPhoneOnly,
+    ignoreSimilarPair,
     editLabel,
   } = useOrders();
   const { storeInfo } = useStore();
@@ -456,28 +457,34 @@ export default function AddressBookPanel() {
     const phoneDigits = (newPhone || '').replace(/\D/g, '');
     const request = newCustomerRequest.trim();
 
-    // 주소 있으면 주소 기반 entry (기존 흐름)
+    // 저장 정책(2026-06-05 사장님 지시): 전화번호 필수 + (주소 또는 별칭) 하나 이상.
+    //   전화만 / 주소만 / 별칭만 / 둘 다 없음 → 저장 거부. 식별 부족한 entry 누적 방지.
+    if (!phoneDigits) {
+      Alert.alert(
+        '등록 불가',
+        '전화번호는 필수입니다.\n전화번호 + (주소 또는 별칭) 을 입력해 주세요.'
+      );
+      return;
+    }
+    if (!label && !alias) {
+      Alert.alert(
+        '등록 불가',
+        '전화번호만으로는 저장할 수 없어요.\n주소 또는 별칭 중 하나는 함께 입력해 주세요.'
+      );
+      return;
+    }
+    // 전화 + 주소 → 주소 기반 entry (전화/별칭/요청 함께 저장)
     if (label) {
       const ok = addAddress(label, alias, newPhone, request);
       if (ok) resetAddForm();
       return;
     }
-    // 2026-06-05: 주소 없이 별칭·전화만으로도 등록 — 사장님 운영(주소 모르는
-    //   단골/전화 손님)에서 "등록 안 먹힘" 사고. 전화 있으면 phone-only entry 생성
-    //   (CID 자동등록과 동일 패턴, key=__phone:digits). 이미 있으면 별칭/요청만 보강.
-    if (phoneDigits) {
-      const key = `__phone:${phoneDigits}`;
-      addPhoneOnly(newPhone, alias);
-      if (alias) setAlias(key, alias);
-      if (request) setCustomerRequest(key, request);
-      resetAddForm();
-      return;
-    }
-    // 주소·전화 둘 다 없으면 식별 key 가 없어 저장 불가 — 조용히 막지 말고 안내.
-    Alert.alert(
-      '등록 불가',
-      '주소 또는 전화번호 중 하나는 입력해 주세요.\n(별칭만으로는 저장할 수 없어요)'
-    );
+    // 전화 + 별칭(주소 없음) → phone-only entry (key=__phone:digits) + 별칭/요청
+    const key = `__phone:${phoneDigits}`;
+    addPhoneOnly(newPhone, alias);
+    if (alias) setAlias(key, alias);
+    if (request) setCustomerRequest(key, request);
+    resetAddForm();
   };
 
   const cancelAdd = () => {
@@ -1099,7 +1106,9 @@ export default function AddressBookPanel() {
       <AddressBookCleanupModal
         visible={showCleanup}
         entries={addressBook?.entries || {}}
+        ignoredPairs={addressBook?.ignoredSimilarPairs || []}
         onApply={handleCleanupApply}
+        onIgnore={ignoreSimilarPair}
         onClose={() => setShowCleanup(false)}
       />
 

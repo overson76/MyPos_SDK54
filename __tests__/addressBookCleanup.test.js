@@ -116,6 +116,17 @@ describe('findSimilarAliasPairs — 비슷한 상호', () => {
     };
     expect(findSimilarAliasPairs(entries)).toEqual([]);
   });
+
+  test('ignoredPairKeys 로 지정한 쌍은 제외 — "다른 가게" 확정', () => {
+    const entries = {
+      a: { key: 'a', label: '주소A', alias: '탑마트', count: 5 },
+      b: { key: 'b', label: '주소B', alias: '신평 탑마트', count: 1 },
+    };
+    expect(findSimilarAliasPairs(entries)).toHaveLength(1); // 무시 전
+    // 쌍 키 = 두 key 정렬 조합('a||b'). 배열·Set 둘 다 허용.
+    expect(findSimilarAliasPairs(entries, ['a||b'])).toHaveLength(0);
+    expect(findSimilarAliasPairs(entries, new Set(['a||b']))).toHaveLength(0);
+  });
 });
 
 describe('mergeEntries — 통합 실행', () => {
