@@ -66,6 +66,7 @@ export default function AddressBookPanel() {
     setPhone,
     setCustomerRequest,
     addAddress,
+    addPhoneOnly,
     editLabel,
   } = useOrders();
   const { storeInfo } = useStore();
@@ -441,29 +442,46 @@ export default function AddressBookPanel() {
     return () => clearTimeout(t);
   }, []);
 
-  const confirmAdd = () => {
-    if (!newLabel.trim()) return;
-    const ok = addAddress(
-      newLabel.trim(),
-      newAlias.trim(),
-      newPhone,
-      newCustomerRequest.trim()
-    );
-    if (ok) {
-      setAddingNew(false);
-      setNewLabel('');
-      setNewAlias('');
-      setNewPhone('');
-      setNewCustomerRequest('');
-    }
-  };
-
-  const cancelAdd = () => {
+  const resetAddForm = () => {
     setAddingNew(false);
     setNewLabel('');
     setNewAlias('');
     setNewPhone('');
     setNewCustomerRequest('');
+  };
+
+  const confirmAdd = () => {
+    const label = newLabel.trim();
+    const alias = newAlias.trim();
+    const phoneDigits = (newPhone || '').replace(/\D/g, '');
+    const request = newCustomerRequest.trim();
+
+    // 주소 있으면 주소 기반 entry (기존 흐름)
+    if (label) {
+      const ok = addAddress(label, alias, newPhone, request);
+      if (ok) resetAddForm();
+      return;
+    }
+    // 2026-06-05: 주소 없이 별칭·전화만으로도 등록 — 사장님 운영(주소 모르는
+    //   단골/전화 손님)에서 "등록 안 먹힘" 사고. 전화 있으면 phone-only entry 생성
+    //   (CID 자동등록과 동일 패턴, key=__phone:digits). 이미 있으면 별칭/요청만 보강.
+    if (phoneDigits) {
+      const key = `__phone:${phoneDigits}`;
+      addPhoneOnly(newPhone, alias);
+      if (alias) setAlias(key, alias);
+      if (request) setCustomerRequest(key, request);
+      resetAddForm();
+      return;
+    }
+    // 주소·전화 둘 다 없으면 식별 key 가 없어 저장 불가 — 조용히 막지 말고 안내.
+    Alert.alert(
+      '등록 불가',
+      '주소 또는 전화번호 중 하나는 입력해 주세요.\n(별칭만으로는 저장할 수 없어요)'
+    );
+  };
+
+  const cancelAdd = () => {
+    resetAddForm();
   };
 
   const handleImport = (mode) => {
