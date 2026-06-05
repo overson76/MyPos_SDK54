@@ -140,6 +140,24 @@ export function findSimilarAliasPairs(entries, ignoredPairKeys) {
   return pairs;
 }
 
+// ── C. 별칭·주소 없는 "번호만" entry (CID 자동등록 잔재) ──
+// 반환: [{ key, phone, count }] — 별칭 X, 주소 X, 전화는 있음. count 로 단골 구분.
+//   주문 이력 적은 것(삭제 후보 우선) → 전화번호 순 정렬.
+export function findPhoneOnlyEntries(entries) {
+  if (!entries || typeof entries !== 'object') return [];
+  const out = [];
+  for (const k of Object.keys(entries)) {
+    const e = entries[k];
+    if (!e) continue;
+    if (realAlias(e)) continue; // 별칭 있으면 제외
+    if (hasRealAddress(e)) continue; // 주소 있으면 제외
+    const phones = entryPhoneDigits(k, e);
+    if (phones.length === 0) continue; // 전화도 없으면 제외(식별 불가)
+    out.push({ key: k, phone: phones[0], count: e.count || 0 });
+  }
+  return out.sort((a, b) => a.count - b.count || a.phone.localeCompare(b.phone));
+}
+
 // ── 통합 실행 ──
 // survivorKey 에 mergeKeys 의 전번/주문횟수/별칭/주소를 흡수 후 mergeKeys 삭제.
 // 반환: 새 entries (변경 없으면 동일 참조).

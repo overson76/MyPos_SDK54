@@ -95,13 +95,20 @@ export default function AddressBookPanel() {
   const [showImport, setShowImport] = useState(false);
   const [showCleanup, setShowCleanup] = useState(false);
   // 2026-06-04: 주소록 자동 정리 적용 — 선택된 통합 그룹들을 entries 에 반영.
-  const handleCleanupApply = (merges) => {
+  const handleCleanupApply = (merges, deleteKeys) => {
     setShowCleanup(false);
-    if (!merges || merges.length === 0) return;
-    const before = Object.keys(addressBook?.entries || {}).length;
-    const merged = applyMerges(addressBook?.entries || {}, merges);
-    const after = Object.keys(merged).length;
-    setAddressBook((prev) => ({ ...prev, entries: merged }));
+    const hasMerges = merges && merges.length > 0;
+    const hasDeletes = deleteKeys && deleteKeys.length > 0;
+    if (!hasMerges && !hasDeletes) return;
+    const cur = addressBook?.entries || {};
+    const before = Object.keys(cur).length;
+    let next = hasMerges ? applyMerges(cur, merges) : cur;
+    if (hasDeletes) {
+      next = { ...next };
+      deleteKeys.forEach((k) => delete next[k]);
+    }
+    const after = Object.keys(next).length;
+    setAddressBook((prev) => ({ ...prev, entries: next }));
     const removed = before - after;
     showToast?.({
       kind: 'success',

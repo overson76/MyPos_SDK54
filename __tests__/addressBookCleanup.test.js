@@ -5,6 +5,7 @@ import {
   entryScore,
   findPhoneDuplicates,
   findSimilarAliasPairs,
+  findPhoneOnlyEntries,
   mergeEntries,
   applyMerges,
 } from '../utils/addressBookCleanup';
@@ -126,6 +127,35 @@ describe('findSimilarAliasPairs — 비슷한 상호', () => {
     // 쌍 키 = 두 key 정렬 조합('a||b'). 배열·Set 둘 다 허용.
     expect(findSimilarAliasPairs(entries, ['a||b'])).toHaveLength(0);
     expect(findSimilarAliasPairs(entries, new Set(['a||b']))).toHaveLength(0);
+  });
+});
+
+describe('findPhoneOnlyEntries — 별칭·주소 없는 번호만', () => {
+  test('별칭/주소 없고 전화만 있는 entry 만 반환 (주문 적은 것 먼저)', () => {
+    const entries = {
+      'addr|a': { key: 'addr|a', label: '주소A', alias: '탑마트', phone: '01011112222' },
+      '__phone:01033334444': {
+        key: '__phone:01033334444',
+        label: '(주소 미입력) 010-3333-4444',
+        phone: '01033334444',
+        count: 0,
+      },
+      '__phone:01055556666': {
+        key: '__phone:01055556666',
+        label: '(주소 미입력) 010-5555-6666',
+        phone: '01055556666',
+        count: 3,
+      },
+    };
+    const out = findPhoneOnlyEntries(entries);
+    expect(out).toHaveLength(2); // 별칭 있는 addr|a 제외
+    expect(out[0].phone).toBe('01033334444'); // count 0 먼저
+    expect(out[1].count).toBe(3);
+  });
+
+  test('전화도 없으면 제외', () => {
+    const entries = { x: { key: 'x', label: '(주소 미입력)', count: 0 } };
+    expect(findPhoneOnlyEntries(entries)).toEqual([]);
   });
 });
 

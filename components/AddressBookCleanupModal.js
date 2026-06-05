@@ -20,6 +20,7 @@ import { useResponsive } from '../utils/useResponsive';
 import {
   findPhoneDuplicates,
   findSimilarAliasPairs,
+  findPhoneOnlyEntries,
   realAlias,
   hasRealAddress,
 } from '../utils/addressBookCleanup';
@@ -43,10 +44,15 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
     () => (visible ? findSimilarAliasPairs(entries || {}, ignoredPairs) : []),
     [visible, entries, ignoredPairs]
   );
+  const phoneOnlyEntries = useMemo(
+    () => (visible ? findPhoneOnlyEntries(entries || {}) : []),
+    [visible, entries]
+  );
 
   // 선택 상태 — phone 그룹 기본 ON(undefined=ON), alias 쌍 기본 OFF.
   const [phoneOff, setPhoneOff] = useState({}); // idx → true 면 제외
   const [aliasOn, setAliasOn] = useState({}); // idx → true 면 포함
+  const [phoneOnlyDel, setPhoneOnlyDel] = useState({}); // idx → true 면 삭제
 
   if (!visible) return null;
 
@@ -62,7 +68,8 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
 
   const selectedCount =
     phoneGroups.filter((_, i) => !phoneOff[i]).length +
-    aliasPairs.filter((_, i) => aliasOn[i]).length;
+    aliasPairs.filter((_, i) => aliasOn[i]).length +
+    phoneOnlyEntries.filter((_, i) => phoneOnlyDel[i]).length;
 
   const handleApply = () => {
     const merges = [];
@@ -72,10 +79,16 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
     aliasPairs.forEach((p, i) => {
       if (aliasOn[i]) merges.push({ survivorKey: p.survivorKey, mergeKeys: [p.mergeKey] });
     });
-    onApply?.(merges);
+    const deleteKeys = phoneOnlyEntries
+      .filter((_, i) => phoneOnlyDel[i])
+      .map((e) => e.key);
+    onApply?.(merges, deleteKeys);
   };
 
-  const nothing = phoneGroups.length === 0 && aliasPairs.length === 0;
+  const nothing =
+    phoneGroups.length === 0 &&
+    aliasPairs.length === 0 &&
+    phoneOnlyEntries.length === 0;
 
   return (
     <View style={styles.overlay} pointerEvents="auto">
@@ -176,6 +189,39 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
                 })}
               </>
             )}
+
+            {phoneOnlyEntries.length > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                  📵 번호만 있는 항목 — {phoneOnlyEntries.length}건
+                </Text>
+                <Text style={styles.sectionHint}>
+                  별칭·주소 없이 번호만 자동 등록된 항목. 지울 것만 체크하세요 (기본 OFF).
+                  "N회" 는 주문 이력 있는 단골 — 신중히.
+                </Text>
+                {phoneOnlyEntries.map((e, i) => {
+                  const on = !!phoneOnlyDel[i];
+                  return (
+                    <TouchableOpacity
+                      key={e.key}
+                      style={[styles.card, on && styles.cardOnRed]}
+                      activeOpacity={0.8}
+                      onPress={() => setPhoneOnlyDel((s) => ({ ...s, [i]: !on }))}
+                    >
+                      <View style={styles.cardRow}>
+                        <Text style={[styles.check, on && styles.checkOnRed]}>
+                          {on ? '🗑' : '☐'}
+                        </Text>
+                        <Text style={styles.cardPhone}>{fmtPhone(e.phone)}</Text>
+                        {e.count > 0 ? (
+                          <Text style={styles.countBadge}>{e.count}회</Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            )}
           </ScrollView>
 
           {!nothing && (
@@ -246,11 +292,14 @@ function makeStyles(scale = 1) {
     },
     cardOn: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
     cardOnAmber: { borderColor: '#d97706', backgroundColor: '#fffbeb' },
+    cardOnRed: { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
     cardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
     check: { fontSize: fp(18), color: '#9ca3af' },
     checkOn: { color: '#2563eb' },
     checkOnAmber: { color: '#d97706' },
+    checkOnRed: { color: '#dc2626' },
     cardPhone: { fontSize: fp(15), fontWeight: '800', color: '#111827' },
+    countBadge: { fontSize: fp(11), color: '#15803d', fontWeight: '800', marginLeft: 'auto' },
     pairText: { fontSize: fp(14), fontWeight: '700', color: '#111827', flex: 1 },
     // "다른 가게" 버튼 — 누르면 그 쌍 무시 목록에 → 다음부터 후보에서 숨김.
     otherStoreBtn: {
