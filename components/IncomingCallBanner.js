@@ -33,7 +33,17 @@ export default function IncomingCallBanner({ call, onOrderPress, onMergePress, o
           <Text style={styles.icon}>📞</Text>
         </View>
         <View style={styles.center}>
-          <Text style={styles.number}>{call.formattedNumber || call.phoneNumber}</Text>
+          {/* 2026-06-05: 아이패드에서 번호가 글자 단위로 세로 줄바꿈되던 사고 —
+              numberOfLines=1 로 세로 wrap 차단 + adjustsFontSizeToFit 로 칸이 좁으면
+              폰트 자동 축소(잘림 없이 한 줄 유지). 별칭/주소 줄엔 원래 numberOfLines 있었음. */}
+          <Text
+            style={styles.number}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {call.formattedNumber || call.phoneNumber}
+          </Text>
           {call.alias ? (
             <Text style={styles.address} numberOfLines={1}>
               👤 {call.alias}
@@ -97,7 +107,9 @@ function makeStyles(scale = 1) {
       shadowRadius: 12,
       elevation: 14,
       minWidth: 380,
-      maxWidth: 640,
+      // 2026-06-05: 아이패드(넓은 화면 + 큰 scale)에서 번호 칸이 눌려 세로로 흐르던
+      //   문제 — 최대폭 확대로 가운데 번호 칸 여유 확보 (640 → 760).
+      maxWidth: 760,
     },
     left: { justifyContent: 'center' },
     icon: { fontSize: fp(32) },
