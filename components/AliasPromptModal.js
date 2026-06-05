@@ -214,17 +214,17 @@ export default function AliasPromptModal({
                     ref={aliasRef}
                     style={styles.aliasInput}
                     value={alias}
+                    // 2026-06-05: PC(RN-Web/Electron)에서 "한글이 안 써지는" 사고 —
+                    // 4부에서 넣은 returnKeyType/blurOnSubmit/onSubmitEditing 이 한글 IME
+                    // 조합 키(keyCode 229)를 가로채 조합을 끊음. 영어/숫자는 조합이 없어
+                    // 멀쩡했던 것. 한글이 정상인 AddressBookModal 검색칸과 동일하게 단순화
+                    // (submit 핸들러·maxLength 제거). 길이 제한은 저장 단계에서 처리.
                     onChangeText={setAlias}
                     placeholder="예) 진실보석, 김사장"
                     placeholderTextColor="#9ca3af"
-                    maxLength={30}
                     // PC(RN-Web/Electron)에서 autoFocus 가 부모 Pressable/KAV 마운트와
                     // 충돌해 포커스가 잡혔다 풀려 "타이핑 안 먹힘" 사고 → web 만 끔.
-                    // 폰(native)은 자동 포커스 유지(키보드 바로 뜸).
                     autoFocus={Platform.OS !== 'web'}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => phoneRef.current?.focus?.()}
                   />
                   {/* 2026-05-28: phone 도 직접 편집. CID 자동 채움 + 사장님 수정.
                       이 phone 으로 onConfirm 전달 → entry phone 박힘. */}
@@ -238,8 +238,6 @@ export default function AliasPromptModal({
                     placeholderTextColor="#9ca3af"
                     keyboardType="phone-pad"
                     maxLength={20}
-                    returnKeyType="done"
-                    onSubmitEditing={handleNext}
                   />
                   <View style={styles.actions}>
                     <TouchableOpacity style={styles.confirmBtn} onPress={handleNext}>
