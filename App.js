@@ -297,6 +297,9 @@ function MainApp() {
         deliveryAddress: incomingCall.address || null,
         deliveryPhone: incomingCall.phoneNumber || null,
         deliveryAlias: incomingCall.alias || null,
+        // 2026-06-05: 작업 중 PENDING 카트를 가로채지 않음 — 빈 슬롯에 발신자 정보만.
+        //   (사장님이 다른 손님 메뉴 담는 중 전화 와도 그 카트가 배달칸으로 끌려가던 사고)
+        migrateCart: false,
       });
       dismissIncomingCall();
     }, 10_000);
@@ -428,6 +431,8 @@ function MainApp() {
               deliveryAddress: data.address || null,
               deliveryPhone: data.phoneNumber || null,
               deliveryAlias: data.alias || null,
+              // 2026-06-05: 작업 중 카트 가로채기 방지 — 빈 슬롯에 발신자 정보만.
+              migrateCart: false,
             });
           }}
         />

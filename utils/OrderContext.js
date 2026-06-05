@@ -786,11 +786,16 @@ export function OrderProvider({ children }) {
     //   d1..d5 / y1..y2 / p1..p2 정적 순서대로 빈 슬롯, 모두 차있으면 동적 확장.
     // 반환: 배당된 슬롯 ID (caller 가 setSelectedTable 호출해서 그 테이블로 진입)
     const submitPendingAsType = (type, opts = {}) => {
-      const { deliveryAddress, deliveryPhone, deliveryAlias } = opts;
+      const { deliveryAddress, deliveryPhone, deliveryAlias, migrateCart = true } = opts;
       const targetId = findEmptySlotForType(orders, type);
       if (!targetId) return null;
       // 1단계: PENDING cart 있으면 슬롯으로 migrate. 없으면 빈 슬롯 그대로.
-      dispatch({ type: 'orders/migratePendingCart', toTableId: targetId });
+      // 2026-06-05: migrateCart=false (전화 자동 stash / CID "주문받기") 는 migrate 안 함 —
+      //   사장님이 다른 손님 주문을 담는 중이어도 그 작업 카트를 가로채지 않게.
+      //   OrderScreen "주문" 버튼만 기본 true (담은 메뉴를 슬롯으로 확정하는 정상 의도).
+      if (migrateCart) {
+        dispatch({ type: 'orders/migratePendingCart', toTableId: targetId });
+      }
       // 2단계: 주소 박기 — setDeliveryAddress 헬퍼 재사용 (sanitize 포함)
       //   배달만 의미있지만 예약/포장도 들어와도 모델에 박힘 (영수증/카드 표시는 type 분기로 처리)
       if (deliveryAddress) {

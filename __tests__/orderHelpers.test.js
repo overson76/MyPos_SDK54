@@ -497,4 +497,31 @@ describe('findEmptySlotForType', () => {
     expect(findEmptyDeliverySlot({})).toBe('d1');
     expect(findEmptyDeliverySlot({ d1: used() })).toBe('d2');
   });
+
+  // 2026-06-05: 발신자/예약 정보만 있는 슬롯도 점유 — CID 자동 stash 가 메뉴 없이
+  //   발신자 정보만 박은 "주문대기" 칸을 다음 전화가 덮어쓰던 사고 회귀 방지.
+  test('delivery — 발신자 전화만 있는 d1 도 점유 → d2', () => {
+    const orders = { d1: { items: [], cartItems: [], deliveryPhone: '01012345678' } };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d2');
+  });
+
+  test('delivery — 별칭만 있는 d1 도 점유 → d2', () => {
+    const orders = { d1: { items: [], cartItems: [], deliveryAlias: '아가맘' } };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d2');
+  });
+
+  test('delivery — 주소만 있는 d1 도 점유 → d2', () => {
+    const orders = { d1: { items: [], cartItems: [], deliveryAddress: '사하구 사하로 47' } };
+    expect(findEmptySlotForType(orders, 'delivery')).toBe('d2');
+  });
+
+  test('reservation — 인원만 있는 y1 도 점유 → y2', () => {
+    const orders = { y1: { items: [], cartItems: [], partySize: 4 } };
+    expect(findEmptySlotForType(orders, 'reservation')).toBe('y2');
+  });
+
+  test('reservation — 시간만 있는 y1 도 점유 → y2', () => {
+    const orders = { y1: { items: [], cartItems: [], deliveryTime: '700' } };
+    expect(findEmptySlotForType(orders, 'reservation')).toBe('y2');
+  });
 });

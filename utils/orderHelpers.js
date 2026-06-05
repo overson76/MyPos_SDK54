@@ -166,17 +166,23 @@ export function findEmptySlotForType(orders, type) {
   const prefix = TYPE_PREFIX[type];
   if (!prefix) return null;
   const staticCount = TYPE_STATIC_COUNT[type] || 2;
+  // 2026-06-05: 점유 판정에 발신자 정보(전화/별칭/주소)·예약(시간/인원) 포함.
+  //   기존엔 메뉴(items/cart)만 봐서, "🕐 주문대기"(발신자만) / 빈 예약(시간·인원만)
+  //   슬롯을 "빈 칸" 으로 재판정 → 다음 전화·예약이 같은 칸을 덮어쓰던 사고 처방.
+  const slotOccupied = (o) =>
+    !!o &&
+    ((o.items?.length || 0) > 0 ||
+      (o.cartItems?.length || 0) > 0 ||
+      !!o.deliveryPhone ||
+      !!o.deliveryAlias ||
+      !!o.deliveryAddress ||
+      !!o.deliveryTime ||
+      (o.partySize || 0) > 0);
   const isUsed = (slotId) => {
-    const o = orders?.[slotId];
-    if (o && ((o.items?.length || 0) > 0 || (o.cartItems?.length || 0) > 0)) {
-      return true;
-    }
-    const splitOccupied = Object.entries(orders || {}).some(
-      ([oid, oo]) =>
-        oid.startsWith(`${slotId}#`) &&
-        ((oo.items?.length || 0) > 0 || (oo.cartItems?.length || 0) > 0)
+    if (slotOccupied(orders?.[slotId])) return true;
+    return Object.entries(orders || {}).some(
+      ([oid, oo]) => oid.startsWith(`${slotId}#`) && slotOccupied(oo)
     );
-    return splitOccupied;
   };
   for (let n = 1; n <= staticCount; n += 1) {
     const id = `${prefix}${n}`;
