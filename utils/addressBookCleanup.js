@@ -140,22 +140,38 @@ export function findSimilarAliasPairs(entries, ignoredPairKeys) {
   return pairs;
 }
 
-// ── C. 별칭·주소 없는 "번호만" entry (CID 자동등록 잔재) ──
-// 반환: [{ key, phone, count }] — 별칭 X, 주소 X, 전화는 있음. count 로 단골 구분.
-//   주문 이력 적은 것(삭제 후보 우선) → 전화번호 순 정렬.
-export function findPhoneOnlyEntries(entries) {
+// ── C. 불완전 entry — 전화/별칭/주소 중 "하나만" 있는 항목 (새 저장 정책 위반) ──
+// 반환: [{ key, kind, display, count }]. kind: 'phone'(번호만)|'alias'(별칭만)|'address'(주소만).
+//   번호만 → 별칭만 → 주소만 순, 그 안에서 주문 적은 것(삭제 후보) 먼저.
+//   2개 이상(전화+주소 등) = 정상 → 제외. 0개(빈 entry) → 제외.
+export function findIncompleteEntries(entries) {
   if (!entries || typeof entries !== 'object') return [];
   const out = [];
   for (const k of Object.keys(entries)) {
     const e = entries[k];
     if (!e) continue;
-    if (realAlias(e)) continue; // 별칭 있으면 제외
-    if (hasRealAddress(e)) continue; // 주소 있으면 제외
+    const hasAlias = !!realAlias(e);
+    const hasAddr = hasRealAddress(e);
     const phones = entryPhoneDigits(k, e);
-    if (phones.length === 0) continue; // 전화도 없으면 제외(식별 불가)
-    out.push({ key: k, phone: phones[0], count: e.count || 0 });
+    const hasPhone = phones.length > 0;
+    const cnt = (hasAlias ? 1 : 0) + (hasAddr ? 1 : 0) + (hasPhone ? 1 : 0);
+    if (cnt !== 1) continue;
+    let kind;
+    let display;
+    if (hasPhone) {
+      kind = 'phone';
+      display = phones[0];
+    } else if (hasAlias) {
+      kind = 'alias';
+      display = realAlias(e);
+    } else {
+      kind = 'address';
+      display = e.label;
+    }
+    out.push({ key: k, kind, display, count: e.count || 0 });
   }
-  return out.sort((a, b) => a.count - b.count || a.phone.localeCompare(b.phone));
+  const order = { phone: 0, alias: 1, address: 2 };
+  return out.sort((a, b) => order[a.kind] - order[b.kind] || a.count - b.count);
 }
 
 // ── 통합 실행 ──

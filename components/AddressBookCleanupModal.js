@@ -20,7 +20,7 @@ import { useResponsive } from '../utils/useResponsive';
 import {
   findPhoneDuplicates,
   findSimilarAliasPairs,
-  findPhoneOnlyEntries,
+  findIncompleteEntries,
   realAlias,
   hasRealAddress,
 } from '../utils/addressBookCleanup';
@@ -44,8 +44,9 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
     () => (visible ? findSimilarAliasPairs(entries || {}, ignoredPairs) : []),
     [visible, entries, ignoredPairs]
   );
+  // phoneOnlyEntries: 번호만/별칭만/주소만(불완전) 항목 모두 — 일괄 삭제 대상.
   const phoneOnlyEntries = useMemo(
-    () => (visible ? findPhoneOnlyEntries(entries || {}) : []),
+    () => (visible ? findIncompleteEntries(entries || {}) : []),
     [visible, entries]
   );
 
@@ -83,6 +84,21 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
       .filter((_, i) => phoneOnlyDel[i])
       .map((e) => e.key);
     onApply?.(merges, deleteKeys);
+  };
+
+  const allPhoneOnlySelected =
+    phoneOnlyEntries.length > 0 &&
+    phoneOnlyEntries.every((_, i) => phoneOnlyDel[i]);
+  const toggleAllPhoneOnly = () => {
+    if (allPhoneOnlySelected) {
+      setPhoneOnlyDel({});
+    } else {
+      const m = {};
+      phoneOnlyEntries.forEach((_, i) => {
+        m[i] = true;
+      });
+      setPhoneOnlyDel(m);
+    }
   };
 
   const nothing =
@@ -192,15 +208,29 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
 
             {phoneOnlyEntries.length > 0 && (
               <>
-                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-                  📵 번호만 있는 항목 — {phoneOnlyEntries.length}건
-                </Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                    📵 번호만·별칭만·주소만 — {phoneOnlyEntries.length}건
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.selectAllBtn}
+                    onPress={toggleAllPhoneOnly}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.selectAllText}>
+                      {allPhoneOnlySelected ? '전체 해제' : '전체 선택'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={styles.sectionHint}>
-                  별칭·주소 없이 번호만 자동 등록된 항목. 지울 것만 체크하세요 (기본 OFF).
+                  전화·별칭·주소 중 하나만 있는 불완전 항목. 지울 것만 체크하세요 (기본 OFF).
                   "N회" 는 주문 이력 있는 단골 — 신중히.
                 </Text>
                 {phoneOnlyEntries.map((e, i) => {
                   const on = !!phoneOnlyDel[i];
+                  const icon =
+                    e.kind === 'phone' ? '📞' : e.kind === 'alias' ? '👤' : '📍';
+                  const text = e.kind === 'phone' ? fmtPhone(e.display) : e.display;
                   return (
                     <TouchableOpacity
                       key={e.key}
@@ -212,7 +242,9 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
                         <Text style={[styles.check, on && styles.checkOnRed]}>
                           {on ? '🗑' : '☐'}
                         </Text>
-                        <Text style={styles.cardPhone}>{fmtPhone(e.phone)}</Text>
+                        <Text style={styles.cardPhone} numberOfLines={1}>
+                          {icon} {text}
+                        </Text>
                         {e.count > 0 ? (
                           <Text style={styles.countBadge}>{e.count}회</Text>
                         ) : null}
@@ -300,6 +332,20 @@ function makeStyles(scale = 1) {
     checkOnRed: { color: '#dc2626' },
     cardPhone: { fontSize: fp(15), fontWeight: '800', color: '#111827' },
     countBadge: { fontSize: fp(11), color: '#15803d', fontWeight: '800', marginLeft: 'auto' },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    selectAllBtn: {
+      borderWidth: 1,
+      borderColor: '#dc2626',
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      marginTop: 16,
+    },
+    selectAllText: { fontSize: fp(11), color: '#dc2626', fontWeight: '800' },
     pairText: { fontSize: fp(14), fontWeight: '700', color: '#111827', flex: 1 },
     // "다른 가게" 버튼 — 누르면 그 쌍 무시 목록에 → 다음부터 후보에서 숨김.
     otherStoreBtn: {

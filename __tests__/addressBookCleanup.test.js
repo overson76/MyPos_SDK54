@@ -5,7 +5,7 @@ import {
   entryScore,
   findPhoneDuplicates,
   findSimilarAliasPairs,
-  findPhoneOnlyEntries,
+  findIncompleteEntries,
   mergeEntries,
   applyMerges,
 } from '../utils/addressBookCleanup';
@@ -130,32 +130,38 @@ describe('findSimilarAliasPairs — 비슷한 상호', () => {
   });
 });
 
-describe('findPhoneOnlyEntries — 별칭·주소 없는 번호만', () => {
-  test('별칭/주소 없고 전화만 있는 entry 만 반환 (주문 적은 것 먼저)', () => {
+describe('findIncompleteEntries — 번호만/별칭만/주소만', () => {
+  test('하나만 있는 entry 만, 번호만→별칭만→주소만 순', () => {
     const entries = {
-      'addr|a': { key: 'addr|a', label: '주소A', alias: '탑마트', phone: '01011112222' },
-      '__phone:01033334444': {
-        key: '__phone:01033334444',
-        label: '(주소 미입력) 010-3333-4444',
-        phone: '01033334444',
+      'addr|full': {
+        key: 'addr|full',
+        label: '부산 사하구 주소',
+        alias: '완전상회',
+        phone: '01000000000',
+      }, // 3개 → 정상, 제외
+      '__phone:01011112222': {
+        key: '__phone:01011112222',
+        label: '(주소 미입력) 010-1111-2222',
+        phone: '01011112222',
         count: 0,
-      },
-      '__phone:01055556666': {
-        key: '__phone:01055556666',
-        label: '(주소 미입력) 010-5555-6666',
-        phone: '01055556666',
-        count: 3,
-      },
+      }, // 번호만
+      'alias-only': { key: 'alias-only', alias: '별칭가게' }, // 별칭만
+      'addr-only': { key: 'addr-only', label: '부산 강서구 주소' }, // 주소만
     };
-    const out = findPhoneOnlyEntries(entries);
-    expect(out).toHaveLength(2); // 별칭 있는 addr|a 제외
-    expect(out[0].phone).toBe('01033334444'); // count 0 먼저
-    expect(out[1].count).toBe(3);
+    const out = findIncompleteEntries(entries);
+    expect(out).toHaveLength(3); // full 제외
+    expect(out.map((x) => x.kind)).toEqual(['phone', 'alias', 'address']);
+    expect(out[0].display).toBe('01011112222');
+    expect(out[1].display).toBe('별칭가게');
+    expect(out[2].display).toBe('부산 강서구 주소');
   });
 
-  test('전화도 없으면 제외', () => {
-    const entries = { x: { key: 'x', label: '(주소 미입력)', count: 0 } };
-    expect(findPhoneOnlyEntries(entries)).toEqual([]);
+  test('전화+주소(정상)·빈 entry 는 제외', () => {
+    const entries = {
+      ok: { key: 'ok', label: '부산 주소', phone: '01099998888' }, // 2개 → 정상
+      empty: { key: 'empty' }, // 0개 → 빈
+    };
+    expect(findIncompleteEntries(entries)).toEqual([]);
   });
 });
 
