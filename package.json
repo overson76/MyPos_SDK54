@@ -1,6 +1,6 @@
 {
   "name": "mypos_sdk54",
-  "version": "1.0.53",
+  "version": "1.0.54",
   "main": "index.js",
   "scripts": {
     "prestart": "node scripts/sync-secrets.js",
