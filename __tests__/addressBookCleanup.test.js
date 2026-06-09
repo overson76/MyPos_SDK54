@@ -5,6 +5,7 @@ import {
   entryScore,
   findPhoneDuplicates,
   findSimilarAliasPairs,
+  similarPairKey,
   findIncompleteEntries,
   mergeEntries,
   applyMerges,
@@ -118,15 +119,42 @@ describe('findSimilarAliasPairs — 비슷한 상호', () => {
     expect(findSimilarAliasPairs(entries)).toEqual([]);
   });
 
-  test('ignoredPairKeys 로 지정한 쌍은 제외 — "다른 가게" 확정', () => {
+  test('ignored 로 지정한 쌍은 제외 — "다른 가게" 확정 (상호명 alias 쌍)', () => {
     const entries = {
       a: { key: 'a', label: '주소A', alias: '탑마트', count: 5 },
       b: { key: 'b', label: '주소B', alias: '신평 탑마트', count: 1 },
     };
     expect(findSimilarAliasPairs(entries)).toHaveLength(1); // 무시 전
-    // 쌍 키 = 두 key 정렬 조합('a||b'). 배열·Set 둘 다 허용.
-    expect(findSimilarAliasPairs(entries, ['a||b'])).toHaveLength(0);
-    expect(findSimilarAliasPairs(entries, new Set(['a||b']))).toHaveLength(0);
+    // 쌍 키 = 상호명(alias) 정규화 정렬 조합 (entry key 아님 — 대표 key 변동 무관). 배열·Set 둘 다.
+    const key = similarPairKey('탑마트', '신평 탑마트');
+    expect(findSimilarAliasPairs(entries, [key])).toHaveLength(0);
+    expect(findSimilarAliasPairs(entries, new Set([key]))).toHaveLength(0);
+  });
+
+  test('대표 entry key 가 바뀌어도 alias 무시는 유지 — 진실보석 단골 회귀 방지', () => {
+    // 같은 상호 '진실보석' 에 entry 2개 — 주문이 쌓이면 count 로 대표 key 가 뒤바뀜.
+    //   옛 entry key 쌍 무시였다면 대표가 바뀌는 순간 무시가 풀려 다시 떴음.
+    const key = similarPairKey('진실보석', '진실보석(남자사장님)');
+    const before = {
+      p1: { key: 'p1', alias: '진실보석', count: 5 },
+      p2: { key: 'p2', alias: '진실보석', count: 3 },
+      q: { key: 'q', alias: '진실보석(남자사장님)', count: 1 },
+    };
+    expect(findSimilarAliasPairs(before, [key])).toHaveLength(0);
+    // count 역전으로 대표가 p1 → p2 로 바뀌어도 alias 키라 그대로 숨김.
+    const after = {
+      p1: { key: 'p1', alias: '진실보석', count: 3 },
+      p2: { key: 'p2', alias: '진실보석', count: 50 },
+      q: { key: 'q', alias: '진실보석(남자사장님)', count: 1 },
+    };
+    expect(findSimilarAliasPairs(after, [key])).toHaveLength(0);
+  });
+
+  test('similarPairKey — 순서·대소문자·공백 무관 정규화', () => {
+    expect(similarPairKey('탑마트', '신평 탑마트')).toBe(
+      similarPairKey('신평 탑마트', '탑마트')
+    );
+    expect(similarPairKey(' 탑마트 ', 'TOP')).toBe(similarPairKey('top', '탑마트'));
   });
 });
 

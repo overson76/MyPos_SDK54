@@ -15,6 +15,7 @@ import {
   mergeOrphanPhoneOnlyEntries,
   mergeSameAliasPhoneOnlyEntries,
 } from './addressBookMigrations';
+import { similarPairKey } from './addressBookCleanup';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -460,10 +461,12 @@ export function useAddressBook() {
   }, []);
 
   // 2026-06-05: "비슷한 상호" 후보를 "다른 가게" 로 확정 → 무시 목록에 추가.
-  //   findSimilarAliasPairs 가 제외하므로 다음 정리부터 안 뜸. 쌍 키 = 정렬 조합.
-  const ignoreSimilarPair = useCallback((keyA, keyB) => {
-    if (!keyA || !keyB) return;
-    const pairKey = [keyA, keyB].sort().join('||');
+  //   findSimilarAliasPairs 가 제외하므로 다음 정리부터 안 뜸.
+  // 2026-06-09: 쌍 키 = 상호명(alias) 정규화 쌍. entry key 는 대표 선택(count 등)에 따라
+  //   바뀌어 무시가 풀리던 버그(진실보석 단골 계속 뜸) → 사용자가 본 상호 이름으로 고정.
+  const ignoreSimilarPair = useCallback((aliasA, aliasB) => {
+    if (!aliasA || !aliasB) return;
+    const pairKey = similarPairKey(aliasA, aliasB);
     setAddressBook((prev) => {
       const cur = Array.isArray(prev.ignoredSimilarPairs)
         ? prev.ignoredSimilarPairs

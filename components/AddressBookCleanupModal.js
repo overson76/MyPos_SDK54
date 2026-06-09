@@ -189,7 +189,7 @@ export default function AddressBookCleanupModal({ visible, entries, ignoredPairs
                         </Text>
                         <TouchableOpacity
                           style={styles.otherStoreBtn}
-                          onPress={() => onIgnore?.(p.keyA, p.keyB)}
+                          onPress={() => onIgnore?.(p.a, p.b)}
                           hitSlop={6}
                         >
                           <Text style={styles.otherStoreBtnText}>다른 가게</Text>

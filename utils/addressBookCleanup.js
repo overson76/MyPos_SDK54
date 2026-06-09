@@ -86,10 +86,15 @@ export function findPhoneDuplicates(entries) {
   return groups;
 }
 
-// 비슷한 상호 쌍의 안정 키 — 두 entry key 를 정렬해 조합(순서 무관).
+// 비슷한 상호 쌍의 안정 키 — 사용자가 본 '상호 이름(alias)' 정규화 쌍(순서 무관).
 // "다른 가게" 무시 목록 / 후보 매칭에 공통 사용.
-export function similarPairKey(keyA, keyB) {
-  return [keyA, keyB].sort().join('||');
+// 2026-06-09: 옛 버전은 entry key 쌍이었으나, 대표 entry key 가 점수(count·주소 등)에 따라
+//   바뀌면 무시가 풀려 "진실보석" 단골이 "다른 가게" 처리 후에도 계속 뜨던 버그 →
+//   상호명(alias) 기준으로 고정. 어느 entry 가 대표든 상호 이름이 같으면 영구 무시.
+export function similarPairKey(aliasA, aliasB) {
+  const na = String(aliasA || '').trim().toLowerCase();
+  const nb = String(aliasB || '').trim().toLowerCase();
+  return [na, nb].sort().join('||');
 }
 
 // ── B. 비슷한 상호 쌍 (부분 포함, 정확 일치 제외) ──
@@ -123,7 +128,7 @@ export function findSimilarAliasPairs(entries, ignoredPairKeys) {
       if (la.includes(lb) || lb.includes(la)) {
         const keyA = aliasKey[a];
         const keyB = aliasKey[b];
-        if (ignored.has(similarPairKey(keyA, keyB))) continue; // "다른 가게" 확정 — 숨김
+        if (ignored.has(similarPairKey(a, b))) continue; // "다른 가게" 확정(상호명 쌍) — 대표 key 변동 무관
         // survivor = 점수 높은 쪽 (보통 주소/주문 많은 정식 entry)
         const aWins = entryScore(keyA, entries[keyA]) >= entryScore(keyB, entries[keyB]);
         pairs.push({
