@@ -1,14 +1,17 @@
-// 메뉴 퀵에디트 모달 — 주문 화면에서 메뉴 타일을 꾹 누르면 등장.
-// 이름 / 가격만 빠르게 수정. 이미지·카테고리 등 상세 수정은 관리자 → 메뉴관리로.
+// 메뉴 퀵에디트 모달 — 주문 화면에서 메뉴 타일 클릭(편집모드) 또는 꾹 누르면 등장.
+// 2026-06-09: 사장님 요청 — 관리자 안 거치고 주문탭에서 바로 추가/수정.
+//   이름 / 가격 + 카테고리 이동 + "대" 옵션(추가금) + 이미지까지 한 모달에서.
 //
 // iOS new architecture 크래시 회피 — absolute 오버레이 패턴 사용.
 
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +21,7 @@ import {
 import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import { sanitizeMenuName, sanitizeMenuPrice, VALIDATE_LIMITS } from '../utils/validate';
+import { pickMenuImage } from '../utils/pickMenuImage';
 
 // 2026-05-26 ⑥ fix: confirm 호출이 옛 코드의 `typeof window !== 'undefined' ? window?.confirm?.()
 // : true` 는 폰에서 window.confirm 이 undefined → ok=undefined → if(!ok) return 으로
@@ -39,21 +43,45 @@ function confirmDestructive(message) {
   });
 }
 
+// "대" 추가금 → sizeGroup 자동 매칭. 두 그룹의 라벨이 모두 "대..." 라 무난.
+//   2000원 이상 = deulpatkong(들/팥/콩), 그 외 = milkalsu(밀/칼/수).
+//   주문 화면은 item.sizeGroup 으로 대 버튼 노출 + item.sizeUpcharge 로 가격 부과.
+function sizeGroupForUpcharge(upcharge) {
+  return Number(upcharge) >= 2000 ? 'deulpatkong' : 'milkalsu';
+}
+
 // 1.0.26: addAt prop 추가 — { category, flatIndex } 면 신규 추가 모드.
-//   - mode='edit' (기본, item prop): 기존 메뉴 이름/가격 빠른 수정
-//   - mode='add' (addAt prop): 빈 슬롯 클릭 시 그 위치에 신규 메뉴 추가 (addNewItemAt)
-// 2026-05-26 ⑥: fromCategory prop — '즐겨찾기' 면 삭제 버튼이 "즐겨찾기에서 빼기" 동작
-//   (default 메뉴 자체 삭제는 ② mergeMenuItems 가 baseline 으로 다시 살리므로 의미 없음.
-//   사장님 의도 = 즐겨찾기 카테고리에서 그 메뉴 빼기).
+//   - mode='edit' (기본, item prop): 기존 메뉴 수정
+//   - mode='add' (addAt prop): 빈 슬롯 위치에 신규 메뉴 추가
+// 2026-05-26 ⑥: fromCategory prop — '즐겨찾기' 면 삭제 버튼이 "즐겨찾기에서 빼기" 동작.
 export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory }) {
-  const { updateItem, addNewItemAt, deleteItem, removeFromFavorite } = useMenu();
+  const {
+    updateItem,
+    updateItemImage,
+    resetItemImage,
+    addNewItemAt,
+    deleteItem,
+    removeFromFavorite,
+    categories,
+  } = useMenu();
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
   const isAddMode = !!addAt && !item;
+  const realCategories = (categories || []).filter((c) => c !== '즐겨찾기');
 
   const [name, setName] = useState(item?.name || '');
   const [price, setPrice] = useState(item ? String(item.price) : '');
+  const [category, setCategory] = useState(
+    item?.category || addAt?.category || realCategories[0] || '국수/만백'
+  );
+  // 대 옵션 — item.sizeGroup 있으면 ON, 추가금은 item.sizeUpcharge.
+  const [sizeEnabled, setSizeEnabled] = useState(!!item?.sizeGroup);
+  const [sizeUpcharge, setSizeUpcharge] = useState(
+    item?.sizeUpcharge ? String(item.sizeUpcharge) : '1000'
+  );
+  // 이미지 — pickedImage 가 null 이면 변경 없음. '' 면 기본 복원 예약.
+  const [pickedImage, setPickedImage] = useState(undefined); // undefined=미변경
   const [nameErr, setNameErr] = useState('');
   const [priceErr, setPriceErr] = useState('');
   const [saving, setSaving] = useState(false);
@@ -63,14 +91,20 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
     if (item) {
       setName(item.name || '');
       setPrice(String(item.price || ''));
-      setNameErr('');
-      setPriceErr('');
+      setCategory(item.category || realCategories[0] || '국수/만백');
+      setSizeEnabled(!!item.sizeGroup);
+      setSizeUpcharge(item.sizeUpcharge ? String(item.sizeUpcharge) : '1000');
     } else if (addAt) {
       setName('');
       setPrice('');
-      setNameErr('');
-      setPriceErr('');
+      setCategory(addAt.category || realCategories[0] || '국수/만백');
+      setSizeEnabled(false);
+      setSizeUpcharge('1000');
     }
+    setPickedImage(undefined);
+    setNameErr('');
+    setPriceErr('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, addAt?.flatIndex, addAt?.category]);
 
   if (!item && !addAt) return null;
@@ -92,34 +126,64 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
     return ok;
   };
 
+  const handlePickImage = async () => {
+    const url = await pickMenuImage();
+    if (url) setPickedImage(url);
+  };
+
   const handleSave = () => {
     if (!validate()) return;
     const newName = sanitizeMenuName(name);
     const newPrice = sanitizeMenuPrice(price);
+    const upN = Math.max(0, Number(String(sizeUpcharge).replace(/[^0-9]/g, '')) || 0);
+    // 대 옵션 필드 — ON 이면 group+추가금, OFF 면 비움('' / 0)으로 명시 제거.
+    const sizeFields = sizeEnabled
+      ? { sizeGroup: sizeGroupForUpcharge(upN), sizeUpcharge: upN }
+      : { sizeGroup: '', sizeUpcharge: 0 };
 
     setSaving(true);
     if (isAddMode) {
-      // 신규 추가 — addAt 의 category + flatIndex 위치에 메뉴 생성.
-      addNewItemAt({ name: newName, price: newPrice, category: addAt.category }, addAt.flatIndex);
+      addNewItemAt(
+        {
+          name: newName,
+          price: newPrice,
+          category,
+          image: pickedImage && pickedImage !== '' ? pickedImage : undefined,
+          ...(sizeEnabled ? sizeFields : {}),
+        },
+        addAt.flatIndex
+      );
     } else {
-      // 변경 없으면 그냥 닫기
-      if (newName === item.name && newPrice === item.price) {
-        setSaving(false);
-        onClose();
-        return;
+      updateItem(item.id, {
+        name: newName,
+        price: newPrice,
+        category,
+        ...sizeFields,
+      });
+      // 이미지 — 새로 고른 게 있으면 적용, '' (기본 복원) 이면 reset.
+      if (pickedImage && pickedImage !== '') {
+        updateItemImage(item.id, pickedImage);
+      } else if (pickedImage === '') {
+        resetItemImage(item.id);
       }
-      updateItem(item.id, { name: newName, price: newPrice });
     }
     setSaving(false);
     onClose();
   };
+
+  // 미리보기 이미지 — 새로 고른 것 우선, 없으면 기존 item.image.
+  const previewImage =
+    pickedImage && pickedImage !== ''
+      ? pickedImage
+      : pickedImage === ''
+        ? ''
+        : item?.image || '';
 
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onClose}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          // 2026-05-28 (2부): 모달 헤더 보정 — landscape 키보드 가림 처방.
           keyboardVerticalOffset={60}
           style={styles.keyboardAvoidWrap}
         >
@@ -127,43 +191,144 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
           {/* 헤더 */}
           <View style={styles.header}>
             <Text style={styles.title}>
-              {isAddMode ? '➕ 새 메뉴 추가' : '✏️ 빠른 메뉴 수정'}
+              {isAddMode ? '➕ 새 메뉴 추가' : '✏️ 메뉴 수정'}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={8}>
               <Text style={styles.close}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {isAddMode ? `카테고리: ${addAt.category}` : item.name}
-          </Text>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* 이름 */}
+            <Text style={styles.label}>메뉴 이름</Text>
+            <TextInput
+              style={[styles.input, nameErr ? styles.inputErr : null]}
+              value={name}
+              onChangeText={setName}
+              placeholder="메뉴 이름"
+              maxLength={30}
+              returnKeyType="next"
+              autoFocus={isAddMode}
+            />
+            {nameErr ? <Text style={styles.errText}>{nameErr}</Text> : null}
 
-          {/* 이름 */}
-          <Text style={styles.label}>메뉴 이름</Text>
-          <TextInput
-            style={[styles.input, nameErr ? styles.inputErr : null]}
-            value={name}
-            onChangeText={setName}
-            placeholder="메뉴 이름"
-            maxLength={30}
-            returnKeyType="next"
-            autoFocus
-          />
-          {nameErr ? <Text style={styles.errText}>{nameErr}</Text> : null}
+            {/* 가격 */}
+            <Text style={styles.label}>가격 (원)</Text>
+            <TextInput
+              style={[styles.input, priceErr ? styles.inputErr : null]}
+              value={price}
+              onChangeText={setPrice}
+              placeholder="가격"
+              keyboardType="number-pad"
+              maxLength={8}
+              returnKeyType="done"
+            />
+            {priceErr ? <Text style={styles.errText}>{priceErr}</Text> : null}
 
-          {/* 가격 */}
-          <Text style={styles.label}>가격 (원)</Text>
-          <TextInput
-            style={[styles.input, priceErr ? styles.inputErr : null]}
-            value={price}
-            onChangeText={setPrice}
-            placeholder="가격"
-            keyboardType="number-pad"
-            maxLength={8}
-            returnKeyType="done"
-            onSubmitEditing={handleSave}
-          />
-          {priceErr ? <Text style={styles.errText}>{priceErr}</Text> : null}
+            {/* 카테고리 — 칩 선택. 다른 카테고리로 이동 = 메뉴 옮기기. */}
+            <Text style={styles.label}>카테고리</Text>
+            <View style={styles.catWrap}>
+              {realCategories.map((c) => {
+                const active = c === category;
+                return (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.catChip, active && styles.catChipActive]}
+                    onPress={() => setCategory(c)}
+                  >
+                    <Text
+                      style={[
+                        styles.catChipText,
+                        active && styles.catChipTextActive,
+                      ]}
+                    >
+                      {c}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 대 옵션 — 토글 + 추가금 */}
+            <View style={styles.sizeRow}>
+              <Text style={styles.label}>"대" 옵션 (곱빼기)</Text>
+              <TouchableOpacity
+                style={[styles.toggle, sizeEnabled && styles.toggleOn]}
+                onPress={() => setSizeEnabled((v) => !v)}
+              >
+                <Text
+                  style={[
+                    styles.toggleText,
+                    sizeEnabled && styles.toggleTextOn,
+                  ]}
+                >
+                  {sizeEnabled ? 'ON' : 'OFF'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {sizeEnabled ? (
+              <View style={styles.sizeUpchargeRow}>
+                <Text style={styles.sizeHint}>대 추가금</Text>
+                <TextInput
+                  style={styles.sizeInput}
+                  value={sizeUpcharge}
+                  onChangeText={setSizeUpcharge}
+                  placeholder="1000"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+                <Text style={styles.sizeHint}>원</Text>
+                <View style={styles.presetRow}>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPress={() => setSizeUpcharge('1000')}
+                  >
+                    <Text style={styles.presetText}>+1,000</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPress={() => setSizeUpcharge('2000')}
+                  >
+                    <Text style={styles.presetText}>+2,000</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {/* 이미지 */}
+            <Text style={styles.label}>이미지</Text>
+            <View style={styles.imageRow}>
+              <ImageBackground
+                source={{ uri: previewImage || undefined }}
+                style={styles.thumb}
+                imageStyle={styles.thumbImg}
+              >
+                {!previewImage ? (
+                  <Text style={styles.thumbEmpty}>없음</Text>
+                ) : null}
+              </ImageBackground>
+              <View style={styles.imageBtns}>
+                <TouchableOpacity
+                  style={styles.imgBtn}
+                  onPress={handlePickImage}
+                >
+                  <Text style={styles.imgBtnText}>📷 이미지 선택</Text>
+                </TouchableOpacity>
+                {!isAddMode ? (
+                  <TouchableOpacity
+                    style={styles.imgBtnGhost}
+                    onPress={() => setPickedImage('')}
+                  >
+                    <Text style={styles.imgBtnGhostText}>기본으로</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          </ScrollView>
 
           {/* 버튼 */}
           <View style={styles.btnRow}>
@@ -179,29 +344,18 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
             </TouchableOpacity>
           </View>
 
-          {/* 1.0.26 + ⑥(2026-05-26): 삭제 버튼. 즐겨찾기 카테고리에서는 즐겨찾기 해제,
-              다른 카테고리에서는 메뉴 자체 삭제. confirm 도 Platform 분기로 폰 정상 작동. */}
+          {/* 삭제 — 즐겨찾기 카테고리에서는 즐겨찾기 해제, 다른 곳에서는 메뉴 삭제. */}
           {!isAddMode ? (
             <TouchableOpacity
-              style={{
-                marginTop: 12,
-                paddingVertical: 8,
-                borderRadius: 8,
-                backgroundColor: '#fef2f2',
-                borderWidth: 1,
-                borderColor: '#fecaca',
-                alignItems: 'center',
-              }}
+              style={styles.deleteBtn}
               onPress={async () => {
                 if (fromCategory === '즐겨찾기') {
-                  // 즐겨찾기에서 빼기 — confirm 없이 즉시 (☆ 다시 누르면 복원 가능)
                   if (typeof removeFromFavorite === 'function') {
                     removeFromFavorite(item.id);
                   }
                   onClose();
                   return;
                 }
-                // 메뉴 자체 삭제 — 되돌릴 수 없으므로 confirm 유지
                 const ok = await confirmDestructive(
                   `'${item.name}' 메뉴를 삭제할까요?\n매출 이력에는 영향 없음. 격자 슬롯이 비워집니다.`
                 );
@@ -210,18 +364,11 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
                 onClose();
               }}
             >
-              <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>
+              <Text style={styles.deleteBtnText}>
                 {fromCategory === '즐겨찾기' ? '⭐ 즐겨찾기에서 빼기' : '🗑️ 메뉴 삭제'}
               </Text>
             </TouchableOpacity>
           ) : null}
-
-          {/* 상세 수정 안내 */}
-          <Text style={styles.hint}>
-            {isAddMode
-              ? '이미지·색상 등 추가 설정 → 저장 후 관리자 → 메뉴 관리'
-              : '이미지·카테고리 등 상세 수정 → 관리자 → 메뉴 관리'}
-          </Text>
         </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -248,7 +395,8 @@ function makeStyles(scale = 1) {
       alignItems: 'center',
     },
     card: {
-      width: 320,
+      width: 360,
+      maxHeight: '92%',
       backgroundColor: '#fff',
       borderRadius: 16,
       padding: 20,
@@ -257,20 +405,18 @@ function makeStyles(scale = 1) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 4,
+      marginBottom: 8,
     },
     title: { fontSize: fp(16), fontWeight: '800', color: '#111827' },
     close: { fontSize: fp(20), color: '#6b7280', paddingHorizontal: 6 },
-    subtitle: {
-      fontSize: fp(12),
-      color: '#6b7280',
-      marginBottom: 14,
-    },
+    scroll: { flexGrow: 0 },
+    scrollContent: { paddingBottom: 4 },
     label: {
       fontSize: fp(12),
       fontWeight: '700',
       color: '#374151',
       marginBottom: 4,
+      marginTop: 8,
     },
     input: {
       borderWidth: 1,
@@ -284,10 +430,108 @@ function makeStyles(scale = 1) {
     },
     inputErr: { borderColor: '#ef4444' },
     errText: { fontSize: fp(11), color: '#ef4444', marginBottom: 6 },
+    // 카테고리 칩
+    catWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 4,
+    },
+    catChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: '#f3f4f6',
+      borderWidth: 1,
+      borderColor: '#e5e7eb',
+    },
+    catChipActive: { backgroundColor: '#dbeafe', borderColor: '#3b82f6' },
+    catChipText: { fontSize: fp(12), fontWeight: '600', color: '#374151' },
+    catChipTextActive: { color: '#1d4ed8' },
+    // 대 옵션
+    sizeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    toggle: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: '#f3f4f6',
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      marginTop: 8,
+    },
+    toggleOn: { backgroundColor: '#16a34a', borderColor: '#15803d' },
+    toggleText: { fontSize: fp(12), fontWeight: '800', color: '#6b7280' },
+    toggleTextOn: { color: '#fff' },
+    sizeUpchargeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 6,
+      flexWrap: 'wrap',
+    },
+    sizeHint: { fontSize: fp(12), color: '#6b7280', fontWeight: '600' },
+    sizeInput: {
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      fontSize: fp(14),
+      color: '#111827',
+      width: 80,
+      textAlign: 'right',
+    },
+    presetRow: { flexDirection: 'row', gap: 4, marginLeft: 4 },
+    presetBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: '#eff6ff',
+      borderWidth: 1,
+      borderColor: '#bfdbfe',
+    },
+    presetText: { fontSize: fp(11), fontWeight: '700', color: '#1d4ed8' },
+    // 이미지
+    imageRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+    thumb: {
+      width: 64,
+      height: 64,
+      borderRadius: 8,
+      backgroundColor: '#f3f4f6',
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    thumbImg: { borderRadius: 8 },
+    thumbEmpty: { fontSize: fp(11), color: '#9ca3af' },
+    imageBtns: { flex: 1, gap: 6 },
+    imgBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: '#1F2937',
+      alignItems: 'center',
+    },
+    imgBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
+    imgBtnGhost: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#d1d5db',
+      alignItems: 'center',
+    },
+    imgBtnGhostText: { color: '#374151', fontSize: fp(12), fontWeight: '600' },
+    // 하단 버튼
     btnRow: {
       flexDirection: 'row',
       gap: 10,
-      marginTop: 16,
+      marginTop: 14,
     },
     cancelBtn: {
       flex: 1,
@@ -306,11 +550,15 @@ function makeStyles(scale = 1) {
     },
     saveBtnDisabled: { opacity: 0.5 },
     saveText: { fontSize: fp(14), fontWeight: '800', color: '#fff' },
-    hint: {
-      fontSize: fp(11),
-      color: '#9ca3af',
-      textAlign: 'center',
-      marginTop: 10,
+    deleteBtn: {
+      marginTop: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: '#fef2f2',
+      borderWidth: 1,
+      borderColor: '#fecaca',
+      alignItems: 'center',
     },
+    deleteBtnText: { color: '#dc2626', fontWeight: '700', fontSize: fp(13) },
   });
 }

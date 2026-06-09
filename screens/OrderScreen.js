@@ -1464,6 +1464,33 @@ export default function OrderScreen({
             ) : (
               <View style={{ flex: 1 }} />
             )}
+            {/* 2026-06-09: [➕ 추가] — 관리자 안 거치고 주문탭에서 바로 신규 메뉴.
+                현재 카테고리 첫 빈칸에 추가. 추천(자동생성)/즐겨찾기(큐레이션)는 제외. */}
+            {!isRecommendation && activeCategory !== '즐겨찾기' ? (
+              <TouchableOpacity
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: '#16a34a',
+                  borderWidth: 1,
+                  borderColor: '#15803d',
+                  marginRight: 6,
+                }}
+                onPress={() =>
+                  setMenuAddTarget({
+                    category: activeCategory,
+                    flatIndex: -1,
+                  })
+                }
+                activeOpacity={0.7}
+                accessibilityLabel={`${activeCategory} 새 메뉴 추가`}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#fff' }}>
+                  ➕ 추가
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={{
                 paddingHorizontal: 12,

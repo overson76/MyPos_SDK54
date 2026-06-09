@@ -393,6 +393,14 @@ export function MenuProvider({ children }) {
         category: cat,
         favorite: !!partial.favorite,
         image: sanitizeImageDataUrl(partial.image) || '',
+        // 2026-06-09: 신규 메뉴도 "대" 옵션 지원 (주문탭 인라인 추가에서 설정).
+        //   sizeGroup 있을 때만 박음 — 없으면 필드 자체 생략 (옛 동작 보존).
+        ...(partial.sizeGroup
+          ? {
+              sizeGroup: partial.sizeGroup,
+              sizeUpcharge: Number(partial.sizeUpcharge) || 0,
+            }
+          : {}),
       };
 
       const nextRows = normalizeAllToGrid(safeCurrentRows());
@@ -435,6 +443,14 @@ export function MenuProvider({ children }) {
         category: cat,
         favorite: !!partial.favorite,
         image: sanitizeImageDataUrl(partial.image) || '',
+        // 2026-06-09: 신규 메뉴도 "대" 옵션 지원 (주문탭 인라인 추가에서 설정).
+        //   sizeGroup 있을 때만 박음 — 없으면 필드 자체 생략 (옛 동작 보존).
+        ...(partial.sizeGroup
+          ? {
+              sizeGroup: partial.sizeGroup,
+              sizeUpcharge: Number(partial.sizeUpcharge) || 0,
+            }
+          : {}),
       };
 
       const nextRows = normalizeAllToGrid(safeCurrentRows());
