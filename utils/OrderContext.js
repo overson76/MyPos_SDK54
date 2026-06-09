@@ -20,6 +20,7 @@ import {
   detectDynamicSlotPrefix,
   findEmptyDeliverySlot,
   findEmptySlotForType,
+  findPendingCallSlot,
   findHistoryEntry,
   groupItemsBySource,
   markHistoryReverted,
@@ -788,6 +789,38 @@ export function OrderProvider({ children }) {
     // 반환: 배당된 슬롯 ID (caller 가 setSelectedTable 호출해서 그 테이블로 진입)
     const submitPendingAsType = (type, opts = {}) => {
       const { deliveryAddress, deliveryPhone, deliveryAlias, migrateCart = true } = opts;
+      // 2026-06-09: 전화 흐름(migrateCart=false: 10초 자동 stash / CID "주문받기")에서
+      //   같은 발신자의 "주문대기" 슬롯이 이미 있으면 새 슬롯을 만들지 않고 재사용 —
+      //   멀티기기 동시 stash / CID 재수신으로 같은 전화가 d2·d3 에 중복으로 박히던 사고
+      //   처방. 전화 1통 = 슬롯 1개(멱등). 메뉴를 담기 시작한 슬롯은 findPendingCallSlot 이
+      //   제외하므로, 같은 손님이 메뉴 담는 중 새 전화로 또 거는 의도적 2차 주문엔 영향 X.
+      if (!migrateCart && (deliveryPhone || deliveryAlias || deliveryAddress)) {
+        const reuseId = findPendingCallSlot(orders, {
+          phone: deliveryPhone,
+          alias: deliveryAlias,
+          address: deliveryAddress,
+        });
+        if (reuseId) {
+          // 기존 주문대기 슬롯에 최신 발신자 정보만 보강 (주소가 나중에 채워진 경우 등)
+          if (deliveryAddress) {
+            dispatch({
+              type: 'orders/setDeliveryAddress',
+              tableId: reuseId,
+              safeAddress: sanitizeDeliveryAddress(deliveryAddress),
+            });
+          }
+          if (deliveryPhone || deliveryAlias) {
+            dispatch({
+              type: 'orders/setDeliveryContact',
+              tableId: reuseId,
+              phone: deliveryPhone || null,
+              alias: deliveryAlias || null,
+            });
+          }
+          addBreadcrumb('order.submitPendingAsType.reuse', { type, reuseId });
+          return reuseId;
+        }
+      }
       const targetId = findEmptySlotForType(orders, type);
       if (!targetId) return null;
       // 1단계: PENDING cart 있으면 슬롯으로 migrate. 없으면 빈 슬롯 그대로.

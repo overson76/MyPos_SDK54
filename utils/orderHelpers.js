@@ -206,6 +206,40 @@ export function findEmptyDeliverySlot(orders) {
   return findEmptySlotForType(orders, 'delivery');
 }
 
+// 2026-06-09: 같은 발신자의 "주문대기"(메뉴 없이 발신자 정보만 박힌) 슬롯 찾기.
+//   전화 자동 stash / "주문받기" 가 멀티기기(PC·아이패드가 각자 10초 타이머) 또는 CID
+//   재수신으로 같은 전화를 d2·d3 에 중복으로 박던 사고 처방. submitPendingAsType 이 새
+//   슬롯을 만들기 전에 이걸로 기존 주문대기 슬롯을 찾아 재사용 → 전화 1통 = 슬롯 1개(멱등).
+//   phone 이 있으면 phone(정규화 digits) 만으로 판정 — 다른 번호 = 다른 손님이므로 alias/
+//   address 폴백을 타지 않음. phone 없는 발신자(드묾)만 alias 또는 address 로 매칭.
+//   메뉴가 담긴 슬롯(items/cartItems)은 이미 작업 중이라 제외.
+export function findPendingCallSlot(orders, opts = {}) {
+  const wantDigits = String(opts.phone || '').replace(/\D/g, '');
+  const wantAlias = String(opts.alias || '').trim();
+  const wantAddress = String(opts.address || '').trim();
+  if (!wantDigits && !wantAlias && !wantAddress) return null;
+  const isPendingCall = (o) =>
+    !!o &&
+    (o.items?.length || 0) === 0 &&
+    (o.cartItems?.length || 0) === 0 &&
+    (!!o.deliveryPhone || !!o.deliveryAlias || !!o.deliveryAddress);
+  const matches = (o) => {
+    if (wantDigits) {
+      const oDigits = String(o.deliveryPhone || '').replace(/\D/g, '');
+      return !!oDigits && oDigits === wantDigits;
+    }
+    if (wantAlias && String(o.deliveryAlias || '').trim() === wantAlias) return true;
+    if (wantAddress && String(o.deliveryAddress || '').trim() === wantAddress) return true;
+    return false;
+  };
+  const keys = Object.keys(orders || {});
+  for (let i = 0; i < keys.length; i += 1) {
+    const o = orders[keys[i]];
+    if (isPendingCall(o) && matches(o)) return keys[i];
+  }
+  return null;
+}
+
 // 동일한 (id, options, cookState/portion states, sourceTableId)를 가진 슬롯들을 qty/largeQty 합산하여 병합.
 // 1.0.35: sourceTableId 추가 — 단체(group, 묶음) 결성 후에도 각 손님 테이블별 슬롯이 살아남아야
 // 1인/테이블별 결제 분리가 가능. 동일 메뉴라도 sourceTable 이 다르면 별도 슬롯 유지.

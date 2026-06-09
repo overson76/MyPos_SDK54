@@ -15,6 +15,7 @@ import {
   computeSubtotalsBySource,
   findEmptyDeliverySlot,
   findEmptySlotForType,
+  findPendingCallSlot,
 } from '../utils/orderHelpers';
 
 describe('capHistory', () => {
@@ -523,5 +524,79 @@ describe('findEmptySlotForType', () => {
   test('reservation — 시간만 있는 y1 도 점유 → y2', () => {
     const orders = { y1: { items: [], cartItems: [], deliveryTime: '700' } };
     expect(findEmptySlotForType(orders, 'reservation')).toBe('y2');
+  });
+});
+
+// 2026-06-09: 전화 1통에 "주문대기" 슬롯이 d2·d3 로 중복 생기던 사고 처방 — 같은 발신자의
+//   기존 주문대기 슬롯을 찾아 submitPendingAsType 이 재사용(멱등)하기 위한 헬퍼.
+describe('findPendingCallSlot', () => {
+  const pending = (extra) => ({ items: [], cartItems: [], ...extra });
+
+  test('같은 phone 의 주문대기 슬롯이 있으면 그 ID 반환', () => {
+    const orders = { d2: pending({ deliveryPhone: '01012345678' }) };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBe('d2');
+  });
+
+  test('phone digits 정규화 — 하이픈/형식 달라도 매칭', () => {
+    const orders = { d1: pending({ deliveryPhone: '010-1234-5678' }) };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBe('d1');
+  });
+
+  test('다른 phone 이면 null (새 슬롯 만들도록)', () => {
+    const orders = { d1: pending({ deliveryPhone: '01011112222' }) };
+    expect(findPendingCallSlot(orders, { phone: '01033334444' })).toBeNull();
+  });
+
+  test('메뉴(items)가 담긴 슬롯은 제외 → null', () => {
+    const orders = {
+      d1: { items: [{ id: 'a' }], cartItems: [], deliveryPhone: '01012345678' },
+    };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBeNull();
+  });
+
+  test('장바구니(cartItems)가 있는 슬롯도 제외 → null', () => {
+    const orders = {
+      d1: { items: [], cartItems: [{ id: 'a' }], deliveryPhone: '01012345678' },
+    };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBeNull();
+  });
+
+  test('phone 우선 — phone 다르면 alias 같아도 null (다른 번호=다른 손님)', () => {
+    const orders = {
+      d1: pending({ deliveryPhone: '01011112222', deliveryAlias: '아가맘' }),
+    };
+    expect(
+      findPendingCallSlot(orders, { phone: '01099998888', alias: '아가맘' })
+    ).toBeNull();
+  });
+
+  test('phone 없는 발신자 — alias 로 매칭', () => {
+    const orders = { d1: pending({ deliveryAlias: '아가맘' }) };
+    expect(findPendingCallSlot(orders, { alias: '아가맘' })).toBe('d1');
+  });
+
+  test('phone 없는 발신자 — address 로 매칭', () => {
+    const orders = { d3: pending({ deliveryAddress: '사하구 사하로 47' }) };
+    expect(findPendingCallSlot(orders, { address: '사하구 사하로 47' })).toBe('d3');
+  });
+
+  test('발신자 정보가 전혀 없는 빈 슬롯은 매칭 안 함', () => {
+    const orders = { d1: pending({}) };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBeNull();
+  });
+
+  test('opts 가 비어있으면 null', () => {
+    const orders = { d1: pending({ deliveryPhone: '01012345678' }) };
+    expect(findPendingCallSlot(orders, {})).toBeNull();
+    expect(findPendingCallSlot(orders)).toBeNull();
+  });
+
+  test('여러 주문대기 중 일치하는 첫 슬롯 반환', () => {
+    const orders = {
+      d1: pending({ deliveryPhone: '01011112222' }),
+      d2: pending({ deliveryPhone: '01012345678' }),
+      d3: pending({ deliveryPhone: '01012345678' }),
+    };
+    expect(findPendingCallSlot(orders, { phone: '01012345678' })).toBe('d2');
   });
 });

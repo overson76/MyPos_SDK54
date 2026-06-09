@@ -1376,17 +1376,15 @@ export default function OrderScreen({
           onSelect={(label, entry) => {
             if (!tableId) return;
             setDeliveryAddress(tableId, label);
-            // 1.0.53: 별칭 단골 자동 등록 — 별칭만 있고 phone 비어있는 entry 클릭 시
-            // 현재 주문의 deliveryPhone (CID 또는 사장님 입력) 을 entry.phone 에 자동 sync.
-            // 다음 전화부터 같은 phone 으로 단골 자동 인식 (사장님 의도).
             const order = getOrder(tableId);
-            if (
-              entry?.key &&
-              !entry.phone &&
-              order?.deliveryPhone &&
-              typeof setPhone === 'function'
-            ) {
-              setPhone(entry.key, order.deliveryPhone);
+            // 2026-06-09: 주소록에서 배달지 선택 시, 이번 발신 전화번호를 그 entry 에
+            //   '추가 전화'로 등록 (mergePhoneIntoEntry — phones 배열에 누적, 이미 있으면
+            //   멱등 noop). entry.phone 유무 무관 — 신규 번호로 전화 온 단골이 기존 배달지를
+            //   고르면 그 번호가 entry 에 쌓여 다음 전화부터 단골 자동 인식 (사장님 요구).
+            //   (옛 1.0.53 은 entry.phone 이 '없을 때만' 등록 → 기존 전화 있는 단골은 누락)
+            const callerPhone = order?.deliveryPhone || getLastCallPhone() || '';
+            if (entry?.key && callerPhone && typeof mergePhoneIntoEntry === 'function') {
+              mergePhoneIntoEntry(entry.key, callerPhone);
             }
             // 2026-05-27: 사장님 호소 처방 — 주소록에서 단골 선택 시 entry 의
             // alias / phone 도 현재 주문에 자동 sync. 사장님이 다시 별칭/전번

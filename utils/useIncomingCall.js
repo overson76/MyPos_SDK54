@@ -50,7 +50,21 @@ export function useIncomingCall(storeId) {
     return () => unsub();
   }, [storeId]);
 
-  const dismiss = useCallback(() => setCall(null), []);
+  const dismiss = useCallback(() => {
+    setCall(null);
+    // 2026-06-09: 로컬뿐 아니라 Firestore incomingCall 문서도 삭제 — 멀티기기(PC·아이패드)가
+    //   각자 10초 자동 stash 해서 같은 전화가 여러 슬롯에 박히던 중복 사고 처방. 한 기기가
+    //   처리하면 모든 기기 알림이 사라지고 타이머 cleanup. 재수신 부활 경로도 차단.
+    //   simulate 는 문서 없어 noop. 실패해도 로컬 dismiss 유지.
+    try {
+      const db = getFirestore();
+      if (db && storeId) {
+        db.collection('stores').doc(storeId).collection('state').doc('incomingCall').delete();
+      }
+    } catch (e) {
+      // 삭제 실패해도 로컬 dismiss 는 유지
+    }
+  }, [storeId]);
 
   // 2026-05-28: 시연 / 검증용 — Firestore 안 거치고 로컬 state 만. 라이브 영향 0.
   const simulateCall = useCallback((data = {}) => {

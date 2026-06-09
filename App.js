@@ -293,15 +293,19 @@ function MainApp() {
       // 자동 stash — 빈 d 슬롯에 발신자 정보만 박음. PENDING cart 없으니 메뉴는
       // 비어있고 (items=0, cartItems=0), deliveryPhone/alias/address 만 채워짐.
       // TableScreen 이 그 상태를 "🕐 주문대기" 배지로 렌더.
-      submitPendingAsType('delivery', {
+      // 2026-06-09: 먼저 dismiss(로컬 + Firestore incomingCall 문서 삭제)로 다른 기기의
+      //   동일 10초 타이머를 멈춤(claim) — 그 다음 이 기기가 stash. 멀티기기가 같은 전화를
+      //   각자 빈 슬롯에 박던 중복의 레이스 창을 좁힘. 최종 방어선은 submitPendingAsType 의
+      //   멱등 가드(같은 발신자 주문대기 슬롯 재사용)라 레이스가 나도 중복 슬롯은 안 생김.
+      const callInfo = {
         deliveryAddress: incomingCall.address || null,
         deliveryPhone: incomingCall.phoneNumber || null,
         deliveryAlias: incomingCall.alias || null,
         // 2026-06-05: 작업 중 PENDING 카트를 가로채지 않음 — 빈 슬롯에 발신자 정보만.
-        //   (사장님이 다른 손님 메뉴 담는 중 전화 와도 그 카트가 배달칸으로 끌려가던 사고)
         migrateCart: false,
-      });
+      };
       dismissIncomingCall();
+      submitPendingAsType('delivery', callInfo);
     }, 10_000);
     return () => clearTimeout(timer);
   }, [incomingCall, submitPendingAsType, dismissIncomingCall]);

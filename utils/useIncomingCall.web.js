@@ -80,7 +80,22 @@ export function useIncomingCall(storeId) {
     return () => unsub();
   }, [storeId]);
 
-  const dismiss = useCallback(() => setCall(null), []);
+  const dismiss = useCallback(() => {
+    setCall(null);
+    // 2026-06-09: 로컬뿐 아니라 Firestore incomingCall 문서도 삭제. 멀티기기(PC·아이패드)가
+    //   각자 10초 자동 stash 해서 같은 전화가 여러 슬롯에 박히던 중복 사고 처방 — 한 기기가
+    //   처리(주문받기/자동 stash)하면 모든 기기의 알림이 사라지고 타이머도 cleanup 됨.
+    //   재수신(CID 서버 ring 반복)으로 incomingCall 이 부활하던 단일기기 경로도 차단.
+    //   simulate 호출은 Firestore 문서가 없어 delete 가 noop. 실패해도 로컬 dismiss 는 유효.
+    try {
+      const db = getFirestore();
+      if (db && storeId) {
+        db.collection('stores').doc(storeId).collection('state').doc('incomingCall').delete();
+      }
+    } catch (e) {
+      // 삭제 실패(네트워크 등)해도 로컬 dismiss 는 유지 — 흐름 안 막음
+    }
+  }, [storeId]);
 
   // 2026-05-28: 시연 / 검증용 — Firestore 안 거치고 로컬 state 만. 라이브 데이터 영향 0.
   // 가상 CID 호출로 IncomingCallBanner → AliasPromptModal → Toast 흐름 즉시 검증.
