@@ -54,6 +54,9 @@ export const menuItems = [
     color: '#E8C54A',
     category: '만두/공기밥',
     favorite: true,
+    // 2026-06-09 사장님 요청 — 만두백반도 "대" 가능. 대 추가금 1000원 (milkalsu 그룹).
+    sizeGroup: 'milkalsu',
+    sizeUpcharge: 1000,
     image:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Korean_cuisine-Kalguksu_and_mandu.jpg/500px-Korean_cuisine-Kalguksu_and_mandu.jpg',
   },
