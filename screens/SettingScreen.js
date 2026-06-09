@@ -109,6 +109,9 @@ export default function SettingScreen() {
     moveItemInCategory,
     placeFavoriteAt,
     removeFromFavorite,
+    inOrderIds,
+    removeFromOrder,
+    addExistingToOrder,
   } = useMenu();
 
   const [filter, setFilter] = useState('전체');
@@ -467,6 +470,43 @@ export default function SettingScreen() {
                       {item.favorite ? '★ 즐겨찾기' : '☆ 즐겨찾기'}
                     </Text>
                   </TouchableOpacity>
+                  {/* 2026-06-09: 주문 노출 토글 — 메뉴목록=시즌 마스터 카탈로그,
+                      주문 탭=현재 운영분. 끄면 주문에서 빠지고 목록엔 잔류(겨울 콩국수). */}
+                  {(() => {
+                    const inOrder =
+                      inOrderIds &&
+                      typeof inOrderIds.has === 'function' &&
+                      inOrderIds.has(item.id);
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.orderToggle,
+                          inOrder
+                            ? styles.orderToggleOn
+                            : styles.orderToggleOff,
+                        ]}
+                        onPress={() => {
+                          if (inOrder) {
+                            if (typeof removeFromOrder === 'function')
+                              removeFromOrder(item.id);
+                          } else if (typeof addExistingToOrder === 'function') {
+                            addExistingToOrder(item.id, item.category);
+                          }
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.orderToggleText,
+                            inOrder
+                              ? styles.orderToggleTextOn
+                              : styles.orderToggleTextOff,
+                          ]}
+                        >
+                          {inOrder ? '🟢 주문 노출' : '⚪ 시즌 대기'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
 
                 {/* 카테고리 내 위치 이동 */}
@@ -736,6 +776,18 @@ function makeStyles(scale = 1) {
   favBtnActive: { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
   favText: { fontSize: fp(11), color: '#6b7280', fontWeight: '600' },
   favTextActive: { color: '#92400e', fontWeight: '700' },
+  // 주문 노출 / 시즌 대기 토글
+  orderToggle: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  orderToggleOn: { backgroundColor: '#ecfdf5', borderColor: '#34d399' },
+  orderToggleOff: { backgroundColor: '#f3f4f6', borderColor: '#d1d5db' },
+  orderToggleText: { fontSize: fp(11), fontWeight: '700' },
+  orderToggleTextOn: { color: '#047857' },
+  orderToggleTextOff: { color: '#6b7280' },
 
   moveRow: {
     flexDirection: 'row',

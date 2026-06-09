@@ -31,6 +31,7 @@ import {
   removeIdFromFavoriteGrid,
   findIdSlotInGrid,
 } from './favoriteGrid';
+import { collectInOrderIds } from './menuCatalog';
 import {
   sanitizeImageDataUrl,
   sanitizeMenuName,
@@ -494,6 +495,37 @@ export function MenuProvider({ children }) {
     [deleteMenuItemFs, writeMenuRowsFs]
   );
 
+  // 2026-06-09: 주문에서 빼기 (시즌 종료) — 모든 그리드에서 id 제거하되 items/Firestore
+  //   item 은 보존. 카탈로그엔 잔류 → 다음 시즌에 addExistingToOrder 로 다시 올림.
+  //   deleteItem 과 달리 setItems/deleteMenuItemFs 안 함.
+  const removeFromOrder = useCallback(
+    (id) => {
+      const nextRows = normalizeAllToGrid(safeCurrentRows());
+      for (const cat of Object.keys(nextRows)) {
+        nextRows[cat] = nextRows[cat].map((row) =>
+          row.map((i) => (i === id ? null : i))
+        );
+      }
+      setRows(nextRows);
+      writeMenuRowsFs(nextRows);
+    },
+    [writeMenuRowsFs]
+  );
+
+  // 2026-06-09: 카탈로그 메뉴를 주문 그리드에 올림 (시즌 시작). updateItem 의 category
+  //   분기가 "다른 그리드에서 빼고 target 그리드 첫 빈칸에 배치" 를 이미 함 → 그대로 재사용.
+  //   category 미지정 시 item 의 기존 category 사용.
+  const addExistingToOrder = useCallback(
+    (id, category) => {
+      const target =
+        category ||
+        itemsRef.current.find((m) => m.id === id)?.category ||
+        '국수/만백';
+      updateItem(id, { category: target });
+    },
+    [updateItem]
+  );
+
   const toggleFavorite = useCallback(
     (id) => {
       const target = itemsRef.current.find((m) => m.id === id);
@@ -750,6 +782,9 @@ export function MenuProvider({ children }) {
     [editableOptions]
   );
 
+  // 주문(그리드)에 노출 중인 id 집합 — 즐겨찾기 제외. 카탈로그/시즌 구분의 단일 진실 소스.
+  const inOrderIds = useMemo(() => collectInOrderIds(rows), [rows]);
+
   const value = useMemo(
     () => ({
       items,
@@ -763,6 +798,9 @@ export function MenuProvider({ children }) {
       addNewItem,
       addNewItemAt,
       deleteItem,
+      removeFromOrder,
+      addExistingToOrder,
+      inOrderIds,
       toggleFavorite,
       moveItemInCategory,
       reorderInCategory,
@@ -786,6 +824,9 @@ export function MenuProvider({ children }) {
       addNewItem,
       addNewItemAt,
       deleteItem,
+      removeFromOrder,
+      addExistingToOrder,
+      inOrderIds,
       toggleFavorite,
       moveItemInCategory,
       reorderInCategory,
@@ -809,6 +850,7 @@ const MENU_FALLBACK = {
   items: [], rows: {}, categories: [], optionsList: [], editableOptions: [],
   updateItem: () => {}, updateItemImage: () => {}, resetItemImage: () => {},
   addNewItem: () => {}, addNewItemAt: () => {}, deleteItem: () => {},
+  removeFromOrder: () => {}, addExistingToOrder: () => {}, inOrderIds: new Set(),
   toggleFavorite: () => {}, moveItemInCategory: () => {}, reorderInCategory: () => {},
   swapInCategory: () => {}, setFavoriteSlot: () => {}, setCategorySlot: () => {},
   updateOptionLabel: () => {}, moveOption: () => {}, resetEditableOptions: () => {},

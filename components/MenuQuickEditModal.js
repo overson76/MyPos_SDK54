@@ -22,6 +22,7 @@ import { useMenu } from '../utils/MenuContext';
 import { useResponsive } from '../utils/useResponsive';
 import { sanitizeMenuName, sanitizeMenuPrice, VALIDATE_LIMITS } from '../utils/validate';
 import { pickMenuImage } from '../utils/pickMenuImage';
+import { findItemByName, catalogOnlyItems } from '../utils/menuCatalog';
 
 // 2026-05-26 ⑥ fix: confirm 호출이 옛 코드의 `typeof window !== 'undefined' ? window?.confirm?.()
 // : true` 는 폰에서 window.confirm 이 undefined → ok=undefined → if(!ok) return 으로
@@ -62,6 +63,11 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
     addNewItemAt,
     deleteItem,
     removeFromFavorite,
+    removeFromOrder,
+    addExistingToOrder,
+    inOrderIds,
+    items,
+    rows,
     categories,
   } = useMenu();
   const { scale } = useResponsive();
@@ -126,6 +132,21 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
     return ok;
   };
 
+  // 신규 추가 모드 — 같은 이름 카탈로그 메뉴 탐지(중복 방지) + 카탈로그 불러오기 후보.
+  const nameMatch = isAddMode ? findItemByName(items, name) : null;
+  const matchInOrder = nameMatch
+    ? !!(inOrderIds && typeof inOrderIds.has === 'function' && inOrderIds.has(nameMatch.id))
+    : false;
+  const catalogPicks = isAddMode ? catalogOnlyItems(items, rows, category) : [];
+
+  // 카탈로그 메뉴를 현재 카테고리 주문에 올림 (시즌 시작 / 중복 대신 불러오기).
+  const bringInCatalogItem = (id) => {
+    if (typeof addExistingToOrder === 'function') {
+      addExistingToOrder(id, category);
+    }
+    onClose();
+  };
+
   const handlePickImage = async () => {
     const url = await pickMenuImage();
     if (url) setPickedImage(url);
@@ -140,6 +161,25 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
     const sizeFields = sizeEnabled
       ? { sizeGroup: sizeGroupForUpcharge(upN), sizeUpcharge: upN }
       : { sizeGroup: '', sizeUpcharge: 0 };
+
+    if (isAddMode) {
+      // 중복 방지 — 같은 이름이 카탈로그에 있으면 새로 만들지 않음.
+      const dup = findItemByName(items, newName);
+      if (dup) {
+        const dupInOrder =
+          inOrderIds && typeof inOrderIds.has === 'function' && inOrderIds.has(dup.id);
+        if (dupInOrder) {
+          Alert.alert(
+            '이미 있는 메뉴',
+            `'${dup.name}' 은(는) 이미 주문에 있습니다. 기존 메뉴를 수정하거나 다른 이름을 쓰세요.`
+          );
+          return;
+        }
+        // 카탈로그(시즌 대기) 에만 있으면 그걸 불러옴.
+        bringInCatalogItem(dup.id);
+        return;
+      }
+    }
 
     setSaving(true);
     if (isAddMode) {
@@ -216,6 +256,28 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
             />
             {nameErr ? <Text style={styles.errText}>{nameErr}</Text> : null}
 
+            {/* 같은 이름 카탈로그 메뉴 안내 — 중복 방지 + 불러오기 (신규 추가 모드) */}
+            {isAddMode && nameMatch ? (
+              matchInOrder ? (
+                <View style={styles.dupBannerWarn}>
+                  <Text style={styles.dupBannerWarnText}>
+                    ⚠ '{nameMatch.name}' 은 이미 주문에 있어요. 다른 이름을 쓰거나
+                    기존 메뉴를 수정하세요.
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.dupBannerLoad}
+                  onPress={() => bringInCatalogItem(nameMatch.id)}
+                >
+                  <Text style={styles.dupBannerLoadText}>
+                    📋 카탈로그에 '{nameMatch.name}' 있어요 — 눌러서 불러오기
+                    (새로 안 만듦)
+                  </Text>
+                </TouchableOpacity>
+              )
+            ) : null}
+
             {/* 가격 */}
             <Text style={styles.label}>가격 (원)</Text>
             <TextInput
@@ -252,6 +314,30 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
                 );
               })}
             </View>
+
+            {/* 카탈로그에서 불러오기 — 이 카테고리의 시즌 대기(주문에서 빠진) 메뉴.
+                여름 콩국수처럼 카탈로그엔 남아있는 메뉴를 한 번에 다시 올림. */}
+            {isAddMode && catalogPicks.length > 0 ? (
+              <View style={styles.catalogBox}>
+                <Text style={styles.catalogTitle}>
+                  📋 카탈로그에서 불러오기 ({category} 시즌 대기 {catalogPicks.length})
+                </Text>
+                <View style={styles.catalogWrap}>
+                  {catalogPicks.map((m) => (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={styles.catalogChip}
+                      onPress={() => bringInCatalogItem(m.id)}
+                    >
+                      <Text style={styles.catalogChipText}>
+                        {m.name}
+                        {m.price ? ` · ${Number(m.price).toLocaleString()}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
 
             {/* 대 옵션 — 토글 + 추가금 */}
             <View style={styles.sizeRow}>
@@ -344,30 +430,50 @@ export default function MenuQuickEditModal({ item, addAt, onClose, fromCategory 
             </TouchableOpacity>
           </View>
 
-          {/* 삭제 — 즐겨찾기 카테고리에서는 즐겨찾기 해제, 다른 곳에서는 메뉴 삭제. */}
-          {!isAddMode ? (
+          {/* 즐겨찾기 카테고리 — 즐겨찾기에서만 빼기 */}
+          {!isAddMode && fromCategory === '즐겨찾기' ? (
             <TouchableOpacity
               style={styles.deleteBtn}
-              onPress={async () => {
-                if (fromCategory === '즐겨찾기') {
-                  if (typeof removeFromFavorite === 'function') {
-                    removeFromFavorite(item.id);
-                  }
-                  onClose();
-                  return;
+              onPress={() => {
+                if (typeof removeFromFavorite === 'function') {
+                  removeFromFavorite(item.id);
                 }
-                const ok = await confirmDestructive(
-                  `'${item.name}' 메뉴를 삭제할까요?\n매출 이력에는 영향 없음. 격자 슬롯이 비워집니다.`
-                );
-                if (!ok) return;
-                deleteItem(item.id);
                 onClose();
               }}
             >
-              <Text style={styles.deleteBtnText}>
-                {fromCategory === '즐겨찾기' ? '⭐ 즐겨찾기에서 빼기' : '🗑️ 메뉴 삭제'}
-              </Text>
+              <Text style={styles.deleteBtnText}>⭐ 즐겨찾기에서 빼기</Text>
             </TouchableOpacity>
+          ) : null}
+
+          {/* 일반 카테고리 — 주문에서 빼기(시즌 종료, 카탈로그 잔류) vs 완전 삭제 구분.
+              사장님 정책: 메뉴목록=시즌 마스터, 주문=현재 운영분. 겨울 콩국수는 주문에서만 빠짐. */}
+          {!isAddMode && fromCategory !== '즐겨찾기' ? (
+            <View style={styles.removeRow}>
+              <TouchableOpacity
+                style={styles.seasonOutBtn}
+                onPress={() => {
+                  if (typeof removeFromOrder === 'function') {
+                    removeFromOrder(item.id);
+                  }
+                  onClose();
+                }}
+              >
+                <Text style={styles.seasonOutText}>📦 주문에서 빼기{'\n'}(시즌 종료·메뉴목록 잔류)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteBtnSm}
+                onPress={async () => {
+                  const ok = await confirmDestructive(
+                    `'${item.name}' 을 메뉴목록(카탈로그)에서도 완전히 삭제할까요?\n시즌 보관이 목적이면 '주문에서 빼기' 를 쓰세요. 매출 이력에는 영향 없음.`
+                  );
+                  if (!ok) return;
+                  deleteItem(item.id);
+                  onClose();
+                }}
+              >
+                <Text style={styles.deleteBtnText}>🗑️ 완전 삭제</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </Pressable>
         </KeyboardAvoidingView>
@@ -560,5 +666,76 @@ function makeStyles(scale = 1) {
       alignItems: 'center',
     },
     deleteBtnText: { color: '#dc2626', fontWeight: '700', fontSize: fp(13) },
+    // 시즌 종료 / 완전삭제 2열
+    removeRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+    seasonOutBtn: {
+      flex: 2,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: '#fffbeb',
+      borderWidth: 1,
+      borderColor: '#fde68a',
+      alignItems: 'center',
+    },
+    seasonOutText: {
+      color: '#b45309',
+      fontWeight: '700',
+      fontSize: fp(11),
+      textAlign: 'center',
+    },
+    deleteBtnSm: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: '#fef2f2',
+      borderWidth: 1,
+      borderColor: '#fecaca',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // 중복 이름 배너
+    dupBannerWarn: {
+      backgroundColor: '#fef2f2',
+      borderWidth: 1,
+      borderColor: '#fecaca',
+      borderRadius: 8,
+      padding: 8,
+      marginBottom: 4,
+    },
+    dupBannerWarnText: { color: '#b91c1c', fontSize: fp(11), fontWeight: '600' },
+    dupBannerLoad: {
+      backgroundColor: '#eff6ff',
+      borderWidth: 1,
+      borderColor: '#bfdbfe',
+      borderRadius: 8,
+      padding: 8,
+      marginBottom: 4,
+    },
+    dupBannerLoadText: { color: '#1d4ed8', fontSize: fp(11), fontWeight: '700' },
+    // 카탈로그 불러오기
+    catalogBox: {
+      marginTop: 8,
+      backgroundColor: '#f9fafb',
+      borderWidth: 1,
+      borderColor: '#e5e7eb',
+      borderRadius: 8,
+      padding: 8,
+    },
+    catalogTitle: {
+      fontSize: fp(11),
+      fontWeight: '800',
+      color: '#374151',
+      marginBottom: 6,
+    },
+    catalogWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    catalogChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#93c5fd',
+    },
+    catalogChipText: { fontSize: fp(11), fontWeight: '700', color: '#1d4ed8' },
   });
 }
