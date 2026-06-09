@@ -413,6 +413,38 @@ export default function AddressBookPanel() {
       }
       if (trimmedRequest) updated.customerRequest = trimmedRequest;
       else delete updated.customerRequest;
+
+      // 2026-06-09: 주소를 비우고 저장 — 오염 주소(CID 가 전화+가게명을 주소칸에 잘못 박은 등)
+      //   삭제 용도. editLabel 이 빈 주소를 거부(return false)해서 위에서 호출조차 안 돼,
+      //   주소가 그대로 남던 버그 처방. 전화가 있으면 phone-only entry(__phone:digits +
+      //   "(주소 미입력)" placeholder)로 전환하고 별칭/전화/요청/카운트는 보존. 전화 없으면
+      //   placeholder label 만 두고 key 유지(별칭만으론 안정적 phone key 불가).
+      if (!trimmedNewLabel) {
+        updated.pendingAddress = true;
+        updated.lat = undefined;
+        updated.lng = undefined;
+        const digits = phones[0] || '';
+        if (digits) {
+          const newKey = `__phone:${digits}`;
+          updated.key = newKey;
+          updated.label = `(주소 미입력) ${formatPhoneDisplay(digits)}`;
+          const nextEntries = { ...prev.entries };
+          if (newKey !== candidate.key) delete nextEntries[candidate.key];
+          const exist = newKey !== candidate.key ? prev.entries[newKey] : null;
+          nextEntries[newKey] = exist
+            ? {
+                ...exist,
+                ...updated,
+                alias: updated.alias || exist.alias,
+                count: (exist.count || 0) + (candidate.count || 0),
+              }
+            : updated;
+          return { ...prev, entries: nextEntries };
+        }
+        updated.label = '(주소 미입력)';
+        return { ...prev, entries: { ...prev.entries, [candidate.key]: updated } };
+      }
+
       return {
         ...prev,
         entries: { ...prev.entries, [candidate.key]: updated },
