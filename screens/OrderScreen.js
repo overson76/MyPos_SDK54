@@ -246,6 +246,11 @@ export default function OrderScreen({
     updateOptionLabel,
     moveOption,
     resetEditableOptions,
+    // 2026-06-09: 카테고리 간 메뉴 드래그 이동 — updateItem 으로 category 변경(그리드 재배치).
+    //   toggleFavorite 는 즐겨찾기 탭 드롭용 — 옛 코드가 destructure 누락으로 undefined →
+    //   가드에 막혀 조용히 무시되던 dead code 였음. 함께 살림.
+    updateItem,
+    toggleFavorite,
   } = useMenu();
   const [dragFromIdx, setDragFromIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
@@ -259,8 +264,11 @@ export default function OrderScreen({
   // number(reactTag) 라 measureInWindow 메서드 X — 그래서 ref 직접 받기.
   const gridViewRef = useRef(null);
   // 1.0.26: 즐겨찾기 탭의 절대 좌표 — drag-drop 시 hit-test 용.
-  const favTabLayoutRef = useRef(null);
-  const favTabViewRef = useRef(null);
+  // 카테고리 탭 hit-test용 — 탭별 노드 ref + 측정된 window 좌표.
+  // 드래그 중인 메뉴를 (활성 외) 다른 카테고리 탭 위에 떨어뜨리면 그 카테고리로 이동.
+  // 즐겨찾기 탭은 'FAV_TAB' sentinel, 그 외는 'CATTAB:<cat>' sentinel.
+  const tabNodeRefs = useRef({}); // category -> node
+  const tabLayoutsRef = useRef({}); // category -> { pageX, pageY, width, height }
   // 드래그 중 손가락 위치 (overlay 표시용 — 카드 따라다니는 ghost). null 이면 표시 X.
   const [dragFingerPos, setDragFingerPos] = useState(null);
   // PanResponder 안에서 최신 nativeMoveFromIdx / dragOverIdx 참조용 (closure stale 방지).
@@ -334,6 +342,18 @@ export default function OrderScreen({
               }
             } else if (
               from !== null &&
+              typeof to === 'string' &&
+              to.startsWith('CATTAB:')
+            ) {
+              // 2026-06-09: 다른 카테고리 탭에 drop → 그 카테고리로 이동 (그리드 재배치).
+              const targetCat = to.slice('CATTAB:'.length);
+              const flat = Array.isArray(currentRows) ? currentRows.flat() : [];
+              const menuId = flat[from];
+              if (menuId != null && typeof updateItem === 'function') {
+                updateItem(menuId, { category: targetCat });
+              }
+            } else if (
+              from !== null &&
               to !== null &&
               typeof to === 'number' &&
               from !== to &&
@@ -359,19 +379,24 @@ export default function OrderScreen({
   );
 
   // grid 컨테이너 안에서 손가락 위치 → cell idx 매핑.
-  // 1.0.26: 즐겨찾기 탭 영역도 우선 hit-test → 'FAV_TAB' sentinel 반환.
+  // 2026-06-09: 모든 카테고리 탭 영역 우선 hit-test → 'FAV_TAB' / 'CATTAB:<cat>' sentinel.
+  //   (옛 1.0.26 은 즐겨찾기 탭만 hit-test 했음 — 다른 카테고리로 드래그 이동 추가.)
   const hitTestAndUpdate = (pageX, pageY) => {
-    // 1) 즐겨찾기 탭 hit-test (현재 활성 카테고리가 즐겨찾기 가 아닐 때만 — 중복 방지)
-    if (activeCategory !== '즐겨찾기') {
-      const fav = favTabLayoutRef.current;
+    // 1) 카테고리 탭 hit-test (활성 탭 제외 — 자기 자신엔 드롭 의미 없음)
+    const layouts = tabLayoutsRef.current || {};
+    for (const cat of Object.keys(layouts)) {
+      // 활성 탭 + 추천 탭(자동 생성 — 직접 배치 불가)은 드롭 대상 제외.
+      if (cat === activeCategory || cat === RECOMMENDATION_CATEGORY) continue;
+      const L = layouts[cat];
       if (
-        fav &&
-        pageX >= fav.pageX &&
-        pageX <= fav.pageX + fav.width &&
-        pageY >= fav.pageY &&
-        pageY <= fav.pageY + fav.height
+        L &&
+        pageX >= L.pageX &&
+        pageX <= L.pageX + L.width &&
+        pageY >= L.pageY &&
+        pageY <= L.pageY + L.height
       ) {
-        if (dragOverRef.current !== 'FAV_TAB') setDragOverIdx('FAV_TAB');
+        const sentinel = cat === '즐겨찾기' ? 'FAV_TAB' : `CATTAB:${cat}`;
+        if (dragOverRef.current !== sentinel) setDragOverIdx(sentinel);
         return;
       }
     }
@@ -1394,34 +1419,52 @@ export default function OrderScreen({
               {displayCategories.map((cat) => {
                 const active = activeCategory === cat;
                 const isFav = cat === '즐겨찾기';
-                // 1.0.26: 즐겨찾기 탭 — drag-drop 시 hit-test 용 onLayout + drop zone 강조
-                const isDropTarget = isFav && dragOverIdx === 'FAV_TAB' && nativeMoveFromIdx !== null;
-                return (
+                const isRecoTab = cat === RECOMMENDATION_CATEGORY;
+                const sentinel = isFav ? 'FAV_TAB' : `CATTAB:${cat}`;
+                // 드래그 중 여부 — 네이티브(PanResponder) / 웹(HTML5 DnD) 양쪽.
+                const dragActive =
+                  nativeMoveFromIdx !== null || dragFromIdx !== null;
+                // 활성/추천 탭 아니고 드래그 중 이 탭 위 = 드롭 타겟. 즐겨찾기는 노랑, 그 외 파랑.
+                const canDrop = !active && !isRecoTab && dragActive;
+                const isDropTarget = canDrop && dragOverIdx === sentinel;
+                // 드래그 중 비활성 탭 전부 점선 안내 (여기 떨어뜨릴 수 있어요).
+                const dropHint = canDrop && !isDropTarget;
+
+                const tabNode = (
                   <TouchableOpacity
                     key={cat}
-                    ref={isFav ? favTabViewRef : null}
+                    ref={(node) => {
+                      if (node) tabNodeRefs.current[cat] = node;
+                    }}
                     style={[
                       styles.categoryTab,
                       isPhone && styles.categoryTabPhone,
                       active && styles.categoryTabActive,
+                      dropHint && {
+                        borderWidth: 1,
+                        borderColor: '#fcd34d',
+                        borderStyle: 'dashed',
+                      },
                       isDropTarget && {
-                        backgroundColor: '#fef3c7',
+                        backgroundColor: isFav ? '#fef3c7' : '#dbeafe',
                         borderWidth: 2,
-                        borderColor: '#d97706',
+                        borderColor: isFav ? '#d97706' : '#2563eb',
+                        borderStyle: 'solid',
                       },
                     ]}
                     onPress={() => { setActiveCategory(cat); setNativeMoveFromIdx(null); }}
                     onLayout={() => {
-                      if (!isFav) return;
                       try {
-                        const ref = favTabViewRef.current;
+                        const ref = tabNodeRefs.current[cat];
                         if (ref && typeof ref.measureInWindow === 'function') {
                           ref.measureInWindow((x, y, w, h) => {
-                            favTabLayoutRef.current = { pageX: x, pageY: y, width: w, height: h };
+                            tabLayoutsRef.current[cat] = {
+                              pageX: x, pageY: y, width: w, height: h,
+                            };
                           });
                         }
                       } catch (err) {
-                        try { reportError(err, { ctx: 'favTabLayout.measure' }); } catch {}
+                        try { reportError(err, { ctx: 'catTabLayout.measure' }); } catch {}
                       }
                     }}
                   >
@@ -1430,13 +1473,68 @@ export default function OrderScreen({
                         styles.categoryText,
                         isPhone && styles.categoryTextPhone,
                         active && styles.categoryTextActive,
-                        isDropTarget && { color: '#d97706', fontWeight: '900' },
+                        isDropTarget && {
+                          color: isFav ? '#d97706' : '#1d4ed8',
+                          fontWeight: '900',
+                        },
                       ]}
                     >
-                      {isDropTarget ? '⭐ 즐겨찾기에 추가' : cat}
+                      {isDropTarget
+                        ? isFav
+                          ? '⭐ 즐겨찾기에 추가'
+                          : `📂 ${cat} 로 이동`
+                        : cat}
                     </Text>
                   </TouchableOpacity>
                 );
+
+                // 웹: HTML5 drag-and-drop — 탭을 드롭 타겟으로 감쌈.
+                //   (네이티브는 PanResponder hit-test 가 같은 일을 함.)
+                if (isWeb) {
+                  return (
+                    <div
+                      key={`cattab-w-${cat}`}
+                      style={{ display: 'flex' }}
+                      onDragOver={(e) => {
+                        if (active || isRecoTab) return;
+                        e.preventDefault();
+                        if (dragOverIdx !== sentinel) setDragOverIdx(sentinel);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverIdx === sentinel) setDragOverIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        if (active || isRecoTab) return;
+                        e.preventDefault();
+                        let from = dragFromIdx;
+                        try {
+                          const data = e.dataTransfer?.getData('text/plain');
+                          if (data !== '' && data != null) {
+                            const parsed = Number(data);
+                            if (Number.isFinite(parsed)) from = parsed;
+                          }
+                        } catch (_) {}
+                        setDragFromIdx(null);
+                        setDragOverIdx(null);
+                        if (from == null) return;
+                        const flat = Array.isArray(currentRows)
+                          ? currentRows.flat()
+                          : [];
+                        const menuId = flat[from];
+                        if (menuId == null) return;
+                        if (isFav) {
+                          if (typeof toggleFavorite === 'function')
+                            toggleFavorite(menuId);
+                        } else if (typeof updateItem === 'function') {
+                          updateItem(menuId, { category: cat });
+                        }
+                      }}
+                    >
+                      {tabNode}
+                    </div>
+                  );
+                }
+                return tabNode;
               })}
             </ScrollView>
           </View>
