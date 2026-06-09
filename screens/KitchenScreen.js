@@ -335,6 +335,15 @@ export default function KitchenScreen() {
     return def?.shortName || stripParens(item?.name) || item?.name || '';
   };
 
+  // 2026-06-09: 만두백반(공기밥 동반)·공기밥 메뉴 판정 — 조리완료 시 "공기밥 확인" 음성 트리거.
+  //   풀네임으로 매칭한다(만두백반 shortName='만백' 이라 표시명으론 못 잡음). 매장 메뉴 id 가
+  //   달라도 이름 기준이라 안전. 항목 자체 name → 없으면 카탈로그(menuById) 이름 fallback.
+  const isSideRiceMenu = (item) => {
+    const full = menuById[item?.id]?.name || item?.name || '';
+    const nm = String(full).replace(/\s/g, '');
+    return nm.includes('만두백반') || nm.includes('공기밥');
+  };
+
   const renderSidebar = () => (
     <View style={[styles.sidebar, { width: sidebarWidth }]}>
       <View style={styles.sidebarHeader}>
@@ -720,13 +729,16 @@ export default function KitchenScreen() {
                             return (it.cookState || 'pending') === 'cooked';
                           });
                           playReadySound();
+                          // 2026-06-09: 만두백반/공기밥 조리완료 시 "공기밥 확인" 음성 덧붙임.
+                          const needSideRice = isSideRiceMenu(r.item);
                           if (allOthersCooked && !hasBothPortions) {
-                            speakFullReady({ table: o.table });
+                            speakFullReady({ table: o.table, sideRice: needSideRice });
                           } else {
                             // 음성 안내도 화면 표시와 동일한 shortMenuName 규칙
                             speakPartialReady({
                               table: o.table,
                               itemName: shortMenuName(r.item),
+                              sideRice: needSideRice,
                             });
                           }
                         }
@@ -910,7 +922,9 @@ export default function KitchenScreen() {
                 onPress={() => {
                   if (isReady) return;
                   playReadySound();
-                  speakFullReady({ table: o.table });
+                  // 2026-06-09: 주문에 만두백반/공기밥 있으면 전체 조리완료 시 "공기밥 확인" 음성.
+                  const needSideRice = (o.items || []).some(isSideRiceMenu);
+                  speakFullReady({ table: o.table, sideRice: needSideRice });
                   markReady(o.tableId);
                 }}
                 activeOpacity={0.8}

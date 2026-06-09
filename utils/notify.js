@@ -660,16 +660,21 @@ export function speakTakeoutAlert({ table, minutesLeft }) {
   triggerSharedAudio({ type: 'speak', text });
 }
 
-export function speakPartialReady({ table, itemName }) {
+export function speakPartialReady({ table, itemName, sideRice = false }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
-  triggerSharedAudio({ type: 'speak', text: `${name}, ${itemName} 먼저 나왔습니다.` });
+  // 2026-06-09: 만두백반/공기밥이면 "공기밥 확인" 을 같은 발화에 덧붙임. cancelSpeech 때문에
+  //   speak 를 연속 호출하면 마지막만 나가므로 한 문장으로 합쳐야 한다 (사장님 요청 — 만두백반
+  //   은 공기밥을 따로 챙겨야 하는데 빠뜨리는 사고 방지).
+  const tail = sideRice ? ' 공기밥 확인해 주세요.' : '';
+  triggerSharedAudio({ type: 'speak', text: `${name}, ${itemName} 먼저 나왔습니다.${tail}` });
 }
 
-export function speakFullReady({ table }) {
+export function speakFullReady({ table, sideRice = false }) {
   cancelSpeech();
   const name = tableSpokenLabel(table.label);
-  triggerSharedAudio({ type: 'speak', text: `${name}, 조리 완료됐습니다.` });
+  const tail = sideRice ? ' 공기밥 확인해 주세요.' : '';
+  triggerSharedAudio({ type: 'speak', text: `${name}, 조리 완료됐습니다.${tail}` });
 }
 
 export function speakReady({ table, order, menuItems, optionsList = [] }) {
