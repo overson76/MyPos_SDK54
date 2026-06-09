@@ -184,6 +184,59 @@ export function findEntryByPhone(addressBook, phone) {
   return null;
 }
 
+// entry 가 "식별 가능한 이름" 을 가졌는지 — alias 우선, 없으면 label 도 식별로 인정.
+// 2026-06-09: 진실보석 단골 모달 반복 버그. needsAliasPrompt 가 entry.alias 만 봐서
+//   alias 비고 label="진실보석..." 인 entry 를 "미상" 으로 오판 → 매번 prompt.
+//   다른 화면(배달지도/주소록/CID)은 label 도 식별로 쓰는데 OrderScreen 만 누락.
+//   placeholder label(__phone:digits / "(주소 미입력)...") 은 식별로 인정 X — 신규는 여전히 prompt.
+export function entryIdentityName(entry) {
+  if (!entry) return '';
+  const alias = (entry.alias || '').trim();
+  if (alias) return alias;
+  const label = (entry.label || '').trim();
+  if (!label) return '';
+  if (label.startsWith('__phone:')) return '';
+  if (label.startsWith('(주소 미입력)')) return '';
+  return label;
+}
+
+// 주문 확정 시 별칭 입력 모달(AliasPromptModal)을 띄울지 결정 — 순수 함수.
+// 정책 (사장님 누적 요구):
+//   - delivery/takeout/reservation 타입만 대상 (매장/홀은 모달 X)
+//   - 손님 식별 정보(별칭 OR 식별 라벨)가 *어디에든* 있으면 단골 → skip
+//   - 완전 미상(신규)만 모달 → 사장님 별칭 등록 기회
+// 식별 소스: order.deliveryAlias > 주소 entry > 전화번호 entry (alias 또는 label).
+export function computeNeedsAliasPrompt({
+  tableType,
+  deliveryAlias,
+  deliveryAddress,
+  phone,
+  addressBook,
+} = {}) {
+  const isPromptType =
+    tableType === 'delivery' ||
+    tableType === 'takeout' ||
+    tableType === 'reservation';
+  if (!isPromptType) return false;
+
+  const aliasFromOrder = (deliveryAlias || '').trim();
+  if (aliasFromOrder) return false;
+
+  // 주소 → entry 식별명
+  if ((deliveryAddress || '').trim()) {
+    const entry = findAddressEntry(addressBook, deliveryAddress);
+    if (entryIdentityName(entry)) return false;
+  }
+
+  // 전화번호 → entry 식별명
+  if ((phone || '').trim()) {
+    const entry = findEntryByPhone(addressBook, phone);
+    if (entryIdentityName(entry)) return false;
+  }
+
+  return true;
+}
+
 // 배달 손님 식별 — 주소 → 주소록 entry 의 alias/phone/phones 통합 추출.
 // 우선순위: order 객체에 명시 저장된 fallback.alias/phone (orderReducer 가 보존) > 주소록 entry.
 // 매출 history 빌더 / 영수증 재출력 / 라벨 표기 모든 곳이 같은 식별값을 쓰도록.

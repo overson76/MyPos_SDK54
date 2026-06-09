@@ -3,6 +3,8 @@ import {
   getCustomerRequest,
   getAddressAlias,
   resolveDeliveryIdentity,
+  entryIdentityName,
+  computeNeedsAliasPrompt,
 } from '../utils/addressBookLookup';
 
 const BOOK_OBJECT = {
@@ -140,5 +142,113 @@ describe('resolveDeliveryIdentity — phone fallback (아가맘 사고)', () => 
       phone: '010-9999-0000',
     });
     expect(id.alias).toBe('');
+  });
+});
+
+describe('entryIdentityName', () => {
+  test('alias 있으면 alias', () => {
+    expect(entryIdentityName({ alias: '진실보석', label: '부산 사하구 ...' })).toBe(
+      '진실보석'
+    );
+  });
+
+  test('alias 없으면 label 을 식별로 인정', () => {
+    expect(entryIdentityName({ alias: '', label: '진실보석 남자사장' })).toBe(
+      '진실보석 남자사장'
+    );
+  });
+
+  test('placeholder label (__phone:) 은 식별 아님', () => {
+    expect(entryIdentityName({ label: '__phone:01012345678' })).toBe('');
+  });
+
+  test('placeholder label ((주소 미입력)) 은 식별 아님', () => {
+    expect(entryIdentityName({ label: '(주소 미입력) 010-1234-5678' })).toBe('');
+  });
+
+  test('null/빈 entry 는 빈 문자열', () => {
+    expect(entryIdentityName(null)).toBe('');
+    expect(entryIdentityName({})).toBe('');
+  });
+});
+
+describe('computeNeedsAliasPrompt', () => {
+  // 진실보석: alias 비어있고 label 만 있는 단골 entry (버그 재현 핵심)
+  const BOOK_LABEL_ONLY = {
+    entries: {
+      '부산 사하구 하신번영로 25': {
+        key: '부산 사하구 하신번영로 25',
+        label: '진실보석 남자사장',
+        alias: '', // ← alias 비어있음
+        phone: '01012345678',
+      },
+    },
+  };
+
+  test('홀/매장 타입은 모달 안 띄움', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'hall',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(false);
+  });
+
+  test('order 에 별칭 있으면 skip', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'delivery',
+        deliveryAlias: '직접입력',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(false);
+  });
+
+  test('★ 진실보석 버그 — alias 비고 label 만 있는 단골은 주소로 skip', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'delivery',
+        deliveryAddress: '부산 사하구 하신번영로 25',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(false); // 핵심 — 옛 로직은 true(모달 반복) 였음
+  });
+
+  test('★ 진실보석 버그 — 전화번호로도 label 식별 → skip', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'delivery',
+        phone: '010-1234-5678',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(false);
+  });
+
+  test('완전 미상 신규 손님 (주소/전번 매칭 X) 은 모달 띄움', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'delivery',
+        deliveryAddress: '(주소 미입력) 010-9999-0000',
+        phone: '010-9999-0000',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(true);
+  });
+
+  test('takeout / reservation 도 동일 정책 (단골 skip)', () => {
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'takeout',
+        deliveryAddress: '부산 사하구 하신번영로 25',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(false);
+    expect(
+      computeNeedsAliasPrompt({
+        tableType: 'reservation',
+        phone: '010-9999-0000',
+        addressBook: BOOK_LABEL_ONLY,
+      })
+    ).toBe(true);
   });
 });

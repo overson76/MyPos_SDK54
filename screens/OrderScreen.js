@@ -22,7 +22,10 @@ import {
   recommendationsToGrid,
   RECOMMENDATION_CATEGORY,
 } from '../utils/recommendations';
-import { getCustomerRequest, findEntryByPhone } from '../utils/addressBookLookup';
+import {
+  getCustomerRequest,
+  computeNeedsAliasPrompt,
+} from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import OrderTypePicker from '../components/OrderTypePicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
@@ -2203,36 +2206,20 @@ export default function OrderScreen({
                       //   - 주소록 entry alias (address 기반 lookup)
                       //   - 글로벌 lastCallPhone (CID 알림 5분 TTL — 사장님이 옛 슬롯 진입했어도 시뮬 phone 인식)
                       //   confirmOrder 자동 sync 가 어차피 entry 만듦. 사장님이 별칭 추가 원하면 ✏️.
-                      const tType = table?.type;
-                      const aliasFromOrder = (order?.deliveryAlias || '').trim();
-                      const phoneFromOrder = (order?.deliveryPhone || '').trim();
-                      const phoneFromLastCall = getLastCallPhone();
-                      const phoneAny = phoneFromOrder || phoneFromLastCall;
-                      let aliasFromBook = '';
-                      if (!aliasFromOrder && order?.deliveryAddress) {
-                        const key = normalizeAddressKey(order.deliveryAddress);
-                        const entry = key ? addressBook?.entries?.[key] : null;
-                        aliasFromBook = (entry?.alias || '').trim();
-                      }
-                      // 2026-05-29: 사장님 신고 "새 번호 전화인데 별칭 입력 모달 안 떠".
-                      //   옛 로직(!phoneAny)은 phone 만 있으면 무조건 skip → 별칭 없는
-                      //   *신규* 번호도 모달을 건너뛰어 사장님이 별칭 등록 기회 상실.
-                      //   2026-05-28 "단골인데 모달 떠" 요구와 충돌하던 것.
-                      //   해결: phone 으로 주소록 entry 의 별칭을 확인 →
-                      //     - 별칭 있음(=단골) → skip (2026-05-28 요구 충족)
-                      //     - 별칭 없음(=신규 번호) → 모달 (오늘 요구 충족)
-                      let aliasFromPhone = '';
-                      if (!aliasFromOrder && !aliasFromBook && phoneAny) {
-                        const e = findEntryByPhone(addressBook, phoneAny);
-                        aliasFromPhone = (e?.alias || '').trim();
-                      }
-                      const knownAlias =
-                        aliasFromOrder || aliasFromBook || aliasFromPhone;
-                      const needsAliasPrompt =
-                        (tType === 'delivery' ||
-                          tType === 'takeout' ||
-                          tType === 'reservation') &&
-                        !knownAlias;
+                      // 2026-06-09: 별칭 입력 모달 표시 판정을 순수 함수로 위임.
+                      //   핵심 fix — 식별을 entry.alias 만 보던 것을 alias OR label 로 확장.
+                      //   진실보석처럼 label="진실보석..." (alias 비어있음) 단골이 매번
+                      //   모달 뜨던 버그 해결. placeholder label 은 식별로 인정 X (신규는 prompt 유지).
+                      //   phone 은 order.deliveryPhone > CID lastCall(5분 TTL) 순.
+                      const needsAliasPrompt = computeNeedsAliasPrompt({
+                        tableType: table?.type,
+                        deliveryAlias: order?.deliveryAlias,
+                        deliveryAddress: order?.deliveryAddress,
+                        phone:
+                          (order?.deliveryPhone || '').trim() ||
+                          getLastCallPhone(),
+                        addressBook,
+                      });
                       if (needsAliasPrompt) {
                         setAliasPromptOpen(true);
                         return;
