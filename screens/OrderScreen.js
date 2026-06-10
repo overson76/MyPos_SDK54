@@ -577,14 +577,22 @@ export default function OrderScreen({
     }
 
     // order 의 deliveryAlias 갱신 (영수증/표시/음성용)
-    if (alias) {
-      setDeliveryContact(tableId, phone, alias);
+    // 2026-06-10: 비슷한 별칭 후보 선택(mergeIntoKey) 시 그 entry 의 별칭을 우선 사용한다.
+    //   옛 코드는 입력칸 alias 만 봐서, 후보만 선택하고 별칭칸을 비우면(또는 검색어와 entry
+    //   별칭이 달라도) 슬롯 deliveryAlias 가 안 박혀 배달탭에 전화번호만 뜨던 버그.
+    //   사장님 룰: "별칭이 등록돼 있으면 무조건 별칭 우선". entry 별칭 > 입력값 순.
+    const mergedEntryAlias = mergeIntoKey
+      ? (addressBook?.entries?.[mergeIntoKey]?.alias || '').trim()
+      : '';
+    const finalAlias = mergedEntryAlias || alias;
+    if (finalAlias) {
+      setDeliveryContact(tableId, phone, finalAlias);
     }
 
     // state 갱신 비동기 — override 객체로 즉시 반영해서 음성 / 영수증에 alias 포함
     const effOrder = {
       ...order,
-      deliveryAlias: alias || order?.deliveryAlias,
+      deliveryAlias: finalAlias || order?.deliveryAlias,
       deliveryAddress: finalAddress || order?.deliveryAddress,
     };
     doSubmitOrder(effOrder);
