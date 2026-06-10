@@ -70,6 +70,12 @@ export function useOrderPersistence({
             typeof loaded.autoRemember === 'boolean'
               ? loaded.autoRemember
               : true,
+          // 2026-06-10: "다른 가게" 무시목록은 Firestore 가 아니라 AsyncStorage 로 영속
+          //   (union Firestore sync 무한루프 사고 후 격리). 앱 재시작 시 여기서 복원 —
+          //   entries 와 달리 무시목록은 다기기 false-diff 부활 위험이 없어 로컬 복원 안전.
+          ignoredSimilarPairs: Array.isArray(loaded.ignoredSimilarPairs)
+            ? loaded.ignoredSimilarPairs
+            : prev.ignoredSimilarPairs,
         }));
       }
       setHydrated(true);

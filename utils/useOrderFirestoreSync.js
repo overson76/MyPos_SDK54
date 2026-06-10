@@ -56,11 +56,14 @@ export function useOrderFirestoreSync({
   const lastSyncedRevenueTotalRef = useRef(revenue.total);
   const lastSyncedHistoryRef = useRef(revenue.history);
   const lastSyncedAddressEntriesRef = useRef(addressBook.entries);
+  // 2026-06-10: ignoredSimilarPairs("다른 가게" 무시)는 Firestore 동기화에서 제외한다 —
+  //   기기 로컬 state + AsyncStorage 영속만. 이전에 union 으로 Firestore 양방향 sync 했다가
+  //   push 비교(참조)가 매번 어긋나 무한 write → 쓰기 한도 폭발 사고. 무시목록은 기기별로 두고
+  //   (각 기기에서 한 번씩 "다른 가게") Firestore 에 안 쓰면 무한루프가 원천 불가능.
   const lastSyncedAddressMetaRef = useRef({
     todayDate: addressBook.todayDate,
     todayDeliveredKeys: addressBook.todayDeliveredKeys,
     autoRemember: addressBook.autoRemember,
-    ignoredSimilarPairs: addressBook.ignoredSimilarPairs,
   });
 
   const ordersDebounceRef = useRef(null);
@@ -183,15 +186,13 @@ export function useOrderFirestoreSync({
               typeof meta.autoRemember === 'boolean'
                 ? meta.autoRemember
                 : prev.autoRemember,
-            ignoredSimilarPairs: Array.isArray(meta.ignoredSimilarPairs)
-              ? meta.ignoredSimilarPairs
-              : prev.ignoredSimilarPairs,
+            // ignoredSimilarPairs 는 의도적으로 덮지 않는다 — 로컬 무시목록 보존
+            //   (모달 닫았다 열어도 유지). Firestore sync 제외(union 무한루프 사고 후 격리).
           }));
           lastSyncedAddressMetaRef.current = {
             todayDate: meta.todayDate,
             todayDeliveredKeys: meta.todayDeliveredKeys,
             autoRemember: meta.autoRemember,
-            ignoredSimilarPairs: meta.ignoredSimilarPairs,
           };
         },
         (err) => reportError(err, { ctx: 'addressBookMeta.listener' })
@@ -401,18 +402,17 @@ export function useOrderFirestoreSync({
       synced &&
       synced.todayDate === addressBook.todayDate &&
       synced.todayDeliveredKeys === addressBook.todayDeliveredKeys &&
-      synced.autoRemember === addressBook.autoRemember &&
-      synced.ignoredSimilarPairs === addressBook.ignoredSimilarPairs
+      synced.autoRemember === addressBook.autoRemember
     ) {
       return;
     }
     const db = getFirestore();
     if (!db) return;
+    // ignoredSimilarPairs 는 meta 에 넣지 않는다 — Firestore 에 안 쓰므로 무한루프 불가.
     const meta = {
       todayDate: addressBook.todayDate,
       todayDeliveredKeys: addressBook.todayDeliveredKeys,
       autoRemember: addressBook.autoRemember,
-      ignoredSimilarPairs: addressBook.ignoredSimilarPairs || [],
     };
     db.collection('stores')
       .doc(storeId)
@@ -425,7 +425,6 @@ export function useOrderFirestoreSync({
     addressBook.todayDate,
     addressBook.todayDeliveredKeys,
     addressBook.autoRemember,
-    addressBook.ignoredSimilarPairs,
     storeId,
   ]);
 }
