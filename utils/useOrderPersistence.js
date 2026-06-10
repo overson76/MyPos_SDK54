@@ -48,11 +48,18 @@ export function useOrderPersistence({
         const today = localDateString();
         const loaded = data.addressBook;
         const sameDay = loaded.todayDate === today;
-        setAddressBook({
-          entries:
-            loaded.entries && typeof loaded.entries === 'object'
-              ? loaded.entries
-              : {},
+        // 2026-06-09: entries 는 AsyncStorage 에서 복원하지 않는다 — Firestore
+        //   (+persistentLocalCache 오프라인 캐시) 가 entries 의 단일 진실원.
+        //   [버그] 옛 코드는 부팅 시 AsyncStorage 의 (다른 기기에서 이미 삭제된) stale
+        //   entries 를 메모리에 올렸다. 그런데 lastSyncedAddressEntriesRef 는 Firestore
+        //   listener 만 갱신하므로, AsyncStorage hydrate 가 만든 entries 는 ref 와 어긋난
+        //   "false diff" → useOrderFirestoreSync 의 write effect 가 그 옛 항목을 "신규
+        //   로컬" 로 오해해 batch.set → Firestore 에 삭제된 entry 부활(사하자원). 단일
+        //   기기에선 AsyncStorage 도 최신이라 안 보이고, 다기기에서만 재현(사장님 "서로 물려서").
+        //   처방: entries 는 prev(초기 {} 또는 이미 도착한 listener 값) 그대로 유지하고
+        //   meta 만 복원. functional update 라 entries 참조가 안 바뀌어 write effect 도 noop.
+        setAddressBook((prev) => ({
+          ...prev,
           todayDate: today,
           todayDeliveredKeys: sameDay
             ? Array.isArray(loaded.todayDeliveredKeys)
@@ -63,7 +70,7 @@ export function useOrderPersistence({
             typeof loaded.autoRemember === 'boolean'
               ? loaded.autoRemember
               : true,
-        });
+        }));
       }
       setHydrated(true);
     })();
