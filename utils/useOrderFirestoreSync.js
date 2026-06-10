@@ -28,25 +28,6 @@ const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
 const ADDRESS_DEBOUNCE_MS = 500;
 
-// 2026-06-09: "다른 가게" 무시 목록(ignoredSimilarPairs) 처럼 "추가만 하는" 집합은 pull 시
-//   합집합으로 머지. onSnapshot 이 옛 meta(빈 목록)로 로컬을 통째로 덮어, 사장님이 방금
-//   "다른 가게" 처리한 무시가 날아가던 영속화 레이스 처방(진실보석이 모달 다시 열면 또 뜸).
-//   로컬이 이미 remote 를 다 포함하면 기존 배열 참조 그대로 반환 → write effect 무한 루프 방지.
-function unionPreserveRef(local, remote) {
-  const a = Array.isArray(local) ? local : [];
-  const b = Array.isArray(remote) ? remote : [];
-  const set = new Set(a);
-  let added = false;
-  for (const x of b) {
-    if (!set.has(x)) {
-      set.add(x);
-      added = true;
-    }
-  }
-  if (!added) return a; // 로컬이 이미 superset — 참조 유지
-  return Array.from(set);
-}
-
 // Firestore document ID 안전 인코딩 (migrateLocalToCloud 와 동일 정책).
 function safeDocId(key) {
   if (!key) return '_';
@@ -202,10 +183,9 @@ export function useOrderFirestoreSync({
               typeof meta.autoRemember === 'boolean'
                 ? meta.autoRemember
                 : prev.autoRemember,
-            ignoredSimilarPairs: unionPreserveRef(
-              prev.ignoredSimilarPairs,
-              meta.ignoredSimilarPairs
-            ),
+            ignoredSimilarPairs: Array.isArray(meta.ignoredSimilarPairs)
+              ? meta.ignoredSimilarPairs
+              : prev.ignoredSimilarPairs,
           }));
           lastSyncedAddressMetaRef.current = {
             todayDate: meta.todayDate,
