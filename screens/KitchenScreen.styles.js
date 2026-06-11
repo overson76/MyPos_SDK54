@@ -511,17 +511,21 @@ export default function makeStyles(scale = 1) {
   },
   itemSubtotalPhone: { fontSize: fp(12), minWidth: 50 },
 
+  // 2026-06-11: 한 줄 4요소(합계+🖨️+조리중+조리완료)가 좁은 카드에서 합계 텍스트를
+  // 세로로 찌그러뜨림 → 2단 구조 (위: 합계 가로 줄 / 아래: 버튼 줄).
   cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 12,
     borderTopWidth: 1,
     borderTopColor: '#eef0f3',
     gap: 8,
   },
   cardFooterPhone: { padding: 6, gap: 4 },
-  totalWrap: { flex: 1 },
+  totalWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  footerBtnRow: { flexDirection: 'row', alignItems: 'stretch', gap: 6 },
   totalLabel: { fontSize: fp(11), color: '#6b7280' },
   totalValue: { fontSize: fp(15), color: '#111827', fontWeight: '800' },
   totalValuePhone: { fontSize: fp(12) },
@@ -530,13 +534,18 @@ export default function makeStyles(scale = 1) {
     paddingVertical: 10,
     borderRadius: 6,
     backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   printSlipBtnText: { fontSize: fp(14) },
   doneBtn: {
+    flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 6,
     backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   doneBtnPhone: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4 },
   doneBtnReady: { backgroundColor: '#10b981' },
@@ -546,12 +555,15 @@ export default function makeStyles(scale = 1) {
   // 2026-06-11: 일괄 "조리중" 버튼 — 조리중 행 색(#f97316 tagCooking) 과 동일 계열.
   // 비활성 = 주황 외곽선, 활성 = 주황 채움 (✓ 조리중).
   cookingBtn: {
+    flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 6,
     backgroundColor: '#fff7ed',
     borderWidth: 1.5,
     borderColor: '#f97316',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cookingBtnActive: { backgroundColor: '#f97316' },
   cookingBtnText: { color: '#c2410c', fontSize: fp(13), fontWeight: '800' },

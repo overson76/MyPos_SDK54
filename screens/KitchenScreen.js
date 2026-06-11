@@ -924,6 +924,7 @@ export default function KitchenScreen() {
                   {total.toLocaleString()}원
                 </Text>
               </View>
+              <View style={styles.footerBtnRow}>
               {printerAvailable && (
                 <TouchableOpacity
                   style={[styles.printSlipBtn, isPhone && styles.doneBtnPhone]}
@@ -976,6 +977,7 @@ export default function KitchenScreen() {
                   {isReady ? '✓ 조리완료' : '조리완료'}
                 </Text>
               </TouchableOpacity>
+              </View>
             </View>
           </View>
         );
