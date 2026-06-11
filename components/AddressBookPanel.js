@@ -7,7 +7,7 @@
 //   - 매장 ↔ entry 거리 컬럼 (StoreContext.lat/lng 사용)
 //   - 정렬 옵션 (최근/사용횟수/거리/가나다/미입력 먼저)
 //   - pendingAddress entry 강조 — CID 신규 번호 / 미확인 임포트
-//   - 백업 75개 일괄 임포트 버튼
+//   - JSON 백업/복원 — 복원 병합·교체 선택은 자체 오버레이 (EXE 가 window.prompt 미지원)
 //
 // "데이터베이스 역할":
 //   - 미리 주소 기입 (+ 새 주소)
@@ -40,7 +40,6 @@ import {
   isDrivingMSane,
   distanceKm,
 } from '../utils/geocode';
-import { importAddresses, SEED_BUSINESS_ADDRESSES } from '../utils/seedAddresses';
 import { downloadJson, pickJsonFile } from '../utils/jsonBackup';
 import AddressBookCleanupModal from './AddressBookCleanupModal';
 import { applyMerges } from '../utils/addressBookCleanup';
@@ -92,7 +91,8 @@ export default function AddressBookPanel() {
   const [newAlias, setNewAlias] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newCustomerRequest, setNewCustomerRequest] = useState('');
-  const [showImport, setShowImport] = useState(false);
+  // 복원 병합/교체 선택 대기 — { incoming, incomingCount, currentCount } | null
+  const [importPrompt, setImportPrompt] = useState(null);
   const [showCleanup, setShowCleanup] = useState(false);
   // 2026-06-04: 주소록 자동 정리 적용 — 선택된 통합 그룹들을 entries 에 반영.
   const handleCleanupApply = (merges, deleteKeys) => {
@@ -178,44 +178,31 @@ export default function AddressBookPanel() {
       return;
     }
     const currentCount = Object.keys(addressBook?.entries || {}).length;
-    // 병합/교체 선택 — Alert.alert 3버튼 (취소 / 병합 / 교체)
-    const askMode = (cb) => {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const choice = window.prompt(
-          `📥 백업 가져오기\n\n현재 ${currentCount}건 · 가져올 파일 ${incomingCount}건\n\n[병합] = 기존 + 새 (중복 key 는 새 파일 우선)\n[교체] = 기존 전부 삭제 후 새 파일만 (위험)\n\n"merge" 또는 "replace" 입력 (취소는 빈 칸):`,
-          'merge'
-        );
-        cb(choice === 'merge' || choice === 'replace' ? choice : null);
-        return;
-      }
-      Alert.alert(
-        '📥 백업 가져오기',
-        `현재 ${currentCount}건 · 가져올 ${incomingCount}건`,
-        [
-          { text: '취소', style: 'cancel', onPress: () => cb(null) },
-          { text: '병합', onPress: () => cb('merge') },
-          { text: '교체 (위험)', style: 'destructive', onPress: () => cb('replace') },
-        ]
-      );
-    };
-    askMode((mode) => {
-      if (!mode) return;
-      setAddressBook((prev) => {
-        const baseEntries = mode === 'replace' ? {} : (prev?.entries || {});
-        return {
-          ...prev,
-          entries: { ...baseEntries, ...incoming },
-        };
-      });
-      const finalCount =
-        mode === 'replace'
-          ? incomingCount
-          : Object.keys({ ...(addressBook?.entries || {}), ...incoming }).length;
-      Alert.alert(
-        '✅ 복원 완료',
-        `${mode === 'replace' ? '교체' : '병합'} 완료 — 주소록 ${finalCount}건`
-      );
+    // 병합/교체 선택은 자체 오버레이 — EXE(Electron) 가 window.prompt 를 지원하지 않아
+    // 파일 선택 후 아무 반응 없이 끝나던 문제. 모든 플랫폼 동일 UI.
+    setImportPrompt({ incoming, incomingCount, currentCount });
+  };
+
+  const applyImportBackup = (mode) => {
+    const prompt = importPrompt;
+    setImportPrompt(null);
+    if (!prompt || !mode) return;
+    const { incoming, incomingCount } = prompt;
+    setAddressBook((prev) => {
+      const baseEntries = mode === 'replace' ? {} : (prev?.entries || {});
+      return {
+        ...prev,
+        entries: { ...baseEntries, ...incoming },
+      };
     });
+    const finalCount =
+      mode === 'replace'
+        ? incomingCount
+        : Object.keys({ ...(addressBook?.entries || {}), ...incoming }).length;
+    Alert.alert(
+      '✅ 복원 완료',
+      `${mode === 'replace' ? '교체' : '병합'} 완료 — 주소록 ${finalCount}건`
+    );
   };
 
   const storeCoord = useMemo(() => {
@@ -530,19 +517,6 @@ export default function AddressBookPanel() {
     resetAddForm();
   };
 
-  const handleImport = (mode) => {
-    const result = importAddresses(setAddressBook, mode);
-    setShowImport(false);
-    const msg = `${result.added}건 추가 · ${result.skipped}건 스킵(중복) · 총 시도 ${result.total}건`;
-    if (Platform.OS === 'web') {
-      // RN-Web 에서 Alert.alert 는 confirm 다이얼로그. 단순 안내는 console + ephemeral state 가 깔끔하지만
-      // 일관성을 위해 Alert 사용.
-      Alert.alert('임포트 완료', msg);
-    } else {
-      Alert.alert('임포트 완료', msg);
-    }
-  };
-
   const handleDelete = (it) => {
     const label = it.alias || it.label || '항목';
     const confirmMsg = `"${label}" 을(를) 주소록에서 삭제할까요?`;
@@ -634,12 +608,8 @@ export default function AddressBookPanel() {
           >
             <Text style={styles.btnSecondaryText}>📥 복원</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary]}
-            onPress={() => setShowImport(true)}
-          >
-            <Text style={styles.btnSecondaryText}>📦 75개 시드</Text>
-          </TouchableOpacity>
+          {/* 2026-06-11: "75개 시드" 버튼 제거 — 초기 이사용. 실수로 누르면 옛 시드가
+              운영 주소록에 다시 섞이는 사고 버튼이라 사장님 요청으로 삭제. */}
           {/* 2026-06-04: 사장님 요청 — 클릭 한 번으로 중복/오타 정리. */}
           <TouchableOpacity
             style={[styles.btn, styles.btnCleanup]}
@@ -1151,43 +1121,45 @@ export default function AddressBookPanel() {
         onClose={() => setShowCleanup(false)}
       />
 
-      {/* ── 임포트 모달 ──────────────────────────────────── */}
-      {showImport && (
+      {/* ── 복원 병합/교체 선택 오버레이 ────────────────────
+          EXE(Electron) 가 window.prompt 미지원이라 자체 UI. 모든 플랫폼 동일 동작.
+          여기서 버튼을 누르기 전까지는 주소록에 아무 변화 없음. */}
+      {importPrompt && (
         <View style={styles.importOverlay} pointerEvents="auto">
-          <Pressable style={styles.importBackdrop} onPress={() => setShowImport(false)}>
+          <Pressable style={styles.importBackdrop} onPress={() => setImportPrompt(null)}>
             <Pressable style={styles.importSheet} onPress={() => {}}>
-              <Text style={styles.importTitle}>주소록 임포트</Text>
+              <Text style={styles.importTitle}>📥 백업 복원</Text>
               <Text style={styles.importDesc}>
-                4월 말 카카오 로컬 API 검색 결과 ({SEED_BUSINESS_ADDRESSES.length}건).
-                기존 항목(주소 또는 전화 일치) 은 자동 스킵.
+                현재 {importPrompt.currentCount}건 · 가져올 파일{' '}
+                {importPrompt.incomingCount}건. 방식을 선택하세요.
               </Text>
               <View style={styles.importOptions}>
                 <TouchableOpacity
                   style={[styles.importBtn, styles.importBtnPrimary]}
-                  onPress={() => handleImport('foundOnly')}
+                  onPress={() => applyImportBackup('merge')}
                 >
                   <Text style={styles.importBtnPrimaryText}>
-                    확인된 주소 56건만 추가
+                    병합 — 기존 위에 얹기
                   </Text>
                   <Text style={styles.importBtnPrimarySub}>
-                    상호·주소·전화 다 검증됨
+                    파일에 있는 항목만 갱신/추가 · 파일에 없는 기존 항목은 유지
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.importBtn, styles.importBtnSecondary]}
-                  onPress={() => handleImport('all')}
+                  style={[styles.importBtn, styles.importBtnDanger]}
+                  onPress={() => applyImportBackup('replace')}
                 >
-                  <Text style={styles.importBtnSecondaryText}>
-                    전체 75건 추가 (미확인 19건은 키워드만)
+                  <Text style={styles.importBtnDangerText}>
+                    교체 — 백업 파일로 전체 덮어쓰기
                   </Text>
-                  <Text style={styles.importBtnSecondarySub}>
-                    미확인 19건은 "주소 미입력" 상태로 등록 — 직원이 채움
+                  <Text style={styles.importBtnDangerSub}>
+                    현재 주소록을 비우고 파일 내용만 남김 (백업 시점으로 복귀)
                   </Text>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.importClose} onPress={() => setShowImport(false)}>
-                <Text style={styles.importCloseText}>닫기</Text>
+              <TouchableOpacity style={styles.importClose} onPress={() => setImportPrompt(null)}>
+                <Text style={styles.importCloseText}>취소</Text>
               </TouchableOpacity>
             </Pressable>
           </Pressable>
@@ -1515,9 +1487,9 @@ function makeStyles(scale = 1) {
     importBtnPrimary: { backgroundColor: '#2563eb' },
     importBtnPrimaryText: { color: '#fff', fontSize: fp(14), fontWeight: '800' },
     importBtnPrimarySub: { color: 'rgba(255,255,255,0.8)', fontSize: fp(11) },
-    importBtnSecondary: { backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#d1d5db' },
-    importBtnSecondaryText: { color: '#111827', fontSize: fp(14), fontWeight: '800' },
-    importBtnSecondarySub: { color: '#6b7280', fontSize: fp(11) },
+    importBtnDanger: { backgroundColor: '#dc2626' },
+    importBtnDangerText: { color: '#fff', fontSize: fp(14), fontWeight: '800' },
+    importBtnDangerSub: { color: 'rgba(255,255,255,0.85)', fontSize: fp(11) },
     importClose: {
       alignSelf: 'flex-end',
       paddingHorizontal: 12,

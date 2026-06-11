@@ -16,17 +16,21 @@
 //     write effect 가 noop → 무한 루프 방지
 //   - AsyncStorage(useOrderPersistence) 와 듀얼 운영. 안정화 후 제거 가능.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from './StoreContext';
 import { getFirestore } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
 import { setSharedAudioStore } from './sharedAudio';
 import { PENDING_TABLE_ID } from './orderReducer';
+import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
 const ADDRESS_DEBOUNCE_MS = 500;
+// 2026-06-11: write 실패(한도 초과/네트워크) 시 lastSynced 를 전진시키지 않고 30초 후
+// 재시도한다. 이전엔 실패해도 "보낸 셈" 처리해서 차단이 풀려도 영영 안 올라갔다.
+const WRITE_RETRY_MS = 30000;
 
 // Firestore document ID 안전 인코딩 (migrateLocalToCloud 와 동일 정책).
 function safeDocId(key) {
@@ -69,6 +73,26 @@ export function useOrderFirestoreSync({
   const ordersDebounceRef = useRef(null);
   const historyDebounceRef = useRef(null);
   const addressEntriesDebounceRef = useRef(null);
+
+  // ── write 실패 재시도 ────────────────────────────────────────
+  // 실패 시 retryTick 을 올려 모든 write effect 를 다시 돌린다. lastSynced 가 전진하지
+  // 않았으므로 밀린 diff 가 통째로 재전송된다. 성공/echo 로 ref 가 따라잡으면 noop —
+  // setState 가 없는 한 effect 는 가만히 있으므로 무한 재시도 폭주는 구조상 불가.
+  const [retryTick, setRetryTick] = useState(0);
+  const retryTimerRef = useRef(null);
+  const scheduleRetry = () => {
+    if (retryTimerRef.current) return;
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      setRetryTick((t) => t + 1);
+    }, WRITE_RETRY_MS);
+  };
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    },
+    []
+  );
 
   // 매장 공유 음성/사운드 dispatcher 활성. storeId 가 바뀌면 listener 재등록.
   useEffect(() => {
@@ -242,17 +266,24 @@ export function useOrderFirestoreSync({
       if (opCount > 0) {
         batch
           .commit()
-          .catch((e) =>
-            reportError(e, { ctx: 'orders.batch.write', opCount })
-          );
+          .then(() => {
+            lastSyncedOrdersRef.current = orders;
+            reportWriteSuccess();
+          })
+          .catch((e) => {
+            reportError(e, { ctx: 'orders.batch.write', opCount });
+            reportWriteFailure('orders.batch.write', e);
+            scheduleRetry();
+          });
+      } else {
+        lastSyncedOrdersRef.current = orders;
       }
-      lastSyncedOrdersRef.current = orders;
     }, ORDERS_DEBOUNCE_MS);
 
     return () => {
       if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
     };
-  }, [orders, storeId]);
+  }, [orders, storeId, retryTick]);
 
   // ── splits write ────────────────────────────────────────────
   useEffect(() => {
@@ -265,9 +296,16 @@ export function useOrderFirestoreSync({
       .collection('state')
       .doc('splits')
       .set({ value: splits })
-      .catch((e) => reportError(e, { ctx: 'splits.write' }));
-    lastSyncedSplitsRef.current = splits;
-  }, [splits, storeId]);
+      .then(() => {
+        lastSyncedSplitsRef.current = splits;
+        reportWriteSuccess();
+      })
+      .catch((e) => {
+        reportError(e, { ctx: 'splits.write' });
+        reportWriteFailure('splits.write', e);
+        scheduleRetry();
+      });
+  }, [splits, storeId, retryTick]);
 
   // ── groups write ────────────────────────────────────────────
   useEffect(() => {
@@ -280,9 +318,16 @@ export function useOrderFirestoreSync({
       .collection('state')
       .doc('groups')
       .set({ value: groups })
-      .catch((e) => reportError(e, { ctx: 'groups.write' }));
-    lastSyncedGroupsRef.current = groups;
-  }, [groups, storeId]);
+      .then(() => {
+        lastSyncedGroupsRef.current = groups;
+        reportWriteSuccess();
+      })
+      .catch((e) => {
+        reportError(e, { ctx: 'groups.write' });
+        reportWriteFailure('groups.write', e);
+        scheduleRetry();
+      });
+  }, [groups, storeId, retryTick]);
 
   // ── revenue.total write ─────────────────────────────────────
   useEffect(() => {
@@ -295,9 +340,16 @@ export function useOrderFirestoreSync({
       .collection('state')
       .doc('revenueTotal')
       .set({ total: revenue.total })
-      .catch((e) => reportError(e, { ctx: 'revenue.total.write' }));
-    lastSyncedRevenueTotalRef.current = revenue.total;
-  }, [revenue.total, storeId]);
+      .then(() => {
+        lastSyncedRevenueTotalRef.current = revenue.total;
+        reportWriteSuccess();
+      })
+      .catch((e) => {
+        reportError(e, { ctx: 'revenue.total.write' });
+        reportWriteFailure('revenue.total.write', e);
+        scheduleRetry();
+      });
+  }, [revenue.total, storeId, retryTick]);
 
   // ── revenue.history write (diff + 디바운스) ────────────────
   useEffect(() => {
@@ -334,17 +386,24 @@ export function useOrderFirestoreSync({
       if (opCount > 0) {
         batch
           .commit()
-          .catch((e) =>
-            reportError(e, { ctx: 'history.batch.write', opCount })
-          );
+          .then(() => {
+            lastSyncedHistoryRef.current = next;
+            reportWriteSuccess();
+          })
+          .catch((e) => {
+            reportError(e, { ctx: 'history.batch.write', opCount });
+            reportWriteFailure('history.batch.write', e);
+            scheduleRetry();
+          });
+      } else {
+        lastSyncedHistoryRef.current = next;
       }
-      lastSyncedHistoryRef.current = next;
     }, HISTORY_DEBOUNCE_MS);
 
     return () => {
       if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
     };
-  }, [revenue.history, storeId]);
+  }, [revenue.history, storeId, retryTick]);
 
   // ── addressBook.entries write (diff + 디바운스) ────────────
   useEffect(() => {
@@ -381,18 +440,25 @@ export function useOrderFirestoreSync({
       if (opCount > 0) {
         batch
           .commit()
-          .catch((e) =>
-            reportError(e, { ctx: 'addresses.batch.write', opCount })
-          );
+          .then(() => {
+            lastSyncedAddressEntriesRef.current = next;
+            reportWriteSuccess();
+          })
+          .catch((e) => {
+            reportError(e, { ctx: 'addresses.batch.write', opCount });
+            reportWriteFailure('addresses.batch.write', e);
+            scheduleRetry();
+          });
+      } else {
+        lastSyncedAddressEntriesRef.current = next;
       }
-      lastSyncedAddressEntriesRef.current = next;
     }, ADDRESS_DEBOUNCE_MS);
 
     return () => {
       if (addressEntriesDebounceRef.current)
         clearTimeout(addressEntriesDebounceRef.current);
     };
-  }, [addressBook.entries, storeId]);
+  }, [addressBook.entries, storeId, retryTick]);
 
   // ── addressBook 메타 write (todayDate / todayDeliveredKeys / autoRemember) ──
   useEffect(() => {
@@ -419,12 +485,20 @@ export function useOrderFirestoreSync({
       .collection('state')
       .doc('addressBookMeta')
       .set(meta)
-      .catch((e) => reportError(e, { ctx: 'addressBookMeta.write' }));
-    lastSyncedAddressMetaRef.current = meta;
+      .then(() => {
+        lastSyncedAddressMetaRef.current = meta;
+        reportWriteSuccess();
+      })
+      .catch((e) => {
+        reportError(e, { ctx: 'addressBookMeta.write' });
+        reportWriteFailure('addressBookMeta.write', e);
+        scheduleRetry();
+      });
   }, [
     addressBook.todayDate,
     addressBook.todayDeliveredKeys,
     addressBook.autoRemember,
     storeId,
+    retryTick,
   ]);
 }

@@ -38,6 +38,7 @@ import IncomingCallBanner from './components/IncomingCallBanner';
 import OrderTypePicker from './components/OrderTypePicker';
 import AliasPromptModal from './components/AliasPromptModal';
 import ToastBanner from './components/ToastBanner';
+import CloudHealthBanner from './components/CloudHealthBanner';
 import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
@@ -496,6 +497,9 @@ function MainApp() {
       />
       {/* 2026-05-28: Toast 알림 — 주소록 저장 결과 시각 피드백. */}
       <ToastBanner />
+      {/* 2026-06-11: 클라우드 쓰기 실패 빨간 띠 — 한도 차단/네트워크 단절 즉시 가시화.
+          무료 한도 사고를 3일간 화면에서 알 수 없었던 후속 처방. */}
+      <CloudHealthBanner />
       {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
           배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>
