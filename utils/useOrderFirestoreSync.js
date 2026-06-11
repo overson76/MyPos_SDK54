@@ -94,6 +94,14 @@ export function useOrderFirestoreSync({
     []
   );
 
+  // 2026-06-11: 부팅 좀비 차단 게이트 — 컬렉션별 첫 서버 snapshot 을 받기 전엔 push 금지.
+  // 기기 부팅 시 로컬 hydration(옛 사본)이 state 를 채우는데, 첫 pull 이 push 디바운스
+  // (300~500ms)보다 늦으면 옛 사본 전체가 diff 로 서버에 올라가 다른 기기에서 고친/지운
+  // 항목이 통째로 부활했다 (대성빨래·사하자원·하나우리들약국 좀비). 크롬↔EXE 처럼
+  // 같은 PC 라도 저장소가 다르면 동일 사고. 첫 snapshot 후엔 pull 이 로컬을 서버 진실로
+  // 교체하므로 그 이후의 push 만 허용한다.
+  const snapshotSeenRef = useRef({});
+
   // 매장 공유 음성/사운드 dispatcher 활성. storeId 가 바뀌면 listener 재등록.
   useEffect(() => {
     setSharedAudioStore(storeId);
@@ -106,9 +114,12 @@ export function useOrderFirestoreSync({
     const db = getFirestore();
     if (!db) return;
     const storeRef = db.collection('stores').doc(storeId);
+    // 매장(storeId) 이 바뀌면 게이트를 다시 닫는다 — 새 매장의 첫 snapshot 대기.
+    snapshotSeenRef.current = {};
 
     const unsubOrders = storeRef.collection('orders').onSnapshot(
       (snap) => {
+        snapshotSeenRef.current.orders = true;
         const next = {};
         snap.docs.forEach((d) => {
           next[d.id] = d.data();
@@ -124,6 +135,8 @@ export function useOrderFirestoreSync({
       .doc('splits')
       .onSnapshot(
         (snap) => {
+          // 문서가 없어도 "서버 상태를 봤다" 는 사실이 중요 — 게이트는 exists 와 무관.
+          snapshotSeenRef.current.splits = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
@@ -139,6 +152,7 @@ export function useOrderFirestoreSync({
       .doc('groups')
       .onSnapshot(
         (snap) => {
+          snapshotSeenRef.current.groups = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
@@ -154,6 +168,7 @@ export function useOrderFirestoreSync({
       .doc('revenueTotal')
       .onSnapshot(
         (snap) => {
+          snapshotSeenRef.current.revenueTotal = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (typeof data?.total === 'number') {
@@ -168,6 +183,7 @@ export function useOrderFirestoreSync({
 
     const unsubHistory = storeRef.collection('history').onSnapshot(
       (snap) => {
+        snapshotSeenRef.current.history = true;
         const list = snap.docs
           .map((d) => d.data())
           .filter((h) => h && h.id != null);
@@ -179,6 +195,7 @@ export function useOrderFirestoreSync({
 
     const unsubAddrEntries = storeRef.collection('addresses').onSnapshot(
       (snap) => {
+        snapshotSeenRef.current.addresses = true;
         const entries = {};
         snap.docs.forEach((d) => {
           const data = d.data() || {};
@@ -198,6 +215,7 @@ export function useOrderFirestoreSync({
       .doc('addressBookMeta')
       .onSnapshot(
         (snap) => {
+          snapshotSeenRef.current.addressBookMeta = true;
           if (!snapExists(snap)) return;
           const meta = snap.data() || {};
           setAddressBook((prev) => ({
@@ -236,6 +254,7 @@ export function useOrderFirestoreSync({
   // ── orders write (diff + 디바운스) ──────────────────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.orders) return; // 첫 pull 전 push 금지 (부팅 좀비 차단)
     if (orders === lastSyncedOrdersRef.current) return;
 
     if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
@@ -288,6 +307,7 @@ export function useOrderFirestoreSync({
   // ── splits write ────────────────────────────────────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.splits) return;
     if (splits === lastSyncedSplitsRef.current) return;
     const db = getFirestore();
     if (!db) return;
@@ -310,6 +330,7 @@ export function useOrderFirestoreSync({
   // ── groups write ────────────────────────────────────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.groups) return;
     if (groups === lastSyncedGroupsRef.current) return;
     const db = getFirestore();
     if (!db) return;
@@ -332,6 +353,7 @@ export function useOrderFirestoreSync({
   // ── revenue.total write ─────────────────────────────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.revenueTotal) return;
     if (revenue.total === lastSyncedRevenueTotalRef.current) return;
     const db = getFirestore();
     if (!db) return;
@@ -354,6 +376,7 @@ export function useOrderFirestoreSync({
   // ── revenue.history write (diff + 디바운스) ────────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.history) return;
     if (revenue.history === lastSyncedHistoryRef.current) return;
 
     if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
@@ -408,6 +431,7 @@ export function useOrderFirestoreSync({
   // ── addressBook.entries write (diff + 디바운스) ────────────
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.addresses) return; // 첫 pull 전 push 금지 — 주소록 좀비 차단 핵심
     if (addressBook.entries === lastSyncedAddressEntriesRef.current) return;
 
     if (addressEntriesDebounceRef.current)
@@ -463,6 +487,7 @@ export function useOrderFirestoreSync({
   // ── addressBook 메타 write (todayDate / todayDeliveredKeys / autoRemember) ──
   useEffect(() => {
     if (!storeId) return;
+    if (!snapshotSeenRef.current.addressBookMeta) return;
     const synced = lastSyncedAddressMetaRef.current;
     if (
       synced &&
