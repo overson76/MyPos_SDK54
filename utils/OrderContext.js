@@ -399,6 +399,12 @@ export function OrderProvider({ children }) {
       dispatch({ type: 'orders/markReady', tableId });
     };
 
+    // 2026-06-11: 주방 "조리중" 버튼 — 테이블 전체 항목 일괄 조리 시작/해제 (cooked 유지).
+    const markCookingAll = (tableId, on = true) => {
+      addBreadcrumb('order.markCookingAll', { tableId, on });
+      dispatch({ type: 'orders/startCookingAll', tableId, on });
+    };
+
     // 조리완료 실수 되돌리기 — 테이블이 살아있는 상태에서 status 만 'preparing' 으로 토글.
     // KitchenScreen 의 status!=='ready' 필터에 다시 걸려서 즉시 주문현황 목록에 복귀.
     const undoMarkReady = (tableId) => {
@@ -921,6 +927,7 @@ export function OrderProvider({ children }) {
       groupItemsBySource: (items, defaultTableId) =>
         groupItemsBySource(items, defaultTableId),
       markReady,
+      markCookingAll,
       undoMarkReady,
       revertHistoryEntry,
       markPaid,
@@ -983,7 +990,7 @@ const ORDERS_FALLBACK = {
   addItem: noop, removeItem: noop, hydrateCartFromItems: noop,
   clearTable: noop, clearTableBySource: noop,
   computeSubtotalsBySource: () => ({}), groupItemsBySource: () => new Map(),
-  markReady: noop, undoMarkReady: () => false,
+  markReady: noop, markCookingAll: noop, undoMarkReady: () => false,
   revertHistoryEntry: () => ({ ok: false, reason: 'notFound' }),
   markPaid: noop, confirmOrder: noop, subscribeConfirmed: () => () => {},
   toggleOption: noop, toggleItemCooked: noop,

@@ -543,5 +543,18 @@ export default function makeStyles(scale = 1) {
   doneBtnText: { color: '#fff', fontSize: fp(13), fontWeight: '700' },
   doneBtnTextPhone: { fontSize: fp(11) },
   doneBtnTextReady: { color: '#fff' },
+  // 2026-06-11: 일괄 "조리중" 버튼 — 조리중 행 색(#f97316 tagCooking) 과 동일 계열.
+  // 비활성 = 주황 외곽선, 활성 = 주황 채움 (✓ 조리중).
+  cookingBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1.5,
+    borderColor: '#f97316',
+  },
+  cookingBtnActive: { backgroundColor: '#f97316' },
+  cookingBtnText: { color: '#c2410c', fontSize: fp(13), fontWeight: '800' },
+  cookingBtnTextActive: { color: '#fff' },
   });
 }

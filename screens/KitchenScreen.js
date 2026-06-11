@@ -50,6 +50,7 @@ export default function KitchenScreen() {
   const {
     orders,
     markReady,
+    markCookingAll,
     cycleItemCookState,
     cycleItemCookStatePortion,
     addressBook,
@@ -448,6 +449,23 @@ export default function KitchenScreen() {
         const total = computeItemsTotal(o.items);
         const qty = o.items.reduce((s, i) => s + i.qty, 0);
         const isReady = o.status === 'ready';
+        // 2026-06-11: "조리중" 일괄 버튼 활성 판정 — cooked 제외한 모든 포션이
+        // cooking 이면 active (다시 누르면 해제). 대/보통 분리 포션도 각각 판정.
+        const portionStates = (o.items || []).flatMap((i) => {
+          const lq = i.largeQty || 0;
+          const hasBoth = lq > 0 && i.qty - lq > 0;
+          if (hasBoth) {
+            return [
+              i.cookStateNormal || i.cookState || 'pending',
+              i.cookStateLarge || i.cookState || 'pending',
+            ];
+          }
+          return [i.cookState || 'pending'];
+        });
+        const notCookedStates = portionStates.filter((s) => s !== 'cooked');
+        const allCooking =
+          notCookedStates.length > 0 &&
+          notCookedStates.every((s) => s === 'cooking');
         const confirmed = o.confirmedItems || [];
         const isFresh = confirmed.length === 0;
         const rows = computeDiffRows(o.items, confirmed);
@@ -917,6 +935,28 @@ export default function KitchenScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
+              {/* 2026-06-11: 사장님 요청 — 테이블 전체 메뉴를 한 번에 조리중으로.
+                  active 상태에서 다시 누르면 해제. 이미 cooked 인 항목은 안 건드림. */}
+              <TouchableOpacity
+                style={[
+                  styles.cookingBtn,
+                  isPhone && styles.doneBtnPhone,
+                  allCooking && styles.cookingBtnActive,
+                ]}
+                onPress={() => markCookingAll(o.tableId, !allCooking)}
+                activeOpacity={0.8}
+                disabled={isReady}
+              >
+                <Text
+                  style={[
+                    styles.cookingBtnText,
+                    isPhone && styles.doneBtnTextPhone,
+                    allCooking && styles.cookingBtnTextActive,
+                  ]}
+                >
+                  {allCooking ? '✓ 조리중' : '🍳 조리중'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.doneBtn, isPhone && styles.doneBtnPhone, isReady && styles.doneBtnReady]}
                 onPress={() => {

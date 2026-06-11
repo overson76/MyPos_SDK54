@@ -1365,3 +1365,92 @@ describe('orderReducer · setReservationInfo (예약 빠른 등록)', () => {
     expect(orderReducer(s, { type: 'orders/setReservationInfo' })).toBe(s);
   });
 });
+
+describe('orderReducer · startCookingAll (주방 "조리중" 일괄 버튼)', () => {
+  const cookItems = () => [
+    { id: 'm1', qty: 2, largeQty: 0, cookState: 'pending' },
+    { id: 'm2', qty: 1, largeQty: 0, cookState: 'cooked' },
+    { id: 'm3', qty: 1, largeQty: 0 }, // cookState 없음 = pending 취급
+  ];
+
+  test('on=true: pending → cooking, cooked 는 유지', () => {
+    const s = { t1: makeOrder({ items: cookItems() }) };
+    const next = orderReducer(s, {
+      type: 'orders/startCookingAll',
+      tableId: 't1',
+      on: true,
+    });
+    const [a, b, c] = next.t1.items;
+    expect(a.cookState).toBe('cooking');
+    expect(b.cookState).toBe('cooked'); // 완료 표시 보존
+    expect(c.cookState).toBe('cooking');
+  });
+
+  test('on=false: cooking → pending 으로 해제, cooked 유지', () => {
+    const s = {
+      t1: makeOrder({
+        items: [
+          { id: 'm1', qty: 1, largeQty: 0, cookState: 'cooking' },
+          { id: 'm2', qty: 1, largeQty: 0, cookState: 'cooked' },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/startCookingAll',
+      tableId: 't1',
+      on: false,
+    });
+    expect(next.t1.items[0].cookState).toBe('pending');
+    expect(next.t1.items[1].cookState).toBe('cooked');
+  });
+
+  test('대/보통 분리 슬롯은 cookStateNormal/Large 각각 적용', () => {
+    const s = {
+      t1: makeOrder({
+        items: [
+          {
+            id: 'm1',
+            qty: 3,
+            largeQty: 1, // 대1 + 보통2 = 포션 분리
+            cookStateNormal: 'pending',
+            cookStateLarge: 'cooked',
+          },
+        ],
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/startCookingAll',
+      tableId: 't1',
+      on: true,
+    });
+    expect(next.t1.items[0].cookStateNormal).toBe('cooking');
+    expect(next.t1.items[0].cookStateLarge).toBe('cooked'); // 완료 포션 보존
+  });
+
+  test('status / readyAt 은 건드리지 않음', () => {
+    const s = {
+      t1: makeOrder({
+        items: [{ id: 'm1', qty: 1, largeQty: 0, cookState: 'pending' }],
+        status: 'preparing',
+        readyAt: null,
+      }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/startCookingAll',
+      tableId: 't1',
+      on: true,
+    });
+    expect(next.t1.status).toBe('preparing');
+    expect(next.t1.readyAt).toBe(null);
+  });
+
+  test('items 없는 테이블 / 없는 테이블은 state 동일 참조', () => {
+    const empty = { t1: makeOrder({ items: [] }) };
+    expect(
+      orderReducer(empty, { type: 'orders/startCookingAll', tableId: 't1' })
+    ).toBe(empty);
+    expect(
+      orderReducer(empty, { type: 'orders/startCookingAll', tableId: 'tX' })
+    ).toBe(empty);
+  });
+});

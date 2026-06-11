@@ -246,6 +246,39 @@ export function orderReducer(state, action) {
       };
     }
 
+    // 2026-06-11: 주방 "조리중" 일괄 버튼 — 테이블 전체 메뉴를 한 번에 조리 시작 표시.
+    // on=true: pending → cooking. on=false: cooking → pending (실수 되돌리기).
+    // 이미 cooked 인 슬롯/포션은 양방향 모두 안 건드림 — 완료 표시가 일괄 버튼에 풀리면 안 됨.
+    // 대/보통 분리 포션(cookStateNormal/Large) 도 동일 규칙.
+    case 'orders/startCookingAll': {
+      const { tableId, on = true } = action;
+      const existing = state[tableId];
+      if (!existing || !existing.items || existing.items.length === 0) {
+        return state;
+      }
+      const shift = (cur) => {
+        const c = cur || 'pending';
+        if (c === 'cooked') return 'cooked';
+        return on ? 'cooking' : 'pending';
+      };
+      const nextItems = existing.items.map((i) => {
+        const lq = i.largeQty || 0;
+        const hasBoth = lq > 0 && i.qty - lq > 0;
+        if (hasBoth) {
+          return {
+            ...i,
+            cookStateNormal: shift(i.cookStateNormal || i.cookState),
+            cookStateLarge: shift(i.cookStateLarge || i.cookState),
+          };
+        }
+        return { ...i, cookState: shift(i.cookState) };
+      });
+      return {
+        ...state,
+        [tableId]: { ...existing, items: nextItems },
+      };
+    }
+
     // history entry 로부터 테이블 복원 — 결제완료/테이블비우기 되돌리기.
     // 이미 같은 tableId 가 살아있으면 abort (호출부가 검사하지만 reducer 도 안전 가드).
     case 'orders/restoreFromHistory': {
