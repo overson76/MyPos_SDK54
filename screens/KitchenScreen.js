@@ -189,7 +189,9 @@ export default function KitchenScreen() {
     width - sidebarWidth - sidebarMargin * 2 - scrollbarReserve
   );
   // 컴팩트(아이폰 가로 등) 에서 사이드바 옆에 카드 3장이 들어가도록 폭 계산.
-  const cardCols = isCompact ? 3 : isMD ? 3 : 4;
+  // 2026-06-12: PC(≥1200) 의 4칸 → 3칸 고정. 4칸이면 카드가 좁아져 제목/메뉴가 잘림
+  // (아이패드 3칸은 안 잘리는데 PC 만 잘린다 — 사장님). 전 기기 3칸 통일, 간격은 자동.
+  const cardCols = 3;
   const cardWidth = Math.floor(
     (cardsAreaWidth - gridPadH * 2 - gridGap * (cardCols - 1)) / cardCols
   );
