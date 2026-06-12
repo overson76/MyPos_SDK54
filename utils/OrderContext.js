@@ -443,12 +443,19 @@ export function OrderProvider({ children }) {
 
     // 1.0.47: 배달 phone/alias 박기 — CID "주문받기" 흐름에서 PENDING_TABLE_ID 또는
     // 배달 슬롯에 발신번호/단골 별칭 미리 박을 때 사용. reducer 가 자체 sanitize.
-    const setDeliveryContact = (tableId, { phone, alias } = {}) => {
+    // 2026-06-12: 위치 인자 (tableId, phone, alias) 도 허용 — OrderScreen 3곳이 5/25부터
+    //   위치 인자로 불러 문자열이 객체 구조분해되며 undefined → 슬롯 발신자 도장이
+    //   조용히 지워지던 잠복 버그. 같은 실수가 재발해도 동작하도록 두 형태 모두 흡수.
+    const setDeliveryContact = (tableId, phoneOrOpts, maybeAlias) => {
+      const opts =
+        phoneOrOpts && typeof phoneOrOpts === 'object'
+          ? phoneOrOpts
+          : { phone: phoneOrOpts, alias: maybeAlias };
       dispatch({
         type: 'orders/setDeliveryContact',
         tableId,
-        phone: phone || null,
-        alias: alias || null,
+        phone: opts.phone || null,
+        alias: opts.alias || null,
       });
     };
 

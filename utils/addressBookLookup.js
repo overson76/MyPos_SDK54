@@ -200,6 +200,39 @@ export function entryIdentityName(entry) {
   return label;
 }
 
+// 2026-06-12: CID 착신 → 주소록 매칭 — 실 CID(useCidHandler.web.js)와 시뮬
+// (App.js onSimulateCall) 이 *같은 매칭 결과* 를 내도록 공용화한 순수 함수.
+// 사장님 신고 "주소록에 저장된 단골(테스트1)인데 시뮬 배너에 번호만 뜸" — 시뮬
+// 경로에 주소록 lookup 이 통째로 없어서 실 CID 와 다른 화면이 나오던 버그의 처방.
+// 반환 형태는 useCidHandler 가 Firestore incomingCall 문서에 박는 필드와 동일.
+export function matchCidEntry(addressBook, phoneNumber) {
+  const entry = findEntryByPhone(addressBook, phoneNumber);
+  return {
+    entry: entry || null,
+    alias: entry?.alias || null,
+    address: entry?.label || null,
+    orderCount: entry?.count || 0,
+    isNewNumber: !entry,
+  };
+}
+
+// 2026-06-12: PENDING 카트 → 배달/포장/예약 슬롯 배당 시 발신자 도장 계산 — 순수 함수.
+// PENDING 카트엔 발신자 정보가 없는 게 보통 (CID stash 는 별도 d 슬롯에만 박힘).
+// 최근 착신 번호(lastCallPhone, 5분 TTL)와 주소록 별칭으로 보강 — 없으면 빈 값
+// (매장 직접 손님). needsAliasPrompt / AliasPromptModal 의 lastCallPhone 정책과 동일 결.
+export function resolvePendingCallerStamp(order, addressBook, lastCallPhone) {
+  const phone =
+    (order?.deliveryPhone || '').trim() || (lastCallPhone || '').trim() || '';
+  const entry = phone ? findEntryByPhone(addressBook, phone) : null;
+  const alias =
+    (order?.deliveryAlias || '').trim() || (entry?.alias || '').trim() || null;
+  return {
+    deliveryAddress: order?.deliveryAddress,
+    deliveryPhone: phone || null,
+    deliveryAlias: alias,
+  };
+}
+
 // 주문 확정 시 별칭 입력 모달(AliasPromptModal)을 띄울지 결정 — 순수 함수.
 // 정책 (사장님 누적 요구):
 //   - delivery/takeout/reservation 타입만 대상 (매장/홀은 모달 X)

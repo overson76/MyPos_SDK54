@@ -25,6 +25,7 @@ import {
 import {
   getCustomerRequest,
   computeNeedsAliasPrompt,
+  resolvePendingCallerStamp,
 } from '../utils/addressBookLookup';
 import AddressBookModal from '../components/AddressBookModal';
 import OrderTypePicker from '../components/OrderTypePicker';
@@ -518,7 +519,12 @@ export default function OrderScreen({
     // (CID 자동 stash 흐름). 모달 phone 입력 시 order 에도 반영 (영수증/표시 일관).
     const phone = (modalPhone || '').trim() || order?.deliveryPhone || '';
     if (modalPhone && modalPhone.trim() && phone !== (order?.deliveryPhone || '')) {
-      setDeliveryContact(tableId, phone, alias || order?.deliveryAlias || null);
+      // 2026-06-12: 객체 인자 — 위치 인자로 부르면 문자열이 구조분해돼 undefined
+      // (도장 무효 + 기존 값 삭제) 되던 잠복 버그 fix. 아래 두 곳 동일.
+      setDeliveryContact(tableId, {
+        phone,
+        alias: alias || order?.deliveryAlias || null,
+      });
     }
     let finalAddress = order?.deliveryAddress;
 
@@ -586,7 +592,7 @@ export default function OrderScreen({
       : '';
     const finalAlias = mergedEntryAlias || alias;
     if (finalAlias) {
-      setDeliveryContact(tableId, phone, finalAlias);
+      setDeliveryContact(tableId, { phone, alias: finalAlias });
     }
 
     // state 갱신 비동기 — override 객체로 즉시 반영해서 음성 / 영수증에 alias 포함
@@ -1410,7 +1416,7 @@ export default function OrderScreen({
               (nextAlias && nextAlias !== order?.deliveryAlias) ||
               (nextPhone && nextPhone !== order?.deliveryPhone)
             ) {
-              setDeliveryContact(tableId, nextPhone, nextAlias);
+              setDeliveryContact(tableId, { phone: nextPhone, alias: nextAlias });
             }
           }}
         />
@@ -2689,11 +2695,13 @@ export default function OrderScreen({
           onClose={() => setTypePickerOpen(false)}
           onSelect={(type) => {
             setTypePickerOpen(false);
-            const targetId = submitPendingAsType(type, {
-              deliveryAddress: order?.deliveryAddress,
-              deliveryPhone: order?.deliveryPhone,
-              deliveryAlias: order?.deliveryAlias,
-            });
+            // 2026-06-12: 발신자 도장 보강 — resolvePendingCallerStamp 가 최근 착신
+            // 번호(5분 TTL) + 주소록 별칭으로 새 슬롯에 박을 발신자 정보를 계산.
+            // 옛 코드는 PENDING 의 (대개 빈) 필드만 넘겨 칸 라벨이 공백이 되던 버그.
+            const targetId = submitPendingAsType(
+              type,
+              resolvePendingCallerStamp(order, addressBook, getLastCallPhone())
+            );
             if (!targetId) return;
             const targetTable =
               resolveAnyTable(targetId) || { id: targetId, label: targetId, type };

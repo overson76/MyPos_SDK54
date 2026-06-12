@@ -5,6 +5,8 @@ import {
   resolveDeliveryIdentity,
   entryIdentityName,
   computeNeedsAliasPrompt,
+  matchCidEntry,
+  resolvePendingCallerStamp,
 } from '../utils/addressBookLookup';
 
 const BOOK_OBJECT = {
@@ -250,5 +252,115 @@ describe('computeNeedsAliasPrompt', () => {
         addressBook: BOOK_LABEL_ONLY,
       })
     ).toBe(true);
+  });
+});
+
+// 2026-06-12: 시뮬 배너 별칭 버그 — 시뮬 경로에 주소록 매칭이 없어 저장된
+// 단골(테스트1)이 번호로만 뜨던 사고. 실 CID(useCidHandler)와 같은 매칭 결과 보장.
+describe('matchCidEntry', () => {
+  const BOOK_CID = {
+    entries: {
+      '__phone:01099998888': {
+        key: '__phone:01099998888',
+        label: '(주소 미입력) 010-9999-8888',
+        alias: '테스트1',
+        phone: '01099998888',
+        count: 3,
+      },
+      '부산 사하구 하신번영로 25': {
+        key: '부산 사하구 하신번영로 25',
+        label: '부산 사하구 하신번영로 25',
+        alias: '진실보석',
+        phones: ['01012345678'],
+        count: 5,
+      },
+    },
+  };
+
+  test('phone-only 단골 매칭 — 별칭/주문횟수 반환 (사장님 신고 시나리오)', () => {
+    const r = matchCidEntry(BOOK_CID, '01099998888');
+    expect(r.alias).toBe('테스트1');
+    expect(r.orderCount).toBe(3);
+    expect(r.isNewNumber).toBe(false);
+  });
+
+  test('하이픈 포맷 / +82 국가코드 정규화 매칭', () => {
+    expect(matchCidEntry(BOOK_CID, '010-1234-5678').alias).toBe('진실보석');
+    expect(matchCidEntry(BOOK_CID, '+82-10-1234-5678').alias).toBe('진실보석');
+  });
+
+  test('address 는 entry.label 그대로 — 실 CID 와 동일 (placeholder 포함)', () => {
+    expect(matchCidEntry(BOOK_CID, '01099998888').address).toBe(
+      '(주소 미입력) 010-9999-8888'
+    );
+    expect(matchCidEntry(BOOK_CID, '01012345678').address).toBe(
+      '부산 사하구 하신번영로 25'
+    );
+  });
+
+  test('미등록 번호 → 신규 (isNewNumber=true, 나머지 null/0)', () => {
+    const r = matchCidEntry(BOOK_CID, '01000000000');
+    expect(r.entry).toBeNull();
+    expect(r.alias).toBeNull();
+    expect(r.address).toBeNull();
+    expect(r.orderCount).toBe(0);
+    expect(r.isNewNumber).toBe(true);
+  });
+
+  test('null/빈 입력 안전', () => {
+    expect(matchCidEntry(null, '01099998888').isNewNumber).toBe(true);
+    expect(matchCidEntry(BOOK_CID, '').entry).toBeNull();
+    expect(matchCidEntry(BOOK_CID, null).alias).toBeNull();
+  });
+});
+
+// 2026-06-12: PENDING → OrderTypePicker 슬롯 배당 시 발신자 도장 — 옛 코드는
+// PENDING 의 (대개 빈) deliveryPhone/Alias 만 넘겨 새 슬롯 라벨이 공백이 되던 버그.
+describe('resolvePendingCallerStamp', () => {
+  const BOOK = {
+    entries: {
+      '__phone:01055554444': {
+        key: '__phone:01055554444',
+        label: '(주소 미입력) 010-5555-4444',
+        alias: '테스트2',
+        phone: '01055554444',
+      },
+    },
+  };
+
+  test('PENDING 비어있고 최근 착신 있으면 — 전번 + 주소록 별칭 도장', () => {
+    const r = resolvePendingCallerStamp({}, BOOK, '01055554444');
+    expect(r.deliveryPhone).toBe('01055554444');
+    expect(r.deliveryAlias).toBe('테스트2');
+  });
+
+  test('미등록 착신 번호 — 전번만 도장 (별칭 null)', () => {
+    const r = resolvePendingCallerStamp({}, BOOK, '01033332222');
+    expect(r.deliveryPhone).toBe('01033332222');
+    expect(r.deliveryAlias).toBeNull();
+  });
+
+  test('order 에 이미 박힌 값이 최우선 (사장님 명시 입력 보호)', () => {
+    const order = {
+      deliveryPhone: '01011112222',
+      deliveryAlias: '직접입력손님',
+      deliveryAddress: '부산 사하구 1',
+    };
+    const r = resolvePendingCallerStamp(order, BOOK, '01055554444');
+    expect(r.deliveryPhone).toBe('01011112222');
+    expect(r.deliveryAlias).toBe('직접입력손님');
+    expect(r.deliveryAddress).toBe('부산 사하구 1');
+  });
+
+  test('order 전번만 있고 별칭 없으면 — 그 전번의 주소록 별칭 보강', () => {
+    const r = resolvePendingCallerStamp({ deliveryPhone: '01055554444' }, BOOK, '');
+    expect(r.deliveryPhone).toBe('01055554444');
+    expect(r.deliveryAlias).toBe('테스트2');
+  });
+
+  test('착신도 order 정보도 없으면 — 빈 도장 (매장 직접 손님)', () => {
+    const r = resolvePendingCallerStamp({}, BOOK, '');
+    expect(r.deliveryPhone).toBeNull();
+    expect(r.deliveryAlias).toBeNull();
   });
 });

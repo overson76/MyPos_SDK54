@@ -356,9 +356,16 @@ export function orderReducer(state, action) {
           },
         };
       }
+      // 2026-06-12: null 은 "지움" 이 아니라 "변경 없음" — 모든 호출처가 보강(머지) 의도.
+      // 별칭만 갱신하는 호출이 CID stash 가 박아둔 전화번호를 null 로 덮어
+      // TableScreen 카드 라벨이 공백이 되던 사고의 영구 처방.
       return {
         ...state,
-        [tableId]: { ...existing, deliveryPhone: safePhone, deliveryAlias: safeAlias },
+        [tableId]: {
+          ...existing,
+          deliveryPhone: safePhone || existing.deliveryPhone || null,
+          deliveryAlias: safeAlias || existing.deliveryAlias || null,
+        },
       };
     }
 
