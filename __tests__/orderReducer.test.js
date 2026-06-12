@@ -1454,3 +1454,88 @@ describe('orderReducer · startCookingAll (주방 "조리중" 일괄 버튼)', (
     ).toBe(empty);
   });
 });
+
+// 2026-06-12: 발신자 도장 머지 정책 — null 은 "지움" 이 아니라 "변경 없음".
+// 별칭만 갱신하는 호출이 CID stash 가 박은 전화번호를 지워 TableScreen 카드
+// 라벨이 공백이 되던 잠복 버그(5/25~)의 회귀 방지.
+describe('orderReducer · setDeliveryContact', () => {
+  test('phone + alias 함께 박기', () => {
+    const s = { d1: makeOrder() };
+    const next = orderReducer(s, {
+      type: 'orders/setDeliveryContact',
+      tableId: 'd1',
+      phone: '010-9999-8888',
+      alias: '테스트1',
+    });
+    expect(next.d1.deliveryPhone).toBe('01099998888'); // sanitize: 숫자/+ 만
+    expect(next.d1.deliveryAlias).toBe('테스트1');
+  });
+
+  test('phone=null 은 기존 phone 보존 (CID stash 도장 보호)', () => {
+    const s = {
+      d1: makeOrder({ deliveryPhone: '01099998888', deliveryAlias: null }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setDeliveryContact',
+      tableId: 'd1',
+      phone: null,
+      alias: '테스트1',
+    });
+    expect(next.d1.deliveryPhone).toBe('01099998888');
+    expect(next.d1.deliveryAlias).toBe('테스트1');
+  });
+
+  test('alias=null 은 기존 alias 보존', () => {
+    const s = {
+      d1: makeOrder({ deliveryPhone: '01011112222', deliveryAlias: '단골' }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setDeliveryContact',
+      tableId: 'd1',
+      phone: '01099998888',
+      alias: null,
+    });
+    expect(next.d1.deliveryPhone).toBe('01099998888');
+    expect(next.d1.deliveryAlias).toBe('단골');
+  });
+
+  test('둘 다 null 이어도 기존 도장 유지 (옛 코드는 null 로 지웠음)', () => {
+    const s = {
+      d1: makeOrder({ deliveryPhone: '01099998888', deliveryAlias: '테스트1' }),
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setDeliveryContact',
+      tableId: 'd1',
+      phone: null,
+      alias: null,
+    });
+    expect(next.d1.deliveryPhone).toBe('01099998888');
+    expect(next.d1.deliveryAlias).toBe('테스트1');
+  });
+
+  test('없는 테이블 → 새 칸 생성 + 도장', () => {
+    const next = orderReducer(
+      {},
+      {
+        type: 'orders/setDeliveryContact',
+        tableId: 'd9',
+        phone: '01055554444',
+        alias: '테스트2',
+      }
+    );
+    expect(next.d9.deliveryPhone).toBe('01055554444');
+    expect(next.d9.deliveryAlias).toBe('테스트2');
+  });
+
+  test('alias 제어문자 제거 + 30자 컷 sanitize 유지', () => {
+    const s = { d1: makeOrder() };
+    const next = orderReducer(s, {
+      type: 'orders/setDeliveryContact',
+      tableId: 'd1',
+      phone: '01012345678',
+      alias: '테스트\x00별칭' + 'a'.repeat(40),
+    });
+    expect(next.d1.deliveryAlias.includes('\x00')).toBe(false);
+    expect(next.d1.deliveryAlias.length).toBeLessThanOrEqual(30);
+  });
+});

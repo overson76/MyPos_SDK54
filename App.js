@@ -41,6 +41,8 @@ import ToastBanner from './components/ToastBanner';
 import CloudHealthBanner from './components/CloudHealthBanner';
 import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
+import { matchCidEntry } from './utils/addressBookLookup';
+import { findSimEntryKeys } from './utils/addressBookCleanup';
 import { useOrders, PENDING_TABLE_ID } from './utils/OrderContext';
 // 2026-05-21: CID 자동 단골(15초 후 자동 배달 슬롯 생성) 제거 — 사장님이 메뉴 담고
 // "주문" 누를 때 OrderTypePicker 로 배달/포장/예약 직접 선택하는 흐름으로 통합.
@@ -251,6 +253,7 @@ function MainApp() {
     setAlias,
     upsertEntryFromOrder,
     clearAllSlots,
+    deleteAddress,
   } = useOrders();
   const { showToast } = useToast();
   // 2026-05-21: CID "주문받기" 클릭 시 띄울 OrderTypePicker — App 레벨에서 관리.
@@ -587,11 +590,26 @@ function MainApp() {
             >
               <AdminScreen
                 onSimulateCall={(data) => {
+                  // 2026-06-12: 시뮬도 실 CID(useCidHandler)와 *같은 주소록 매칭* 수행.
+                  // 사장님이 별칭 저장해둔 번호(테스트1 등)로 시뮬 발신하면 배너에
+                  // 별칭/주소/주문횟수가 실 전화와 동일하게 떠야 검증이 성립.
+                  // 버튼이 명시한 alias/address 가 있으면 그게 우선 (단골 시뮬 버튼).
+                  const matched = matchCidEntry(addressBook, data?.phoneNumber);
+                  const merged = {
+                    ...data,
+                    alias: data?.alias || matched.alias,
+                    address: data?.address || matched.address,
+                    orderCount: data?.orderCount ?? matched.orderCount,
+                    isNewNumber:
+                      data?.alias || data?.address
+                        ? data?.isNewNumber ?? false
+                        : matched.isNewNumber,
+                  };
                   // 2026-05-28: 시뮬 호출 시 *주소록 entry 도 자동 박음* — 알림만으론
                   // 사장님 슬롯/카드에서 단골 매칭 안 됨. upsertEntryFromOrder 가
                   // 정식 entry 생성 (address+alias+phone). 다음 흐름에서 phone 기반
                   // lookup 으로 어디서든 "👤 진실보석" 자동 표시.
-                  simulateIncomingCall(data);
+                  simulateIncomingCall(merged);
                   if (data?.alias) {
                     if (data.address) {
                       upsertEntryFromOrder({
@@ -608,6 +626,21 @@ function MainApp() {
                   }
                 }}
                 onClearAllSlots={clearAllSlots}
+                onCleanupSimEntries={() => {
+                  // 2026-06-12: 시뮬 검증 잔재(테스트1/테스트2 등 프리셋 번호 entry) 일괄
+                  // 삭제. deleteAddress = 주소록 UI 의 삭제와 같은 경로 — 휴지통(tombstone)
+                  // 24h 재등록 금지가 그대로 적용돼 좀비 부활 없음.
+                  const keys = findSimEntryKeys(addressBook?.entries);
+                  if (keys.length === 0) {
+                    showToast({ kind: 'success', text: 'ℹ 시뮬 잔재 entry 가 없습니다' });
+                    return;
+                  }
+                  keys.forEach((k) => deleteAddress(k));
+                  showToast({
+                    kind: 'success',
+                    text: `✓ 시뮬 잔재 ${keys.length}건 삭제했습니다 (24시간 재등록 금지)`,
+                  });
+                }}
               />
             </View>
           </View>

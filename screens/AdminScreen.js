@@ -75,7 +75,7 @@ const SECTIONS = [
 // 1.0.24: PinManageModal + PIN_LENGTH 는 components/PinManageModal.js 로 이동
 // (AdminSettingsView 와 공유). 아래에서 import.
 
-function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
+function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntries } = {}) {
   const { scale } = useResponsive();
   const sysStyles = useMemo(() => makeSysStyles(scale), [scale]);
   const lock = useLock();
@@ -733,6 +733,31 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {/* 2026-06-12: 시뮬 검증 잔재 정리 — 프리셋 번호(9999-8888 등)로 생긴
+                  테스트 entry 만 골라 삭제. 실제 손님 주소록은 안 건드림. */}
+              {onCleanupSimEntries ? (
+                <View style={sysStyles.row}>
+                  <View style={sysStyles.rowText}>
+                    <Text style={sysStyles.label}>시뮬 잔재 정리</Text>
+                    <Text style={sysStyles.helper}>
+                      위 시뮬 프리셋 번호로 만들어진 주소록 entry (테스트 별칭 포함)
+                      일괄 삭제. 삭제 후 24시간 자동 재등록 금지 (휴지통).
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={sysStyles.btnSecondary}
+                    onPress={() => {
+                      if (typeof window !== 'undefined' && window.confirm) {
+                        if (!window.confirm('시뮬 테스트 번호로 만들어진 주소록 entry 를 삭제할까요?')) return;
+                      }
+                      onCleanupSimEntries();
+                    }}
+                  >
+                    <Text style={sysStyles.btnSecondaryText}>🧹 시뮬 정리</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </>
           ) : null}
 
@@ -849,7 +874,7 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots } = {}) {
   );
 }
 
-export default function AdminScreen({ onSimulateCall, onClearAllSlots } = {}) {
+export default function AdminScreen({ onSimulateCall, onClearAllSlots, onCleanupSimEntries } = {}) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [section, setSection] = useState('returns');
@@ -947,6 +972,7 @@ export default function AdminScreen({ onSimulateCall, onClearAllSlots } = {}) {
           <SystemSettingsView
             onSimulateCall={onSimulateCall}
             onClearAllSlots={onClearAllSlots}
+            onCleanupSimEntries={onCleanupSimEntries}
           />
         )}
       </View>

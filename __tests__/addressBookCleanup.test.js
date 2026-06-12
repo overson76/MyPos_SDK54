@@ -9,6 +9,8 @@ import {
   findIncompleteEntries,
   mergeEntries,
   applyMerges,
+  CID_SIM_PHONES,
+  findSimEntryKeys,
 } from '../utils/addressBookCleanup';
 
 describe('entryPhoneDigits', () => {
@@ -248,5 +250,67 @@ describe('applyMerges — 여러 통합 순차', () => {
     expect(Object.keys(next).sort()).toEqual(['s1', 's2']);
     expect(next.s1.count).toBe(2);
     expect(next.s2.count).toBe(2);
+  });
+});
+
+// 2026-06-12: 시뮬 검증 잔재 정리 — 프리셋 번호로 생긴 테스트 entry 만 골라냄.
+describe('findSimEntryKeys', () => {
+  const entries = {
+    '__phone:01099998888': {
+      key: '__phone:01099998888',
+      label: '(주소 미입력) 010-9999-8888',
+      alias: '테스트1',
+      phone: '01099998888',
+    },
+    '__phone:01055554444': {
+      key: '__phone:01055554444',
+      label: '(주소 미입력) 010-5555-4444',
+      alias: '테스트2',
+      // phone 필드 없이 label 텍스트에만 번호 — entryPhoneDigits 가 텍스트 스캔
+    },
+    '부산 사하구 하신중앙로 240': {
+      key: '부산 사하구 하신중앙로 240',
+      label: '부산 사하구 하신중앙로 240',
+      alias: '진실보석',
+      phones: ['01077776666'], // 단골 시뮬 프리셋
+    },
+    '부산 사하구 진짜손님로 1': {
+      key: '부산 사하구 진짜손님로 1',
+      label: '부산 사하구 진짜손님로 1',
+      alias: '아가맘',
+      phone: '01027724064', // 실제 손님 — 절대 안 잡혀야
+    },
+  };
+
+  test('프리셋 번호 entry 만 잡고 실제 손님은 제외', () => {
+    const keys = findSimEntryKeys(entries);
+    expect(keys.sort()).toEqual(
+      [
+        '__phone:01099998888',
+        '__phone:01055554444',
+        '부산 사하구 하신중앙로 240',
+      ].sort()
+    );
+    expect(keys).not.toContain('부산 사하구 진짜손님로 1');
+  });
+
+  test('하이픈 포맷 프리셋 목록도 정규화 매칭', () => {
+    const keys = findSimEntryKeys(entries, ['010-9999-8888']);
+    expect(keys).toEqual(['__phone:01099998888']);
+  });
+
+  test('빈/이상 입력 안전', () => {
+    expect(findSimEntryKeys(null)).toEqual([]);
+    expect(findSimEntryKeys({})).toEqual([]);
+    expect(findSimEntryKeys(entries, [])).toEqual([]);
+  });
+
+  test('CID_SIM_PHONES 프리셋 4종 유지 (AdminScreen 버튼과 동기)', () => {
+    expect(CID_SIM_PHONES).toEqual([
+      '01099998888',
+      '01055554444',
+      '01033332222',
+      '01077776666',
+    ]);
   });
 });

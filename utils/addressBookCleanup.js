@@ -86,6 +86,32 @@ export function findPhoneDuplicates(entries) {
   return groups;
 }
 
+// ── CID 시뮬 잔재 정리 ──
+// 2026-06-12: AdminScreen 시뮬 프리셋 번호 — 시뮬 검증 중 생긴 테스트 entry
+// (테스트1/테스트2 등) 를 한 번에 골라내기 위한 단일 진실 소스.
+// AdminScreen 의 시뮬 버튼 번호와 같이 유지할 것 (신규 프리셋 추가 시 여기도).
+export const CID_SIM_PHONES = [
+  '01099998888', // 신규 A
+  '01055554444', // 신규 B
+  '01033332222', // 신규 C
+  '01077776666', // 단골 (진실보석 시뮬)
+];
+
+// 시뮬 프리셋 번호가 박힌 entry key 목록 — 실제 손님 entry 는 절대 안 잡힘
+// (프리셋 번호는 실존하지 않는 테스트 번호).
+export function findSimEntryKeys(entries, simPhones = CID_SIM_PHONES) {
+  if (!entries || typeof entries !== 'object') return [];
+  const targets = new Set(
+    simPhones.map((p) => normalizePhoneDigits(p)).filter(Boolean)
+  );
+  const out = [];
+  for (const k of Object.keys(entries)) {
+    const digits = entryPhoneDigits(k, entries[k]);
+    if (digits.some((d) => targets.has(d))) out.push(k);
+  }
+  return out;
+}
+
 // 비슷한 상호 쌍의 안정 키 — 사용자가 본 '상호 이름(alias)' 정규화 쌍(순서 무관).
 // "다른 가게" 무시 목록 / 후보 매칭에 공통 사용.
 // 2026-06-09: 옛 버전은 entry key 쌍이었으나, 대표 entry key 가 점수(count·주소 등)에 따라
