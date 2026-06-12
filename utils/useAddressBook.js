@@ -616,6 +616,14 @@ export function useAddressBook() {
     const key = normalizeAddressKey(safeAddr);
     if (!key) return null;
 
+    // 2026-06-12: 휴지통 가드 — 삭제 후 24시간 내 같은 키 자동 재등록 금지 (좀비 영구처방).
+    // 주문 칸에 실려있던 옛 주소가 확정/결제 순간 주소록을 되살리던 경로를 전 기기에서 차단.
+    // 사장님 수동 등록(addAddress)은 이 가드를 안 타므로 의도적 재등록은 그대로 가능.
+    const tombs = addressBook?.deletedTombstones || {};
+    const TOMB_BLOCK_MS = 24 * 60 * 60 * 1000;
+    const tombAt = tombs[key] || (digits ? tombs[`__phone:${digits}`] : 0);
+    if (tombAt && Date.now() - tombAt < TOMB_BLOCK_MS) return null;
+
     // closure 시점 결과 계산 — setAddressBook 콜백은 비동기라 즉시 결과 반환 어려움.
     // 호출 시점 entries snapshot 으로 action 결정. 호출 빈도 낮아 race 위험 무시.
     const snapEntries = addressBook?.entries || {};

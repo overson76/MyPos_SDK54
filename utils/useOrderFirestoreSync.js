@@ -197,14 +197,24 @@ export function useOrderFirestoreSync({
       (snap) => {
         snapshotSeenRef.current.addresses = true;
         const entries = {};
+        const tombstones = {};
         snap.docs.forEach((d) => {
           const data = d.data() || {};
           const key = data._key || d.id;
+          // 2026-06-12: 휴지통(삭제 표식) — 목록에는 안 보이고 자동 재등록만 24h 차단.
+          if (data.deleted) {
+            tombstones[key] = data.deletedAt || 0;
+            return;
+          }
           // _key 는 Firestore 저장용 메타 — entries 에서는 제외.
           const { _key: _ignore, ...rest } = data;
           entries[key] = rest;
         });
-        setAddressBook((prev) => ({ ...prev, entries }));
+        setAddressBook((prev) => ({
+          ...prev,
+          entries,
+          deletedTombstones: tombstones,
+        }));
         lastSyncedAddressEntriesRef.current = entries;
       },
       (err) => reportError(err, { ctx: 'addresses.listener' })
@@ -457,7 +467,14 @@ export function useOrderFirestoreSync({
       for (const key of Object.keys(synced)) {
         if (!(key in next)) {
           const docId = safeDocId(key);
-          batch.delete(storeRef.collection('addresses').doc(docId));
+          // 2026-06-12: 실제 삭제 대신 휴지통 표식 — 전 기기가 표식을 동기화로 인지,
+          // 자동 재등록이 24h 간 같은 키를 못 되살린다 (좀비 영구처방). 수동으로 다시
+          // 등록하면 정상 entry 가 표식을 덮어 자연 부활.
+          batch.set(storeRef.collection('addresses').doc(docId), {
+            _key: key,
+            deleted: true,
+            deletedAt: Date.now(),
+          });
           opCount++;
         }
       }
