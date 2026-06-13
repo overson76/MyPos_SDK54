@@ -253,6 +253,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       const existing = getGroupFor?.(tableObj.id);
       if (existing) {
         dissolveGroup?.(existing.leaderId);
+        setMoveMessage('단체를 해제했습니다 — 다시 묶으려면 테이블을 차례로 클릭하세요');
         return;
       }
       // split 된 테이블은 단체 묶기 대상에서 제외
@@ -262,17 +263,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       }
       // 이미 선택된 테이블을 다시 클릭 → 선택 해제
       if (groupSelection.includes(tableObj.id)) {
+        setMoveMessage('');
         setGroupSelection((prev) => prev.filter((x) => x !== tableObj.id));
         return;
       }
-      // 두 번째 선택 시 추가 버튼 클릭 없이 즉시 단체 생성 (pendingGroupMode 적용)
-      const nextSel = [...groupSelection, tableObj.id];
-      if (nextSel.length >= 2) {
-        createGroup?.(nextSel, pendingGroupMode);
-        exitAllModes();
-      } else {
-        setGroupSelection(nextSel);
-      }
+      // 2026-06-13: 사장님 요청 "단체 2테이블 한계 해제". 옛 코드는 2번째 클릭에서
+      // 즉시 createGroup + 모드 종료 → 3개 이상 못 묶음. 클릭마다 누적만 하고
+      // 확정은 [단체 확정(N)] 버튼이 담당 — 3·4·5… 테이블 묶기 가능.
+      // (useGroups/reducer/분리결제는 처음부터 N명 지원 — UI 흐름만 한계였음)
+      setMoveMessage('');
+      setGroupSelection((prev) => [...prev, tableObj.id]);
       return;
     }
     if (moveMode === 'source') {
@@ -280,13 +280,14 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       const hasAny =
         order.items.length > 0 || (order.confirmedItems || []).length > 0;
       if (!hasAny) {
-        setMoveMessage('주문이 있는 테이블을 선택하세요');
+        setMoveMessage('빈 테이블입니다 — 주문이 있는 테이블을 클릭하세요');
         return;
       }
       setMoveSourceId(tableObj.id);
       setMoveMode('dest');
+      // 2026-06-13: 사장님 요청 — 단계별 사용법 유도 멘트 (1단계 → 2단계).
       setMoveMessage(
-        `${tableObj.label} → 이동할 빈 테이블을 선택하세요`
+        `${tableObj.label} 선택됨 → 옮겨갈 빈 테이블을 클릭하세요`
       );
       return;
     }
@@ -297,7 +298,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       }
       const ok = moveOrder(moveSourceId, tableObj.id);
       if (!ok) {
-        setMoveMessage('비어있는 테이블로만 이동할 수 있습니다');
+        setMoveMessage('그 자리는 사용 중입니다 — 비어있는 테이블을 클릭하세요');
         return;
       }
       exitAllModes();
@@ -359,7 +360,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       exitAllModes();
       if (!was) {
         setMoveMode('source');
-        setMoveMessage('이동할 테이블(주문 있음)을 선택하세요');
+        setMoveMessage('이동할 주문이 있는 테이블을 클릭하세요');
       }
       return;
     }
@@ -987,6 +988,17 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               (a === '합석' && splitMode) ||
               (a === '자리이동' && moveMode !== null) ||
               (a === '단체' && groupMode);
+            // 2026-06-13: 모드 활성 중엔 버튼이 "다음 행동" 을 말하게 — 단체는
+            // 2개 이상 선택 시 [단체 확정(N)] 으로 바뀌어 확정 버튼 역할.
+            let label = a;
+            if (a === '단체' && groupMode) {
+              label =
+                groupSelection.length >= 2
+                  ? `단체 확정(${groupSelection.length})`
+                  : '단체 종료';
+            } else if (active) {
+              label = `${a} 종료`;
+            }
             return (
               <TouchableOpacity
                 key={a}
@@ -1000,7 +1012,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     active && styles.actionBtnTextActive,
                   ]}
                 >
-                  {a}
+                  {label}
                 </Text>
               </TouchableOpacity>
             );
@@ -1026,11 +1038,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         </View>
       </View>
 
-      {/* 합석 안내 */}
+      {/* 합석 안내 — 2026-06-13 사장님 요청: 사용법 유도 멘트 */}
       {splitMode && (
         <View style={styles.hintBar}>
           <Text style={styles.hintText}>
-            나눌 테이블을 선택하세요 (이미 합석된 테이블 선택 시 다시 합쳐집니다)
+            합석할 테이블을 클릭하세요 — 한 테이블이 2칸으로 나뉩니다 (이미
+            합석된 테이블을 클릭하면 다시 합칩니다)
           </Text>
         </View>
       )}
@@ -1042,11 +1055,16 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
         </View>
       )}
 
-      {/* 단체 안내 */}
+      {/* 단체 안내 — 선택 단계별 다음 행동 유도. 해제/오류 안내(moveMessage)가 우선. */}
       {groupMode && (
         <View style={[styles.hintBar, styles.groupHint]}>
           <Text style={styles.groupHintText}>
-            {moveMessage || '단체로 묶을 테이블을 선택하세요 (2개 이상)'}
+            {moveMessage ||
+              (groupSelection.length === 0
+                ? '단체로 묶을 테이블을 차례로 클릭하세요 (2개 이상)'
+                : groupSelection.length === 1
+                ? '계속해서 함께 묶을 테이블을 클릭하세요 (다시 클릭하면 해제)'
+                : `${groupSelection.length}개 선택됨 — 더 클릭해 추가하거나, 위 [단체 확정] 버튼을 누르면 묶입니다`)}
           </Text>
           {groupSelection.length > 0 && (
             <Text style={styles.groupHintSelected}>
@@ -1514,10 +1532,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           setPendingGroupMode(mode);
           setGroupMode(true);
           setGroupSelection([]);
+          // 첫 테이블 클릭 시 handleTilePress 가 비워서 단계별 안내로 전환.
           setMoveMessage(
             mode === 'shared'
-              ? '🔗 통합 모드 — 단체로 묶을 테이블을 2개 이상 선택'
-              : '✂️ 분리 모드 — 단체로 묶을 테이블을 2개 이상 선택'
+              ? '🔗 통합 모드 — 함께 묶을 테이블을 차례로 클릭하세요 (2개 이상)'
+              : '✂️ 분리 모드 — 함께 묶을 테이블을 차례로 클릭하세요 (2개 이상)'
           );
         }}
         onClose={() => setGroupModePickerOpen(false)}
