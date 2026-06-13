@@ -421,6 +421,33 @@ describe('groupItemsBySource / computeSubtotalsBySource', () => {
     expect(computeSubtotalsBySource([], 't01')).toEqual({});
     expect(computeSubtotalsBySource(null, 't01')).toEqual({});
   });
+
+  // 2026-06-13: 단체 2테이블 한계 해제 — useGroups.createGroup 이 3개 이상도
+  // mergeOrderParts 를 순차 적용해 leader 로 합치는 조합. 분리 결제 소계까지
+  // 테이블별로 정확히 갈리는지 (사장님 시나리오: 3테이블 단체).
+  test('3테이블 순차 병합 — 전 메뉴 보존 + 테이블별 소계 분리', () => {
+    const t1 = {
+      items: [{ slotId: 'a', id: 'm1', qty: 1, price: 7000, sourceTableId: 't01' }],
+      cartItems: [],
+      confirmedItems: [],
+    };
+    const t2 = {
+      items: [{ slotId: 'b', id: 'm2', qty: 2, price: 9000, sourceTableId: 't02' }],
+      cartItems: [],
+      confirmedItems: [],
+    };
+    const t3 = {
+      items: [{ slotId: 'c', id: 'm3', qty: 1, price: 11000, sourceTableId: 't03' }],
+      cartItems: [],
+      confirmedItems: [],
+    };
+    const merged = mergeOrderParts(mergeOrderParts(t1, t2), t3);
+    expect(merged.items).toHaveLength(3);
+    const sub = computeSubtotalsBySource(merged.items, 't01');
+    expect(sub['t01']).toBe(7000);
+    expect(sub['t02']).toBe(18000);
+    expect(sub['t03']).toBe(11000);
+  });
 });
 
 describe('findHistoryEntry', () => {
