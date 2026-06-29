@@ -16,6 +16,7 @@ import {
   mergeSameAliasPhoneOnlyEntries,
 } from './addressBookMigrations';
 import { similarPairKey } from './addressBookCleanup';
+import { hasResolvableAddress } from './addressBookLookup';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -97,6 +98,10 @@ export function useAddressBook() {
     for (const entry of Object.values(addressBook.entries)) {
       if (
         typeof entry.lat === 'number' ||
+        // 2026-06-13: 주소 미입력(CID phone-only/placeholder) entry 는 좌표 변환
+        //   대상 아님 — label 이 주소가 아니라 식별 placeholder 라 카카오가 못 찾고
+        //   매번 실패 호출만 남기던 낭비(48~62건). 카운터 PC 첫 로드 지연 처방.
+        !hasResolvableAddress(entry) ||
         inFlightRef.current.has(entry.key) ||
         failedRef.current.has(entry.key)
       ) {

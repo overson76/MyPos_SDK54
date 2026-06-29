@@ -7,6 +7,7 @@ import {
   computeNeedsAliasPrompt,
   matchCidEntry,
   resolvePendingCallerStamp,
+  hasResolvableAddress,
 } from '../utils/addressBookLookup';
 
 const BOOK_OBJECT = {
@@ -362,5 +363,40 @@ describe('resolvePendingCallerStamp', () => {
     const r = resolvePendingCallerStamp({}, BOOK, '');
     expect(r.deliveryPhone).toBeNull();
     expect(r.deliveryAlias).toBeNull();
+  });
+});
+
+// 2026-06-13: 카운터 PC 딜레이 처방 — 주소 미입력 entry 의 카카오 좌표 변환 낭비 차단.
+// useAddressBook 의 lazy geocode 루프가 이 함수로 진짜 주소 entry 만 골라 호출.
+describe('hasResolvableAddress', () => {
+  test('진짜 도로명/지번 주소 → 변환 대상', () => {
+    expect(hasResolvableAddress({ label: '부산 사하구 하신번영로 25' })).toBe(true);
+    expect(hasResolvableAddress({ label: '서울 강남구 테헤란로 152' })).toBe(true);
+  });
+
+  test('CID phone-only placeholder → 변환 대상 아님', () => {
+    expect(
+      hasResolvableAddress({ label: '(주소 미입력) 010-9999-8888' })
+    ).toBe(false);
+    expect(hasResolvableAddress({ label: '__phone:01099998888' })).toBe(false);
+  });
+
+  test('pendingAddress 플래그 entry → 변환 대상 아님', () => {
+    expect(
+      hasResolvableAddress({ label: '부산 어딘가', pendingAddress: true })
+    ).toBe(false);
+  });
+
+  test('빈/공백 label → 변환 대상 아님', () => {
+    expect(hasResolvableAddress({ label: '' })).toBe(false);
+    expect(hasResolvableAddress({ label: '   ' })).toBe(false);
+    expect(hasResolvableAddress({})).toBe(false);
+    expect(hasResolvableAddress(null)).toBe(false);
+  });
+
+  test('별칭만 있고 label 이 placeholder 면 변환 대상 아님 (alias 검색은 별도)', () => {
+    expect(
+      hasResolvableAddress({ alias: '진실보석', label: '(주소 미입력) 010-1' })
+    ).toBe(false);
   });
 });
