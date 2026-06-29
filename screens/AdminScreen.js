@@ -874,7 +874,7 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntri
   );
 }
 
-export default function AdminScreen({ onSimulateCall, onClearAllSlots, onCleanupSimEntries } = {}) {
+export default function AdminScreen({ isActive = true, onSimulateCall, onClearAllSlots, onCleanupSimEntries } = {}) {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [section, setSection] = useState('returns');
@@ -956,7 +956,11 @@ export default function AdminScreen({ onSimulateCall, onClearAllSlots, onCleanup
         </TouchableOpacity>
       </View>
       <View style={{ flex: 1 }}>
-        {section === 'returns' ? (
+        {/* 2026-06-13: 카운터 PC 딜레이 처방 — 관리자 탭이 *실제로 보일 때만* 무거운
+            자식(배달회수/주소록의 카카오 도로거리 순회 useEffect 등)을 마운트. 탭은 전부
+            display:none 으로 살아있어, 옛 코드는 테이블 탭만 봐도 배달회수 화면이 백그라운드에서
+            주소록 변경마다 전체 순회하던 상시 부하. isActive 가드로 평소 그 비용 제거. */}
+        {!isActive ? null : section === 'returns' ? (
           <DeliveryReturnScreen />
         ) : section === 'menu' ? (
           <SettingScreen />

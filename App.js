@@ -589,6 +589,7 @@ function MainApp() {
               style={[styles.pane, activeTab !== '관리자' && styles.paneHidden]}
             >
               <AdminScreen
+                isActive={activeTab === '관리자'}
                 onSimulateCall={(data) => {
                   // 2026-06-12: 시뮬도 실 CID(useCidHandler)와 *같은 주소록 매칭* 수행.
                   // 사장님이 별칭 저장해둔 번호(테스트1 등)로 시뮬 발신하면 배너에

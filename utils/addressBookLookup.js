@@ -200,6 +200,20 @@ export function entryIdentityName(entry) {
   return label;
 }
 
+// 2026-06-13: 카운터 PC 딜레이 처방 — entry 가 카카오 좌표 변환을 시도할 가치가
+// 있는 "진짜 주소" 를 가졌는지. useAddressBook 의 lazy geocode 루프가 주소 미입력
+// (CID phone-only / placeholder) entry 48~62건까지 매번 카카오로 보내 실패하던 낭비
+// 차단. 이런 entry 는 label 이 주소가 아니라 식별용 placeholder 라 좌표를 구할 수 없음
+// → 호출 자체가 무의미. (alias 기반 검색은 AliasPromptModal 이 사용자 트리거로 별도 처리.)
+export function hasResolvableAddress(entry) {
+  const label = (entry?.label || '').trim();
+  if (!label) return false;
+  if (label.startsWith('(주소 미입력)')) return false;
+  if (label.startsWith('__phone:')) return false;
+  if (entry?.pendingAddress === true) return false;
+  return true;
+}
+
 // 2026-06-12: CID 착신 → 주소록 매칭 — 실 CID(useCidHandler.web.js)와 시뮬
 // (App.js onSimulateCall) 이 *같은 매칭 결과* 를 내도록 공용화한 순수 함수.
 // 사장님 신고 "주소록에 저장된 단골(테스트1)인데 시뮬 배너에 번호만 뜸" — 시뮬
