@@ -4,6 +4,7 @@
 // 여기 담지 않고 wrapper 레벨에서 dispatch 전후로 처리.
 
 import { compactSlotsByPrefix, genSlotId, normalizeSlots } from './orderHelpers';
+import { mergeKeyedPull } from './syncMerge';
 
 // 주문 탭에서 테이블 선택 없이 먼저 담는 장바구니용 가상 tableId
 export const PENDING_TABLE_ID = '__pending__';
@@ -65,16 +66,25 @@ export function orderReducer(state, action) {
     case 'orders/hydrate': {
       // payload 가 falsy 면 변화 없음 — useOrderPersistence 가드와 별개로 안전하게.
       if (!action.payload || typeof action.payload !== 'object') return state;
+      // 2026-06-30: Firestore pull 이 미push 로컬 변경(결제 완료/조작)을 통째로
+      //   되돌리던 사고 처방 — action.lastSynced(마지막 동기 시점 스냅샷)가 오면
+      //   dirty 보존 병합(mergeKeyedPull). 부팅 hydrate(useOrderPersistence)는
+      //   lastSynced 없이 호출 → 기존 전체 교체 유지.
+      //   (1.0.51 의 PENDING 보존과 같은 계열 — 그땐 PENDING 만, 이제 전 테이블)
+      const base =
+        action.lastSynced && typeof action.lastSynced === 'object'
+          ? mergeKeyedPull(action.payload, state, action.lastSynced)
+          : action.payload;
       // 1.0.51: PENDING_TABLE_ID 는 local-only — Firestore sync 무관.
       //   사장님 보고 (1.0.50): "테이블 선택 없이 메뉴 담으면 카트가 계속 지워짐".
       //   원인: useOrderFirestoreSync 의 orders onSnapshot 콜백이 매번 dispatch('orders/hydrate')
       //         → Firestore 에는 PENDING 문서 없음 → 통째 교체 시 local 의 PENDING cart 사라짐.
       //   처방: hydrate 시 local 의 PENDING 이 있으면 그대로 보존.
       const pending = state?.[PENDING_TABLE_ID];
-      if (pending) {
-        return { ...action.payload, [PENDING_TABLE_ID]: pending };
+      if (pending && base[PENDING_TABLE_ID] !== pending) {
+        return { ...base, [PENDING_TABLE_ID]: pending };
       }
-      return action.payload;
+      return base;
     }
 
     case 'orders/addItem': {

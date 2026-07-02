@@ -98,10 +98,12 @@ export default function KitchenScreen() {
       orderType,
       scheduledTime: o.deliveryTime || '',
       scheduledTimeIsPM: o.deliveryTimeIsPM ?? true,
-      // 2026-05-28: order 자체의 alias/phone 도 fallback — entry 없거나 phone 누락 case 방어.
-      // 빌더의 우선순위(별칭→전번→주소) 가 정상 동작하려면 customerAlias/Phone 가 채워져야.
-      customerAlias: addrEntry?.alias || o.deliveryAlias || '',
-      customerPhone: addrEntry?.phone || o.deliveryPhone || '',
+      // 2026-06-30: 칸 도장(o.deliveryAlias/Phone) 우선 — 그 주문 시점에 확정된 손님.
+      //   옛 entry 우선은 도장이 안 박히던 시절(6/13 처방 전) 보완책. 주소 키가 다른
+      //   손님 entry 에 매칭되거나 주소록이 잠깐 어긋나면 카운터(도장 우선)와 주방이
+      //   서로 다른 별칭을 보여줬다 (사장님 신고). TableScreen 정책과 통일.
+      customerAlias: o.deliveryAlias || addrEntry?.alias || '',
+      customerPhone: o.deliveryPhone || addrEntry?.phone || '',
       drivingDistanceM:
         typeof addrEntry?.drivingM === 'number' ? addrEntry.drivingM : null,
       drivingDurationSec:
@@ -548,11 +550,13 @@ export default function KitchenScreen() {
 
             {o.table.type === 'delivery' && o.deliveryAddress ? (() => {
               // 배달지 표시 — 별칭 > 전번 > 주소 (사장님 정책 일관 적용).
+              // 2026-06-30: 칸 도장(o.deliveryAlias) 우선 — 주소 키로 찾은 entry 가
+              //   다른 손님 것일 때 주방만 엉뚱한 별칭이 뜨던 사고 (카운터는 도장 우선).
               const entry = findAddressEntry(addressBook, o.deliveryAddress);
               const displayLabel = formatDeliveryLabel(
                 {
-                  alias: entry?.alias,
-                  phone: entry?.phone || o.deliveryPhone,
+                  alias: o.deliveryAlias || entry?.alias,
+                  phone: o.deliveryPhone || entry?.phone,
                   label: o.deliveryAddress,
                 },
                 { phoneStyle: 'full' }
