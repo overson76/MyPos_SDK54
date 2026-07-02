@@ -24,6 +24,7 @@ import { snapExists } from './firestoreCompat';
 import { setSharedAudioStore } from './sharedAudio';
 import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
+import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -124,7 +125,15 @@ export function useOrderFirestoreSync({
         snap.docs.forEach((d) => {
           next[d.id] = d.data();
         });
-        dispatch({ type: 'orders/hydrate', payload: next });
+        // 2026-06-30: lastSynced 를 action 에 실어 reducer 가 dirty 보존 병합.
+        //   옛 전체 교체는 미push 로컬 변경(결제 완료/조작)을 echo/타 기기 snapshot 이
+        //   되돌리고, effect 재실행이 디바운스까지 취소해 조작이 흔적 없이 소멸했다.
+        //   ref 는 서버 값으로 전진 — dirty 항목은 diff 로 남아 push 가 곧 밀어냄.
+        dispatch({
+          type: 'orders/hydrate',
+          payload: next,
+          lastSynced: lastSyncedOrdersRef.current || {},
+        });
         lastSyncedOrdersRef.current = next;
       },
       (err) => reportError(err, { ctx: 'orders.listener' })
@@ -140,7 +149,11 @@ export function useOrderFirestoreSync({
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
-            setSplits(data.value);
+            // 2026-06-30: dirty(미push 로컬 변경) 면 pull 무시 — ref 는 서버 값으로
+            //   전진하므로 push effect 가 내 값을 곧 밀어냄. setState 업데이터는 나중에
+            //   실행되므로 ref 는 반드시 *먼저 캡처* (아래 4개 listener 동일 패턴).
+            const prevSynced = lastSyncedSplitsRef.current;
+            setSplits((prev) => mergeValuePull(data.value, prev, prevSynced));
             lastSyncedSplitsRef.current = data.value;
           }
         },
@@ -156,7 +169,8 @@ export function useOrderFirestoreSync({
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
-            setGroups(data.value);
+            const prevSynced = lastSyncedGroupsRef.current;
+            setGroups((prev) => mergeValuePull(data.value, prev, prevSynced));
             lastSyncedGroupsRef.current = data.value;
           }
         },
@@ -172,9 +186,12 @@ export function useOrderFirestoreSync({
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (typeof data?.total === 'number') {
-            setRevenue((prev) =>
-              prev.total === data.total ? prev : { ...prev, total: data.total }
-            );
+            // dirty(방금 결제로 로컬 total 증가, 미push) 면 pull 무시 — 매출 누락 방지.
+            const prevSynced = lastSyncedRevenueTotalRef.current;
+            setRevenue((prev) => {
+              const nextTotal = mergeValuePull(data.total, prev.total, prevSynced);
+              return prev.total === nextTotal ? prev : { ...prev, total: nextTotal };
+            });
             lastSyncedRevenueTotalRef.current = data.total;
           }
         },
@@ -187,7 +204,12 @@ export function useOrderFirestoreSync({
         const list = snap.docs
           .map((d) => d.data())
           .filter((h) => h && h.id != null);
-        setRevenue((prev) => ({ ...prev, history: list }));
+        // 방금 append 한 결제 기록(미push)이 echo/타 기기 snapshot 으로 증발하지 않게.
+        const prevSynced = lastSyncedHistoryRef.current;
+        setRevenue((prev) => {
+          const merged = mergeHistoryPull(list, prev.history, prevSynced);
+          return prev.history === merged ? prev : { ...prev, history: merged };
+        });
         lastSyncedHistoryRef.current = list;
       },
       (err) => reportError(err, { ctx: 'history.listener' })
@@ -210,9 +232,13 @@ export function useOrderFirestoreSync({
           const { _key: _ignore, ...rest } = data;
           entries[key] = rest;
         });
+        // 방금 저장한 별칭/전화(미push 500ms 창)가 pull 로 소멸하지 않게 dirty 보존.
+        // dirty 없으면 mergeKeyedPull 이 server 객체 그대로 반환 — 6/9 "Firestore
+        // 단일 진실 + 참조 보존 → write noop" 설계 유지.
+        const prevSynced = lastSyncedAddressEntriesRef.current;
         setAddressBook((prev) => ({
           ...prev,
-          entries,
+          entries: mergeKeyedPull(entries, prev.entries, prevSynced),
           deletedTombstones: tombstones,
         }));
         lastSyncedAddressEntriesRef.current = entries;
