@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -482,25 +484,31 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     }
     const deliveryAlias = deliveryAliasFromOrder || deliveryAliasFromBook;
     const deliveryPhone = deliveryPhoneFromOrder || deliveryPhoneFromBook;
+    const fmtPhone = (p) => {
+      const d = String(p).replace(/\D/g, '');
+      return d.length === 11
+        ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
+        : d.length === 10
+        ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
+        : String(p);
+    };
     let deliveryPrimary = null;
     let deliveryIcon = null;
     if (deliveryAlias) {
       deliveryPrimary = deliveryAlias;
       deliveryIcon = '👤';
     } else if (deliveryPhone) {
-      const d = String(deliveryPhone).replace(/\D/g, '');
-      deliveryPrimary =
-        d.length === 11 && d.startsWith('010')
-          ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
-          : d.length === 10
-          ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
-          : deliveryPhone;
+      deliveryPrimary = fmtPhone(deliveryPhone);
       deliveryIcon = '☎';
     } else if (isDelivery && deliveryAddr) {
       // 예약/포장은 주소 없을 수 있음. 주소 fallback 은 배달만.
       deliveryPrimary = deliveryAddr;
       deliveryIcon = '📍';
     }
+    // 2026-07-03 사장님 요청: 별칭이 있어도 전화번호는 상시 노출 — 배달지 확인이
+    // 필요하거나 주문자에게 전화할 일이 생겼을 때 한눈에 보여야 함 (배달/포장/예약).
+    const deliveryPhoneLine =
+      deliveryAlias && deliveryPhone ? `☎ ${fmtPhone(deliveryPhone)}` : null;
     // 배달 거리 — 매장 좌표 + 주소록의 변환 좌표 모두 있을 때만 표시.
     // useAddressBook 의 백그라운드 effect 가 lat/lng 채워주면 자동으로 나타남.
     let distanceLabel = null;
@@ -684,12 +692,23 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                   </Text>
                 </TouchableOpacity>
               ) : null}
+              {/* 2026-07-03: 별칭 아래 전화번호 상시 노출 — 배달지 문의/확인 전화용 */}
+              {isDelivery && deliveryPhoneLine ? (
+                <Text style={styles.deliveryPhoneLine} numberOfLines={1}>
+                  {deliveryPhoneLine}
+                </Text>
+              ) : null}
               {/* 2026-05-21: 예약/포장 — 별칭/전번 (있으면).
                   CID PENDING → submitPendingAsType 흐름으로 박힌 alias/phone 이 라이더가 아닌
                   *사장님 식별* 용으로 표시됨. */}
               {(t.type === 'reservation' || t.type === 'takeout') && deliveryPrimary ? (
                 <Text style={styles.deliveryAddr} numberOfLines={1}>
                   {deliveryIcon} {deliveryPrimary}
+                </Text>
+              ) : null}
+              {(t.type === 'reservation' || t.type === 'takeout') && deliveryPhoneLine ? (
+                <Text style={styles.deliveryPhoneLine} numberOfLines={1}>
+                  {deliveryPhoneLine}
                 </Text>
               ) : null}
               {(() => {
@@ -865,6 +884,34 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
             </View>
           ) : isPendingCall ? (
             <View style={styles.tilePendingCallWrap}>
+              {/* 2026-07-03 사장님 요청: 문의/스팸 전화로 생긴 주문대기를 바로 삭제.
+                  옛 흐름은 주문 화면에 들어가 메뉴를 아무거나 담고 삭제해야 칸이 비워졌음.
+                  메뉴 0 이므로 clearTable 이 매출 기록 없이 칸만 비움. */}
+              <TouchableOpacity
+                style={styles.pendingDiscardBtn}
+                onPress={() => {
+                  payClickedAtRef.current = Date.now(); // 타일 onPress 무시 가드 (기존 패턴)
+                  const who = deliveryPrimary || displayLabel;
+                  const doDiscard = () => clearTable(t.id);
+                  if (Platform.OS === 'web') {
+                    if (
+                      typeof window === 'undefined' ||
+                      !window.confirm ||
+                      window.confirm(`${who} — 주문대기를 삭제할까요? (문의/스팸 전화 정리)`)
+                    ) {
+                      doDiscard();
+                    }
+                  } else {
+                    Alert.alert('주문대기 삭제', `${who} — 삭제할까요?`, [
+                      { text: '취소', style: 'cancel' },
+                      { text: '삭제', style: 'destructive', onPress: doDiscard },
+                    ]);
+                  }
+                }}
+                hitSlop={8}
+              >
+                <Text style={styles.pendingDiscardText}>✕ 삭제</Text>
+              </TouchableOpacity>
               <Text style={styles.tilePendingCallBadge}>🕐 주문대기</Text>
               <Text
                 style={isSplitPart ? styles.tileLabelTiny : styles.tileLabel}
@@ -875,6 +922,11 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               {deliveryPrimary ? (
                 <Text style={styles.tilePendingCallLabel} numberOfLines={1}>
                   {deliveryIcon} {deliveryPrimary}
+                </Text>
+              ) : null}
+              {deliveryPhoneLine ? (
+                <Text style={styles.tilePendingCallLabel} numberOfLines={1}>
+                  {deliveryPhoneLine}
                 </Text>
               ) : null}
             </View>

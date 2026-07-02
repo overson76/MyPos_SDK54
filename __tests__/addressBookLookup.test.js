@@ -364,6 +364,45 @@ describe('resolvePendingCallerStamp', () => {
     expect(r.deliveryPhone).toBeNull();
     expect(r.deliveryAlias).toBeNull();
   });
+
+  // 2026-07-03 사장님 신고 재현: "진실보석 주문 담는 중 다른 배달지 전화가 오면
+  // 카트가 마지막 전화 손님에게 들어간다" — 카트 시작 이후 착신은 fallback 금지.
+  test('🔴 카트 시작 *이후* 걸려온 전화 — 이 카트의 주인으로 쓰지 않음', () => {
+    const order = { createdAt: 1000 }; // 카트 시작 t=1000
+    const r = resolvePendingCallerStamp(order, BOOK, '01055554444', 2000); // 전화 t=2000
+    expect(r.deliveryPhone).toBeNull();
+    expect(r.deliveryAlias).toBeNull();
+  });
+
+  test('카트 시작 *이전* 전화(전화→받아적기 흐름)는 기존대로 인정', () => {
+    const order = { createdAt: 3000 };
+    const r = resolvePendingCallerStamp(order, BOOK, '01055554444', 2000);
+    expect(r.deliveryPhone).toBe('01055554444');
+    expect(r.deliveryAlias).toBe('테스트2');
+  });
+
+  test('카트 시작 이후 전화라도 order 에 이미 박힌 도장(첫 담기 스냅샷)이 최우선', () => {
+    const order = {
+      createdAt: 1000,
+      deliveryPhone: '01011112222',
+      deliveryAlias: '진실보석',
+    };
+    const r = resolvePendingCallerStamp(order, BOOK, '01055554444', 2000);
+    expect(r.deliveryPhone).toBe('01011112222');
+    expect(r.deliveryAlias).toBe('진실보석');
+  });
+
+  test('order=null (addItem 첫 담기 스냅샷 경로) — lastCall 그대로 사용', () => {
+    const r = resolvePendingCallerStamp(null, BOOK, '01055554444', 2000);
+    expect(r.deliveryPhone).toBe('01055554444');
+    expect(r.deliveryAlias).toBe('테스트2');
+  });
+
+  test('lastCallTs 미전달(옛 3인자 호출) — 기존 동작 유지', () => {
+    const order = { createdAt: 1000 };
+    const r = resolvePendingCallerStamp(order, BOOK, '01055554444');
+    expect(r.deliveryPhone).toBe('01055554444');
+  });
 });
 
 // 2026-06-13: 카운터 PC 딜레이 처방 — 주소 미입력 entry 의 카카오 좌표 변환 낭비 차단.

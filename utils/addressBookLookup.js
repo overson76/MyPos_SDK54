@@ -234,9 +234,24 @@ export function matchCidEntry(addressBook, phoneNumber) {
 // PENDING 카트엔 발신자 정보가 없는 게 보통 (CID stash 는 별도 d 슬롯에만 박힘).
 // 최근 착신 번호(lastCallPhone, 5분 TTL)와 주소록 별칭으로 보강 — 없으면 빈 값
 // (매장 직접 손님). needsAliasPrompt / AliasPromptModal 의 lastCallPhone 정책과 동일 결.
-export function resolvePendingCallerStamp(order, addressBook, lastCallPhone) {
-  const phone =
-    (order?.deliveryPhone || '').trim() || (lastCallPhone || '').trim() || '';
+//
+// 2026-07-03: lastCallTs 추가 — 사장님 신고 "진실보석 주문 담는 중 다른 배달지
+// 전화가 오면 카트가 마지막 전화 손님에게 들어감". 최근 착신 fallback 은 **카트를
+// 시작하기 전에 온 전화**(전화 → 주문 받아적기 흐름)만 인정. 카트 시작(order.createdAt)
+// *이후*에 걸려온 전화는 딴 손님일 수 있으므로 이 카트의 주인으로 쓰지 않는다.
+// (카트 시작 시점의 발신자는 OrderContext.addItem 이 첫 담기 순간 스냅샷 도장 —
+//  order.deliveryPhone 이 이미 있으므로 그게 최우선으로 이긴다.)
+export function resolvePendingCallerStamp(order, addressBook, lastCallPhone, lastCallTs) {
+  const ownPhone = (order?.deliveryPhone || '').trim();
+  const cartStartedAt =
+    typeof order?.createdAt === 'number' ? order.createdAt : null;
+  const callArrivedMidCart =
+    cartStartedAt != null &&
+    typeof lastCallTs === 'number' &&
+    lastCallTs > 0 &&
+    lastCallTs > cartStartedAt;
+  const fallbackPhone = callArrivedMidCart ? '' : (lastCallPhone || '').trim();
+  const phone = ownPhone || fallbackPhone || '';
   const entry = phone ? findEntryByPhone(addressBook, phone) : null;
   const alias =
     (order?.deliveryAlias || '').trim() || (entry?.alias || '').trim() || null;

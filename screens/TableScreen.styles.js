@@ -368,6 +368,32 @@ export default function makeStyles(scale = 1) {
     fontWeight: '700',
     textAlign: 'center',
   },
+  // 2026-07-03: 주문대기(문의/스팸 전화) 즉시 삭제 버튼 — 사장님 불편 개선.
+  pendingDiscardBtn: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#dc2626',
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  pendingDiscardText: {
+    fontSize: fp(10),
+    color: '#dc2626',
+    fontWeight: '800',
+  },
+  // 2026-07-03: 별칭 아래 전화번호 상시 노출 — 배달지 문의/확인 전화용.
+  deliveryPhoneLine: {
+    fontSize: fp(9),
+    lineHeight: fp(11),
+    color: '#1d4ed8',
+    fontWeight: '700',
+    marginBottom: 2,
+    paddingHorizontal: 2,
+    flexShrink: 0,
+  },
   // 예약(메뉴 없이 인원·시간만) 슬롯 — amber 배지 + 정보 텍스트 (2026-06-04).
   tileReservationBadge: {
     fontSize: fp(8),
