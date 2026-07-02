@@ -37,7 +37,7 @@ import GroupPaymentSplitPicker from '../components/GroupPaymentSplitPicker';
 import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
 import { useToast } from '../utils/ToastContext';
-import { getLastCallPhone } from '../utils/useIncomingCall';
+import { getLastCallPhone, getLastCallTs } from '../utils/useIncomingCall';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -2698,9 +2698,16 @@ export default function OrderScreen({
             // 2026-06-12: 발신자 도장 보강 — resolvePendingCallerStamp 가 최근 착신
             // 번호(5분 TTL) + 주소록 별칭으로 새 슬롯에 박을 발신자 정보를 계산.
             // 옛 코드는 PENDING 의 (대개 빈) 필드만 넘겨 칸 라벨이 공백이 되던 버그.
+            // 2026-07-03: lastCallTs 전달 — 카트 시작 *이후* 걸려온 전화(딴 손님 가능)는
+            // fallback 에서 제외. 카트 주인은 addItem 첫 담기 스냅샷이 지킨다.
             const targetId = submitPendingAsType(
               type,
-              resolvePendingCallerStamp(order, addressBook, getLastCallPhone())
+              resolvePendingCallerStamp(
+                order,
+                addressBook,
+                getLastCallPhone(),
+                getLastCallTs()
+              )
             );
             if (!targetId) return;
             const targetTable =

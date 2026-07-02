@@ -34,6 +34,13 @@ export function getLastCallFormatted() {
   return _lastCallFormatted;
 }
 
+// 2026-07-03: 최근 착신 "시각" — 카트 시작 시점과 비교해 "메뉴 담는 중 걸려온
+// 다른 손님 전화"가 그 카트의 주인으로 둔갑하는 사고 차단용 (TTL 동일 적용).
+export function getLastCallTs() {
+  if (Date.now() - _lastCallTs > LAST_CALL_TTL_MS) return 0;
+  return _lastCallTs;
+}
+
 // 반환 시그니처: { call, dismiss }
 //   - call: null | { phoneNumber, formattedNumber, address, orderCount, alias, ... }
 //   - dismiss: 외부에서 알림을 즉시 숨기는 함수 (주문 확정 또는 ✕ 클릭 시).

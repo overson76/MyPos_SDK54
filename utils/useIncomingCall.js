@@ -87,3 +87,4 @@ export function useIncomingCall(storeId) {
 export function recordLastCallPhone() {}
 export function getLastCallPhone() { return ''; }
 export function getLastCallFormatted() { return ''; }
+export function getLastCallTs() { return 0; }

@@ -27,7 +27,8 @@ import {
   normalizeAddressKey,
   resolveTableForAlert,
 } from './orderHelpers';
-import { resolveDeliveryIdentity } from './addressBookLookup';
+import { resolveDeliveryIdentity, resolvePendingCallerStamp } from './addressBookLookup';
+import { getLastCallPhone, getLastCallTs } from './useIncomingCall';
 import { isDrivingMSane, distanceKm } from './geocode';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
@@ -182,6 +183,16 @@ export function OrderProvider({ children }) {
     // 선택 모달을 띄워 받음 (Phase 1.0.36).
     const addItem = (tableId, menuItem, preferredSlotId, sourceTableId) => {
       if (!tableId) return;
+      // 2026-07-03: PENDING *첫 담기* 순간의 발신자를 스냅샷 도장 — 담는 중 새 전화가
+      // 와서 lastCallPhone 이 덮여도 이 카트의 주인은 바뀌지 않는다 (사장님 신고:
+      // "진실보석 주문 담는 중 다른 배달지 전화 → 카트가 마지막 전화 손님에게 감").
+      // order.deliveryPhone 이 박히면 resolvePendingCallerStamp 가 그걸 최우선으로 씀.
+      // 전화 없던 5분(홀 손님)은 빈 값 — 도장 없음. reducer 머지 정책이라 null 은 no-op.
+      const ex = orders[tableId];
+      const isPendingFirstItem =
+        tableId === PENDING_TABLE_ID &&
+        (!ex ||
+          (((ex.cartItems || []).length === 0) && ((ex.items || []).length === 0)));
       dispatch({
         type: 'orders/addItem',
         tableId,
@@ -189,6 +200,22 @@ export function OrderProvider({ children }) {
         preferredSlotId,
         sourceTableId,
       });
+      if (isPendingFirstItem && !(ex?.deliveryPhone || ex?.deliveryAlias)) {
+        const stamp = resolvePendingCallerStamp(
+          null,
+          addressBook,
+          getLastCallPhone(),
+          getLastCallTs()
+        );
+        if (stamp.deliveryPhone || stamp.deliveryAlias) {
+          dispatch({
+            type: 'orders/setDeliveryContact',
+            tableId: PENDING_TABLE_ID,
+            phone: stamp.deliveryPhone,
+            alias: stamp.deliveryAlias,
+          });
+        }
+      }
     };
 
     // 2026-05-23: OrderScreen 진입 시 cartItems=[] && items.length>0 인 테이블을
