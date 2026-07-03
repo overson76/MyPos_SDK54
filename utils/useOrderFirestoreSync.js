@@ -25,6 +25,7 @@ import { setSharedAudioStore } from './sharedAudio';
 import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
+import { measurePerf, notePerfInfo } from './perfDiag';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -119,7 +120,8 @@ export function useOrderFirestoreSync({
     snapshotSeenRef.current = {};
 
     const unsubOrders = storeRef.collection('orders').onSnapshot(
-      (snap) => {
+      (snap) => measurePerf('리스너:주문', () => {
+        if (snap.docs.length >= 100) notePerfInfo(`⚠ 주문 문서 ${snap.docs.length}개`);
         // 2026-07-03: **첫 snapshot 은 무조건 전체 교체** (병합 금지) — 매장 사고 처방.
         //   부팅 직후엔 lastSynced ref 가 AsyncStorage hydration *이전*(빈 상태) 기준이라,
         //   dirty 병합(6/30)이 hydration 으로 올라온 *옛 사본*을 "미push 내 변경"으로
@@ -145,7 +147,7 @@ export function useOrderFirestoreSync({
             : lastSyncedOrdersRef.current || {},
         });
         lastSyncedOrdersRef.current = next;
-      },
+      }),
       (err) => reportError(err, { ctx: 'orders.listener' })
     );
 
@@ -220,7 +222,8 @@ export function useOrderFirestoreSync({
       );
 
     const unsubHistory = storeRef.collection('history').onSnapshot(
-      (snap) => {
+      (snap) => measurePerf('리스너:매출이력', () => {
+        if (snap.docs.length >= 500) notePerfInfo(`⚠ 매출이력 문서 ${snap.docs.length}개`);
         const isFirstSnapshot = !snapshotSeenRef.current.history;
         snapshotSeenRef.current.history = true;
         const list = snap.docs
@@ -235,12 +238,13 @@ export function useOrderFirestoreSync({
           return prev.history === merged ? prev : { ...prev, history: merged };
         });
         lastSyncedHistoryRef.current = list;
-      },
+      }),
       (err) => reportError(err, { ctx: 'history.listener' })
     );
 
     const unsubAddrEntries = storeRef.collection('addresses').onSnapshot(
-      (snap) => {
+      (snap) => measurePerf('리스너:주소록', () => {
+        if (snap.docs.length >= 500) notePerfInfo(`⚠ 주소록 문서 ${snap.docs.length}개`);
         const isFirstSnapshot = !snapshotSeenRef.current.addresses;
         snapshotSeenRef.current.addresses = true;
         const entries = {};
@@ -269,7 +273,7 @@ export function useOrderFirestoreSync({
           deletedTombstones: tombstones,
         }));
         lastSyncedAddressEntriesRef.current = entries;
-      },
+      }),
       (err) => reportError(err, { ctx: 'addresses.listener' })
     );
 
