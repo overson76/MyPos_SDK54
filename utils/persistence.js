@@ -53,7 +53,12 @@ export async function saveJSON(key, value) {
     const json = measurePerf(`저장:${key}`, () => JSON.stringify(value));
     const kb = Math.round((json ? json.length : 0) / 1024);
     if (kb >= 512) notePerfInfo(`⚠ ${key} 크기 ${kb}KB`); // 0.5MB 넘으면 이상 신호
+    // 실제 디스크 쓰기(localStorage 는 동기 블로킹) 시간도 별도 계측 — 40초 범인이
+    // 직렬화인지 쓰기인지 구분. 200ms 넘으면 진단 목록에 기록.
+    const t0 = Date.now();
     await AsyncStorage.setItem(KEY_PREFIX + key, json);
+    const dt = Date.now() - t0;
+    if (dt >= 200) notePerfInfo(`⚙ 저장쓰기:${key} ${Math.round(dt)}ms`);
   } catch (e) {}
 }
 
