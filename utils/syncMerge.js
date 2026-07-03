@@ -19,6 +19,14 @@
 //
 // 트레이드오프 (의도): 같은 테이블을 두 기기가 "동시에" 편집하면 내 기기가
 //   이김(last-write-wins). 드문 진짜 충돌보다 "완료가 소멸"이 훨씬 큰 사고.
+//
+// ⚠️ 2026-07-03 대전제 — **첫 snapshot 엔 이 병합을 절대 쓰지 말 것 (전체 교체)**:
+//   부팅 직후엔 lastSynced 기준선이 AsyncStorage hydration *이전*(빈 상태)이라,
+//   hydration 으로 올라온 옛 사본 전체가 "dirty" 로 오인된다 → 보존 → push 게이트가
+//   열리는 순간 서버로 되밀림 → 다른 기기가 끝낸 결제가 전 기기에서 부활 (7/3 매장
+//   사고: 카운터 PC 멈춤→재시작 후 아이패드 결제 2건 부활). 병합은 ref 가 서버
+//   기준으로 잡힌 *두 번째 snapshot 부터만* — useOrderFirestoreSync 의
+//   isFirstSnapshot 분기가 이 계약을 지킨다 (6/12 부팅 게이트 계약의 복원).
 
 // 키-객체 맵 병합 — orders(테이블별) / addressBook.entries(주소 키별) 공용.
 // server: snapshot 재구성 결과, local: 현재 state, lastSynced: 마지막 push/pull 시점 ref.

@@ -120,6 +120,14 @@ export function useOrderFirestoreSync({
 
     const unsubOrders = storeRef.collection('orders').onSnapshot(
       (snap) => {
+        // 2026-07-03: **첫 snapshot 은 무조건 전체 교체** (병합 금지) — 매장 사고 처방.
+        //   부팅 직후엔 lastSynced ref 가 AsyncStorage hydration *이전*(빈 상태) 기준이라,
+        //   dirty 병합(6/30)이 hydration 으로 올라온 *옛 사본*을 "미push 내 변경"으로
+        //   오인해 보존 → push 게이트가 열리는 순간 서버로 되밀어 — 아이패드가 끝낸
+        //   결제 2건이 전 기기에서 부활했다 (7/3 카운터 PC 멈춤→재시작 사고).
+        //   6/12 게이트의 계약("첫 snapshot 후엔 pull 이 로컬을 서버 진실로 교체") 복원.
+        //   두 번째 snapshot 부터는 ref 가 서버 기준으로 잡혀 있으므로 dirty 병합이 안전.
+        const isFirstSnapshot = !snapshotSeenRef.current.orders;
         snapshotSeenRef.current.orders = true;
         const next = {};
         snap.docs.forEach((d) => {
@@ -132,7 +140,9 @@ export function useOrderFirestoreSync({
         dispatch({
           type: 'orders/hydrate',
           payload: next,
-          lastSynced: lastSyncedOrdersRef.current || {},
+          lastSynced: isFirstSnapshot
+            ? undefined
+            : lastSyncedOrdersRef.current || {},
         });
         lastSyncedOrdersRef.current = next;
       },
@@ -145,6 +155,9 @@ export function useOrderFirestoreSync({
       .onSnapshot(
         (snap) => {
           // 문서가 없어도 "서버 상태를 봤다" 는 사실이 중요 — 게이트는 exists 와 무관.
+          // 2026-07-03: 첫 snapshot 은 전체 교체 — 부팅 hydration 옛 사본을 dirty 로
+          //   오인해 부활시키던 사고 처방 (orders listener 주석 참조. 아래 4개 동일).
+          const isFirstSnapshot = !snapshotSeenRef.current.splits;
           snapshotSeenRef.current.splits = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
@@ -153,7 +166,9 @@ export function useOrderFirestoreSync({
             //   전진하므로 push effect 가 내 값을 곧 밀어냄. setState 업데이터는 나중에
             //   실행되므로 ref 는 반드시 *먼저 캡처* (아래 4개 listener 동일 패턴).
             const prevSynced = lastSyncedSplitsRef.current;
-            setSplits((prev) => mergeValuePull(data.value, prev, prevSynced));
+            setSplits((prev) =>
+              isFirstSnapshot ? data.value : mergeValuePull(data.value, prev, prevSynced)
+            );
             lastSyncedSplitsRef.current = data.value;
           }
         },
@@ -165,12 +180,15 @@ export function useOrderFirestoreSync({
       .doc('groups')
       .onSnapshot(
         (snap) => {
+          const isFirstSnapshot = !snapshotSeenRef.current.groups;
           snapshotSeenRef.current.groups = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (data?.value !== undefined) {
             const prevSynced = lastSyncedGroupsRef.current;
-            setGroups((prev) => mergeValuePull(data.value, prev, prevSynced));
+            setGroups((prev) =>
+              isFirstSnapshot ? data.value : mergeValuePull(data.value, prev, prevSynced)
+            );
             lastSyncedGroupsRef.current = data.value;
           }
         },
@@ -182,6 +200,7 @@ export function useOrderFirestoreSync({
       .doc('revenueTotal')
       .onSnapshot(
         (snap) => {
+          const isFirstSnapshot = !snapshotSeenRef.current.revenueTotal;
           snapshotSeenRef.current.revenueTotal = true;
           if (!snapExists(snap)) return;
           const data = snap.data();
@@ -189,7 +208,9 @@ export function useOrderFirestoreSync({
             // dirty(방금 결제로 로컬 total 증가, 미push) 면 pull 무시 — 매출 누락 방지.
             const prevSynced = lastSyncedRevenueTotalRef.current;
             setRevenue((prev) => {
-              const nextTotal = mergeValuePull(data.total, prev.total, prevSynced);
+              const nextTotal = isFirstSnapshot
+                ? data.total
+                : mergeValuePull(data.total, prev.total, prevSynced);
               return prev.total === nextTotal ? prev : { ...prev, total: nextTotal };
             });
             lastSyncedRevenueTotalRef.current = data.total;
@@ -200,6 +221,7 @@ export function useOrderFirestoreSync({
 
     const unsubHistory = storeRef.collection('history').onSnapshot(
       (snap) => {
+        const isFirstSnapshot = !snapshotSeenRef.current.history;
         snapshotSeenRef.current.history = true;
         const list = snap.docs
           .map((d) => d.data())
@@ -207,7 +229,9 @@ export function useOrderFirestoreSync({
         // 방금 append 한 결제 기록(미push)이 echo/타 기기 snapshot 으로 증발하지 않게.
         const prevSynced = lastSyncedHistoryRef.current;
         setRevenue((prev) => {
-          const merged = mergeHistoryPull(list, prev.history, prevSynced);
+          const merged = isFirstSnapshot
+            ? list
+            : mergeHistoryPull(list, prev.history, prevSynced);
           return prev.history === merged ? prev : { ...prev, history: merged };
         });
         lastSyncedHistoryRef.current = list;
@@ -217,6 +241,7 @@ export function useOrderFirestoreSync({
 
     const unsubAddrEntries = storeRef.collection('addresses').onSnapshot(
       (snap) => {
+        const isFirstSnapshot = !snapshotSeenRef.current.addresses;
         snapshotSeenRef.current.addresses = true;
         const entries = {};
         const tombstones = {};
@@ -238,7 +263,9 @@ export function useOrderFirestoreSync({
         const prevSynced = lastSyncedAddressEntriesRef.current;
         setAddressBook((prev) => ({
           ...prev,
-          entries: mergeKeyedPull(entries, prev.entries, prevSynced),
+          entries: isFirstSnapshot
+            ? entries
+            : mergeKeyedPull(entries, prev.entries, prevSynced),
           deletedTombstones: tombstones,
         }));
         lastSyncedAddressEntriesRef.current = entries;
