@@ -23,8 +23,7 @@ import {
   onSnapshot as fsOnSnapshot,
   writeBatch as fsWriteBatch,
   runTransaction as fsRunTransaction,
-  persistentLocalCache,
-  persistentMultipleTabManager,
+  memoryLocalCache,
 } from 'firebase/firestore';
 import {
   getAuth as fsGetAuth,
@@ -83,19 +82,23 @@ export async function initFirebase() {
     // 일부 사파리 사설 모드에선 실패 가능 — 메모리 영속화로 자동 폴백.
   }
 
-  // Firebase v11+ 에서 enableIndexedDbPersistence 가 제거됨.
-  // 새 앱이면 initializeFirestore 로 IndexedDB 캐시 구성 (새 API).
-  // 이미 있는 앱이면 getFirestore 로 기존 인스턴스 반환 (HMR 재설정 방지).
+  // 2026-07-03: 🔴 카운터 PC(저사양) 40초 멈춤 근본 처방 — Firestore 로컬 캐시를
+  //   IndexedDB(persistentLocalCache) → 메모리(memoryLocalCache) 로 전환.
+  //   진단 확정: 매출이력 1000 doc 실시간 구독 + 매 결제 echo 를 저사양 PC 가
+  //   IndexedDB(+persistentMultipleTabManager 멀티탭 조정)에 재저장/재조회하며 40초
+  //   메인스레드 블로킹(measure 밖=SDK 내부라 이름표 안 뜨고 배경 43초만 반복).
+  //   메모리 캐시는 IndexedDB 를 안 써서 그 병목이 원천 소멸.
+  //   트레이드오프: 앱 재시작 시 Firestore 데이터 재다운로드(1회, 수초) + 완전
+  //   오프라인 시 캐시 없음 — 매장 인터넷 상시라 실질 무해. 익명 auth 영속은
+  //   browserLocalPersistence(별개)라 uid 유지, PC 재연동 사고와 무관.
   let rawDb;
   if (!alreadyHadApp) {
     try {
       rawDb = initializeFirestore(app, {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
+        localCache: memoryLocalCache(),
       });
     } catch (e) {
-      // failed-precondition (다른 탭에서 이미 켬) / 브라우저 미지원 시 메모리 캐시로 폴백.
+      // 미지원 시 기본 인스턴스로 폴백.
       rawDb = fsGetFirestore(app);
     }
   } else {
