@@ -96,9 +96,16 @@ export function useOrderPersistence({
   useEffect(() => {
     if (hydrated) saver('groups', groups);
   }, [groups, hydrated, saver]);
+  // 2026-07-03: 🔴 카운터 PC 40초 멈춤 근본 처방. 매출이력(history)이 1000건까지
+  //   차서 revenue 객체가 579KB. 옛 코드는 *매 결제마다* 이 덩어리 전체를 localStorage
+  //   에 통째 직렬화·쓰기(동기 블로킹) → 저사양 PC 40초 얼어붙음.
+  //   history 는 Firestore(+오프라인 캐시)가 단일 진실 — 부팅 시 listener 가 채우므로
+  //   localStorage 엔 total 만 저장. deps 도 revenue.total 로 좁혀 history 변경(매 결제)
+  //   으로는 저장 effect 자체가 안 돈다. 매출 데이터 손실 0(Firestore 원본 그대로).
+  //   부팅 게이트(snapshotSeenRef)가 첫 pull 전 push 를 막아 history 소실 위험 없음.
   useEffect(() => {
-    if (hydrated) saver('revenue', revenue);
-  }, [revenue, hydrated, saver]);
+    if (hydrated) saver('revenue', { total: revenue.total });
+  }, [revenue.total, hydrated, saver]);
   useEffect(() => {
     if (hydrated) saver('addressBook', addressBook);
   }, [addressBook, hydrated, saver]);
