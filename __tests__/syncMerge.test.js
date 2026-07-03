@@ -154,3 +154,35 @@ describe('orderReducer · hydrate + lastSynced 병합', () => {
     expect(next.d1).toBe(t1);
   });
 });
+
+// 2026-07-03 매장 사고 재현 — 카운터 PC 멈춤→재시작 후, 아이패드가 끝낸 결제
+// 2건이 전 기기에서 부활. 부팅 hydration 의 옛 사본은 "dirty" 가 아니다.
+describe('orderReducer · 부팅 옛 사본 vs 첫 snapshot (7/3 부활 회귀 방지)', () => {
+  const stale07 = { items: [{ id: 'm1', qty: 1 }], paymentStatus: 'unpaid' };
+  const stale03 = { items: [{ id: 'm2', qty: 1 }], paymentStatus: 'unpaid' };
+
+  test('🔴 첫 snapshot(lastSynced 미전달) — 옛 사본 전체 교체, 결제 완료 유지', () => {
+    // 재시작: AsyncStorage 옛 사본 {07,03} hydrate. 서버는 이미 결제 완료(빈).
+    // listener 는 첫 snapshot 에 lastSynced 를 싣지 않는다 → 병합 없이 서버 진실.
+    const bootState = { t07: stale07, t03: stale03 };
+    const next = orderReducer(bootState, {
+      type: 'orders/hydrate',
+      payload: {}, // 서버: 아이패드가 모두 결제 완료
+    });
+    expect(next.t07).toBeUndefined(); // 부활 금지
+    expect(next.t03).toBeUndefined();
+  });
+
+  test('위험 동작 문서화: 첫 snapshot 에 lastSynced 를 실으면 옛 사본이 부활한다', () => {
+    // 7/3 사고의 정확한 메커니즘 — 부팅 직후 ref 는 hydration 이전(빈) 기준이라
+    // 옛 사본이 전부 dirty 로 오인됨. 그래서 listener 는 첫 snapshot 에 절대
+    // lastSynced 를 싣지 않는다 (isFirstSnapshot 분기). 이 테스트는 그 이유의 증명.
+    const bootState = { t07: stale07 };
+    const next = orderReducer(bootState, {
+      type: 'orders/hydrate',
+      payload: {},
+      lastSynced: {}, // ← 부팅 직후의 잘못된 기준선
+    });
+    expect(next.t07).toBe(stale07); // dirty 오인 → 부활 (금지된 호출 형태)
+  });
+});
