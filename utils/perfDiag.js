@@ -81,6 +81,35 @@ export function subscribePerfLog(cb) {
   return () => _subs.delete(cb);
 }
 
+// 이름표 계측 — 배경 작업(저장/직렬화/리스너)을 감싸 200ms 이상 걸리면 그 *이름*을
+// 기록. longtask 는 "무엇이" 느린지 안 알려주므로, 유력 지점을 직접 감싸 범인 특정.
+// (동기 함수 전용 — JSON.stringify/parse, 리스너 콜백 동기부 등.)
+export function measurePerf(label, fn) {
+  const t0 = _now();
+  try {
+    return fn();
+  } finally {
+    const dt = _now() - t0;
+    if (dt >= THRESHOLD_MS) {
+      _log.unshift({ ts: _now(), duration: Math.round(dt), action: `⚙ ${label}` });
+      if (_log.length > MAX) _log.pop();
+      if (typeof console !== 'undefined') {
+        console.warn(`[PERF] ${label} ${Math.round(dt)}ms`);
+      }
+      _emit();
+    }
+  }
+}
+
+// 임계 무관 정보 기록 — 크기 이상 등 "느림은 아니지만 원인 후보" 신호를 진단
+// 목록에 남긴다 (duration 0 으로 구분). 예: "⚠ orders 크기 8000KB".
+export function notePerfInfo(label) {
+  _log.unshift({ ts: _now(), duration: 0, action: String(label || ''), info: true });
+  if (_log.length > MAX) _log.pop();
+  if (typeof console !== 'undefined') console.warn(`[PERF] ${label}`);
+  _emit();
+}
+
 // 링버퍼 요약 — 블로킹 건수 + 최대·합계(진단 한눈에).
 export function summarizePerfLog(log = _log) {
   const list = Array.isArray(log) ? log : [];
