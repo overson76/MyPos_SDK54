@@ -54,6 +54,12 @@ import {
   useFeatureFlags,
   setFeatureFlag,
 } from '../utils/featureFlags';
+import {
+  getPerfLog,
+  clearPerfLog,
+  subscribePerfLog,
+  summarizePerfLog,
+} from '../utils/perfDiag';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -104,6 +110,63 @@ function PerformanceOptionsSection({ sysStyles }) {
             value={flags[f.key] !== false}
             onValueChange={(v) => setFeatureFlag(f.key, v)}
           />
+        </View>
+      ))}
+    </>
+  );
+}
+
+// 2026-07-03: 성능 진단 — 멈춤(메인스레드 200ms+ 블로킹)을 자동 기록해 보여줌.
+// 사장님이 F12 안 열어도 "언제 몇 초 멈췄나 + 직전 액션" 을 여기서 확인 → 범인 특정.
+function PerfDiagSection({ sysStyles }) {
+  const [log, setLog] = useState(() => getPerfLog());
+  useEffect(() => subscribePerfLog((l) => setLog(l.slice())), []);
+  const summary = summarizePerfLog(log);
+  const fmtTime = (ts) => {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
+  return (
+    <>
+      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>🩺 성능 진단</Text>
+      <View style={sysStyles.note}>
+        <Text style={sysStyles.noteText}>
+          • 화면이 0.2초 이상 멈추면 자동으로 아래에 기록됩니다(이 기기 기준).
+          멈춘 뒤 이 목록을 캡처해서 보내주시면 원인을 정확히 찾습니다. 숫자가
+          클수록(ms=1000분의 1초) 심하게 멈춘 것입니다.
+        </Text>
+      </View>
+      <View style={sysStyles.row}>
+        <View style={sysStyles.rowText}>
+          <Text style={sysStyles.label}>
+            블로킹 {summary.count}회 · 최대 {summary.maxMs}ms
+          </Text>
+          <Text style={sysStyles.helper}>
+            {summary.count === 0
+              ? '아직 감지된 멈춤이 없습니다. 평소처럼 쓰시다가 멈추면 여기 쌓입니다.'
+              : Object.entries(summary.byAction)
+                  .map(([k, n]) => `${k}: ${n}회`)
+                  .join(' · ')}
+          </Text>
+        </View>
+        {log.length > 0 ? (
+          <TouchableOpacity style={sysStyles.btnSecondary} onPress={clearPerfLog}>
+            <Text style={sysStyles.btnSecondaryText}>지우기</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {log.slice(0, 12).map((e, i) => (
+        <View key={`${e.ts}-${i}`} style={sysStyles.row}>
+          <View style={sysStyles.rowText}>
+            <Text style={sysStyles.label}>
+              {fmtTime(e.ts)} — {e.duration}ms 멈춤
+              {e.duration >= 1000 ? '  🔴' : e.duration >= 500 ? '  🟠' : ''}
+            </Text>
+            <Text style={sysStyles.helper}>
+              {e.action ? `직전 액션: ${e.action}` : '배경 작업(사용자 액션 직후 아님)'}
+            </Text>
+          </View>
         </View>
       ))}
     </>
@@ -325,6 +388,9 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntri
       {/* === ⚡ 성능 옵션 (2026-07-03) — 무거운 기능 온/오프. 카운터 PC 멈춤 진단용.
            기본 전부 ON = 지금까지 동작. 사장님이 하나씩 끄며 가벼워지는지 확인. === */}
       <PerformanceOptionsSection sysStyles={sysStyles} />
+
+      {/* === 🩺 성능 진단 (2026-07-03) — 멈춤(메인스레드 블로킹) 자동 기록. === */}
+      <PerfDiagSection sysStyles={sysStyles} />
 
       {/* (1.0.24: PIN 잠금 / 자동 잠금 / 음성 안내 모두 관리자 → 설정 탭으로 이동) */}
 
