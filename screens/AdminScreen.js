@@ -49,6 +49,11 @@ import {
 } from '../utils/electronUpdate';
 import { checkForUpdates } from '../utils/otaUpdates';
 import { hasRevenuePin } from '../utils/revenuePin';
+import {
+  FEATURE_FLAGS,
+  useFeatureFlags,
+  setFeatureFlag,
+} from '../utils/featureFlags';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -74,6 +79,36 @@ const SECTIONS = [
 
 // 1.0.24: PinManageModal + PIN_LENGTH 는 components/PinManageModal.js 로 이동
 // (AdminSettingsView 와 공유). 아래에서 import.
+
+// 2026-07-03: 성능 옵션 — 무거운 기능 온/오프. 카운터 PC(저사양) "응답 없는 페이지"
+// 멈춤 진단용. 사장님이 하나씩 끄며 가벼워지는지 이분 탐색. 기본 전부 ON.
+function PerformanceOptionsSection({ sysStyles }) {
+  const flags = useFeatureFlags();
+  return (
+    <>
+      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>⚡ 성능 옵션</Text>
+      <View style={sysStyles.note}>
+        <Text style={sysStyles.noteText}>
+          • 카운터 PC 가 느리거나 멈추면, 아래 기능을 하나씩 꺼서 어떤 게 원인인지
+          찾을 수 있습니다. 전부 켜둔 상태가 지금까지의 동작이며, 꺼도 주문·결제 등
+          핵심 기능은 그대로입니다. 설정은 이 기기에만 적용됩니다.
+        </Text>
+      </View>
+      {FEATURE_FLAGS.map((f) => (
+        <View key={f.key} style={sysStyles.row}>
+          <View style={sysStyles.rowText}>
+            <Text style={sysStyles.label}>{f.label}</Text>
+            <Text style={sysStyles.helper}>{f.help}</Text>
+          </View>
+          <Switch
+            value={flags[f.key] !== false}
+            onValueChange={(v) => setFeatureFlag(f.key, v)}
+          />
+        </View>
+      ))}
+    </>
+  );
+}
 
 function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntries } = {}) {
   const { scale } = useResponsive();
@@ -286,6 +321,10 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntri
     >
       {/* === 매장 관리 (매장 정보 + 수익 PIN, 대표 전용 항목 포함) === */}
       <StoreManagementSection />
+
+      {/* === ⚡ 성능 옵션 (2026-07-03) — 무거운 기능 온/오프. 카운터 PC 멈춤 진단용.
+           기본 전부 ON = 지금까지 동작. 사장님이 하나씩 끄며 가벼워지는지 확인. === */}
+      <PerformanceOptionsSection sysStyles={sysStyles} />
 
       {/* (1.0.24: PIN 잠금 / 자동 잠금 / 음성 안내 모두 관리자 → 설정 탭으로 이동) */}
 
