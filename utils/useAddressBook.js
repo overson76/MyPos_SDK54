@@ -17,6 +17,7 @@ import {
 } from './addressBookMigrations';
 import { similarPairKey } from './addressBookCleanup';
 import { hasResolvableAddress } from './addressBookLookup';
+import { useFeatureFlags, getFeatureFlag } from './featureFlags';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -93,8 +94,14 @@ export function useAddressBook() {
   }, [storeInfo?.lat, storeInfo?.lng]);
   const inFlightRef = useRef(new Set());
   const failedRef = useRef(new Set());
+  // 2026-07-03: 성능 옵션 반응값 — 토글 변경 시 effect deps 재평가로 즉시 반영.
+  const flags = useFeatureFlags();
+  const geocodeEnabled = flags.addressAutoGeocode;
   useEffect(() => {
     if (!isGeocodingAvailable()) return;
+    // 2026-07-03: 성능 옵션 — 꺼두면 주소 자동 좌표변환 순회를 통째로 건너뜀
+    //   (카운터 PC 멈춤 진단용 이분 탐색). 켜면 밀린 entry 를 다시 변환.
+    if (!getFeatureFlag('addressAutoGeocode')) return;
     for (const entry of Object.values(addressBook.entries)) {
       if (
         typeof entry.lat === 'number' ||
@@ -148,7 +155,7 @@ export function useAddressBook() {
         });
       });
     }
-  }, [addressBook.entries, storeCoord]);
+  }, [addressBook.entries, storeCoord, geocodeEnabled]);
 
   // 매장 좌표 변경 시 in-flight/failed 캐시 리셋 — 새 좌표 기준으로 재시도.
   useEffect(() => {

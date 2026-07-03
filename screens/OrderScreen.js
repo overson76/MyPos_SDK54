@@ -38,6 +38,7 @@ import TimeWheelPicker from '../components/TimeWheelPicker';
 import { useStore } from '../utils/StoreContext';
 import { useToast } from '../utils/ToastContext';
 import { getLastCallPhone, getLastCallTs } from '../utils/useIncomingCall';
+import { useFeatureFlags } from '../utils/featureFlags';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -707,10 +708,15 @@ export default function OrderScreen({
 
   // AI 메뉴 추천 — 시간대/단골/인기도 가중 점수로 매출 history 에서 자동 선정.
   // 외부 API 사용 X. 카탈로그 편집 불가능한 동적 카테고리.
-  const isRecommendation = activeCategory === RECOMMENDATION_CATEGORY;
+  // 2026-07-03: 성능 옵션 — 끄면 추천 탭 숨김 + 계산(history 순회) skip.
+  const flags = useFeatureFlags();
+  const isRecommendation =
+    flags.aiRecommend && activeCategory === RECOMMENDATION_CATEGORY;
   const displayCategories = useMemo(
-    () => [RECOMMENDATION_CATEGORY, ...categories],
-    []
+    () => (flags.aiRecommend ? [RECOMMENDATION_CATEGORY, ...categories] : categories),
+    // categories 는 원래 클로저 캡처 정책([]) 유지 — flag 변경에만 반응.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flags.aiRecommend]
   );
   const recommendations = useMemo(() => {
     if (!isRecommendation) return [];

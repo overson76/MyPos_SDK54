@@ -29,6 +29,7 @@ import { StoreProvider, useStore, STORE_STATE } from './utils/StoreContext';
 import { useResponsive } from './utils/useResponsive';
 import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
+import { loadFeatureFlags } from './utils/featureFlags';
 import { SentryErrorBoundary } from './utils/sentry';
 import { setupPwa } from './utils/pwaSetup';
 import { checkForUpdates } from './utils/otaUpdates';
@@ -335,6 +336,8 @@ function MainApp() {
     loadJSON('speakAddress', false).then((v) => {
       setSpeakAddress(!!v);
     });
+    // 2026-07-03: 성능 옵션(무거운 기능 온/오프) 기기별 설정 복원.
+    loadFeatureFlags();
   }, []);
 
   // Android 하드웨어 뒤로가기 처리. iOS/web 은 no-op.

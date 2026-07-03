@@ -30,6 +30,7 @@ import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
 import { findEntryByPhone } from '../utils/addressBookLookup';
+import { useFeatureFlags } from '../utils/featureFlags';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
 // 2026-05-27: deliveryTime 은 문자열("420") 로 저장 — parseDeliveryTime 으로 객체화 후 formatShort12h 호출.
 import { formatShort12h, parseDeliveryTime } from '../utils/timeUtil';
@@ -92,6 +93,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
     return () => clearTimeout(t);
   }, [highlightTableId]);
   const { width, height, isXS, isSM, isMD, scale } = useResponsive();
+  const flags = useFeatureFlags(); // 성능 옵션 (지도/거리/경로 게이트)
   // 폰트 배율(scale) 이 바뀔 때만 StyleSheet 재생성 — lg 진입 시 1.0 → 1.3.
   const styles = useMemo(() => makeStyles(scale), [scale]);
   const [mapInfo, setMapInfo] = useState(null);
@@ -511,8 +513,9 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
       deliveryAlias && deliveryPhone ? `☎ ${fmtPhone(deliveryPhone)}` : null;
     // 배달 거리 — 매장 좌표 + 주소록의 변환 좌표 모두 있을 때만 표시.
     // useAddressBook 의 백그라운드 effect 가 lat/lng 채워주면 자동으로 나타남.
+    // 2026-07-03: 성능 옵션 — 거리 표시 끄면 계산·표시 skip.
     let distanceLabel = null;
-    if (isDelivery && deliveryAddr && storeInfo?.lat != null && storeInfo?.lng != null) {
+    if (flags.deliveryDistanceLabel && isDelivery && deliveryAddr && storeInfo?.lat != null && storeInfo?.lng != null) {
       const key = normalizeAddressKey(deliveryAddr);
       const entry = key ? addressBook?.entries?.[key] : null;
       if (entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
@@ -668,7 +671,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               {isDelivery && deliveryPrimary ? (
                 <TouchableOpacity
                   onPress={() => {
-                    if (!deliveryAddr) return;
+                    if (!deliveryAddr || !flags.deliveryMap) return;
                     const dk = normalizeAddressKey(deliveryAddr);
                     const de = dk ? addressBook?.entries?.[dk] : null;
                     setMapInfo({
@@ -683,12 +686,12 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
                     });
                   }}
                   activeOpacity={0.7}
-                  disabled={!deliveryAddr}
+                  disabled={!deliveryAddr || !flags.deliveryMap}
                 >
                   <Text style={styles.deliveryAddr} numberOfLines={1}>
                     {deliveryIcon} {deliveryPrimary}
                     {distanceLabel ? ` · ${distanceLabel}` : ''}
-                    {deliveryAddr ? ' 🗺️' : ''}
+                    {deliveryAddr && flags.deliveryMap ? ' 🗺️' : ''}
                   </Text>
                 </TouchableOpacity>
               ) : null}
@@ -1069,14 +1072,14 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
               </TouchableOpacity>
             );
           })}
-          {/* 전체 배달 지도 — 배달 테이블이 하나 이상 있을 때만 표시 */}
-          {tables.some((t) => t.type === 'delivery') ? (
+          {/* 전체 배달 지도 — 배달 테이블이 하나 이상 있을 때만 표시 (성능 옵션 게이트) */}
+          {flags.deliveryMap && tables.some((t) => t.type === 'delivery') ? (
             <TouchableOpacity style={styles.allMapBtn} onPress={openAllDeliveryMap}>
               <Text style={styles.allMapBtnText}>🗺️ 배달지도</Text>
             </TouchableOpacity>
           ) : null}
           {/* 배달 경로 최적화 — 활성 배달 2건 이상일 때만 (2026-05-16: KitchenScreen 에서 이동) */}
-          {activeDeliveriesForRoute.length >= 2 ? (
+          {flags.routeOptimize && activeDeliveriesForRoute.length >= 2 ? (
             <TouchableOpacity
               style={styles.routeOptBtn}
               onPress={() => setRouteOptOpen(true)}

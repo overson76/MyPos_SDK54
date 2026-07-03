@@ -45,6 +45,7 @@ import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 import { useDeliveryRounds, getRoundReturnProgress } from '../utils/useDeliveryRounds';
 import { getDrivingDistance, isNaviAvailable } from '../utils/geocode';
 import { localDateString } from '../utils/orderHelpers';
+import { useFeatureFlag } from '../utils/featureFlags';
 import DeliveryMapModal from '../components/DeliveryMapModal';
 import { reportError } from '../utils/sentry';
 
@@ -86,8 +87,11 @@ export default function DeliveryReturnScreen() {
   // AddressBookPanel 의 패턴 동일 — entry 한 번 fetch → 영구 캐시 (Firestore 동기화).
   const inFlightRef = useRef(new Set());
   const failedRef = useRef(new Set());
+  const drivingEnabled = useFeatureFlag('deliveryDrivingDistance');
   useEffect(() => {
     if (!storeCoord || !isNaviAvailable()) return;
+    // 2026-07-03: 성능 옵션 — 도로거리 자동계산 끄면 순회·카카오 호출 전면 skip.
+    if (!drivingEnabled) return;
     const fromLat = storeCoord.lat;
     const fromLng = storeCoord.lng;
     for (const entry of Object.values(addressBook?.entries || {})) {
@@ -137,7 +141,7 @@ export default function DeliveryReturnScreen() {
           } catch (_) {}
         });
     }
-  }, [addressBook?.entries, storeCoord, setAddressBook]);
+  }, [addressBook?.entries, storeCoord, setAddressBook, drivingEnabled]);
 
   useEffect(() => {
     inFlightRef.current.clear();

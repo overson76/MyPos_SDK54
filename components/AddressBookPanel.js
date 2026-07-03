@@ -31,6 +31,7 @@ import {
 import { useOrders } from '../utils/OrderContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
+import { useFeatureFlag } from '../utils/featureFlags';
 import {
   formatDrivingDistance,
   formatDuration,
@@ -217,8 +218,10 @@ export default function AddressBookPanel() {
   // 동시 호출 폭주 방지 — inFlightRef. 일시 실패는 failedRef (앱 재시작 시 재시도).
   const inFlightRef = useRef(new Set());
   const failedRef = useRef(new Set());
+  const drivingEnabled = useFeatureFlag('deliveryDrivingDistance');
   useEffect(() => {
     if (!storeCoord || !isNaviAvailable()) return;
+    if (!drivingEnabled) return; // 2026-07-03: 성능 옵션 — 도로거리 계산 skip
     const fromLat = storeCoord.lat;
     const fromLng = storeCoord.lng;
     for (const entry of Object.values(addressBook.entries || {})) {
@@ -279,7 +282,7 @@ export default function AddressBookPanel() {
         });
       });
     }
-  }, [addressBook.entries, storeCoord, setAddressBook]);
+  }, [addressBook.entries, storeCoord, setAddressBook, drivingEnabled]);
 
   // 매장 좌표가 바뀌면 inFlightRef / failedRef 도 리셋 — 옛 결과의 in-flight 무효화.
   useEffect(() => {
