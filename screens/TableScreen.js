@@ -31,6 +31,7 @@ import { distanceKm, formatDistance } from '../utils/geocode';
 import { normalizeAddressKey, computeItemsTotal } from '../utils/orderHelpers';
 import { findEntryByPhone } from '../utils/addressBookLookup';
 import { useFeatureFlags } from '../utils/featureFlags';
+import { markPerfAction } from '../utils/perfDiag';
 // 1.0.47: 예약/포장 카드에 시간 표기 — { h, m, period } 객체를 "오후 5:30" 한 줄로.
 // 2026-05-27: deliveryTime 은 문자열("420") 로 저장 — parseDeliveryTime 으로 객체화 후 formatShort12h 호출.
 import { formatShort12h, parseDeliveryTime } from '../utils/timeUtil';
@@ -1472,6 +1473,7 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
             setSplitPayQueue(null);
           }}
           onSelect={(code, opts) => {
+            markPerfAction('결제(테이블)'); // 성능 진단 — 이 직후 블로킹이면 결제가 원인
             const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;

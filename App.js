@@ -30,6 +30,7 @@ import { useResponsive } from './utils/useResponsive';
 import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
 import { loadFeatureFlags } from './utils/featureFlags';
+import { startPerfDiag } from './utils/perfDiag';
 import { SentryErrorBoundary } from './utils/sentry';
 import { setupPwa } from './utils/pwaSetup';
 import { checkForUpdates } from './utils/otaUpdates';
@@ -338,6 +339,8 @@ function MainApp() {
     });
     // 2026-07-03: 성능 옵션(무거운 기능 온/오프) 기기별 설정 복원.
     loadFeatureFlags();
+    // 2026-07-03: 메인스레드 블로킹(멈춤) 자동 감지 시작 — 관찰만, 동작 무변경.
+    startPerfDiag();
   }, []);
 
   // Android 하드웨어 뒤로가기 처리. iOS/web 은 no-op.

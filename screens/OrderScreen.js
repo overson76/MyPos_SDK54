@@ -39,6 +39,7 @@ import { useStore } from '../utils/StoreContext';
 import { useToast } from '../utils/ToastContext';
 import { getLastCallPhone, getLastCallTs } from '../utils/useIncomingCall';
 import { useFeatureFlags } from '../utils/featureFlags';
+import { markPerfAction } from '../utils/perfDiag';
 import { printReceipt } from '../utils/printReceipt';
 import { distanceKm, formatDistance, geocodeAddress } from '../utils/geocode';
 import { normalizeAddressKey } from '../utils/orderHelpers';
@@ -495,6 +496,7 @@ export default function OrderScreen({
   // 2026-05-25: 주문 확정 흐름 함수화 — AliasPromptModal 콜백에서 재호출 위해.
   // overrideOrder 인자: state 갱신 비동기 차단용 — 사장님 입력 alias/address 즉시 반영.
   const doSubmitOrder = (overrideOrder) => {
+    markPerfAction('주문 확정'); // 성능 진단 — 이 직후 블로킹이면 주문 확정이 원인
     const effOrder = overrideOrder || order;
     if (hasCommittedOrder) {
       const diff = computeDiffRows(cart, effOrder.confirmedItems || []);
@@ -2541,6 +2543,7 @@ export default function OrderScreen({
             setSplitPayQueue(null);
           }}
           onSelect={(code, opts) => {
+            markPerfAction('결제(주문화면)'); // 성능 진단
             const { autoPrint, kisApproval } = opts || {};
             const picked = code === 'unspecified' ? null : code;
             const id = paymentPicker.tableId;
