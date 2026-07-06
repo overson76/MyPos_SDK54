@@ -39,6 +39,13 @@ export function mergeKeyedPull(server, local, lastSynced) {
   // 로컬 dirty(미push 편집/신규) 보존 — 서버 값 대신 로컬 값.
   for (const k of Object.keys(loc)) {
     if (loc[k] !== last[k] && srv[k] !== loc[k]) {
+      // 2026-07-03 🔴 부활 근본처방: 서버에서 사라진 항목(srv 에 없음)이 lastSynced
+      //   엔 있었으면 = 다른 기기가 그 항목을 삭제(결제완료)한 것. 내가 그걸 수정
+      //   중(dirty)이어도 삭제를 따른다 — "완료가 수정을 이긴다".
+      //   안 그러면 카운터 결제완료(삭제) vs 주방 조리완료(수정)가 같은 주문에 겹칠 때
+      //   내 수정이 삭제를 되돌려 완료된 주문이 부활했다(매장 빈번 — 7/2 처방의 구멍).
+      //   lastSynced 에도 없던 로컬 신규(내가 방금 만든, 아직 push 전 주문)만 보존.
+      if (!(k in srv) && k in last) continue; // 다른 기기 삭제 — 부활 금지, 삭제 따름
       if (!merged) merged = { ...srv };
       merged[k] = loc[k];
     }
@@ -80,7 +87,9 @@ export function mergeHistoryPull(server, local, lastSynced) {
     const prev = lastById.get(id);
     if (prev === h) continue; // 변경 없음
     if (srvIds.has(id)) dirtyById.set(id, h); // 서버에도 있는 항목의 로컬 수정 우선
-    else dirtyNew.push(h); // 서버에 아직 없는 로컬 신규 (방금 결제)
+    else if (!lastById.has(id)) dirtyNew.push(h); // 서버·lastSynced 둘 다 없던 = 진짜 신규(방금 결제)
+    // 2026-07-03 🔴 부활 근본처방: 서버에 없고 lastSynced 엔 있던 = 다른 기기가 삭제한
+    //   항목. 내 로컬 수정(dirty)이어도 부활시키지 않는다 (orders 와 동일 원리).
   }
   // 로컬 삭제 미push: lastSynced 에 있었는데 로컬에 없는 id 는 서버에서 빼고 유지.
   const removed = new Set();

@@ -54,6 +54,37 @@ describe('mergeKeyedPull', () => {
     expect(merged.d5).toBe(fresh);
   });
 
+  // 2026-07-03 🔴 12:20 부활 재현 — 카운터 결제완료(삭제) vs 주방 조리완료(수정) 충돌.
+  test('🔴 다른 기기 결제완료(삭제) 가 내 로컬 수정(조리완료)을 이긴다 — 부활 금지', () => {
+    // 주방 관점: 배달3(d3)을 방금 조리완료로 수정(dirty). 그런데 카운터가 d3 결제완료
+    // → 서버에서 d3 삭제됨. 옛 코드는 내 수정을 지키려 d3 부활 → push → 전 기기 부활.
+    const cooked = { items: [1], status: 'ready' }; // 주방이 조리완료로 수정
+    const orig = { items: [1], status: 'preparing' };
+    const server = {}; // 카운터가 d3 결제완료 → 서버에서 사라짐
+    const local = { d3: cooked }; // 주방 로컬: d3 조리완료(수정)
+    const last = { d3: orig }; // lastSynced: d3 있었음(서버가 알던 항목)
+    const merged = mergeKeyedPull(server, local, last);
+    expect(merged.d3).toBeUndefined(); // 완료 우선 — 부활 금지!
+  });
+
+  test('로컬 신규(lastSynced 없음)는 서버에 없어도 여전히 보존 (결제완료와 구분)', () => {
+    // 내가 방금 만든 주문(아직 push 전): 서버에도 lastSynced 에도 없음 = 진짜 신규.
+    const fresh = { items: [9] };
+    const merged = mergeKeyedPull({}, { d7: fresh }, {});
+    expect(merged.d7).toBe(fresh); // 신규는 보존 (삭제 아님)
+  });
+
+  test('동시 수정(둘 다 살아있음)은 여전히 내 기기 우선 (부활 아님)', () => {
+    const mine = { items: [1, 2] };
+    const theirs = { items: [1, 3] };
+    const orig = { items: [1] };
+    const server = { d1: theirs }; // 서버엔 다른 기기 수정본 (살아있음)
+    const local = { d1: mine };
+    const last = { d1: orig };
+    const merged = mergeKeyedPull(server, local, last);
+    expect(merged.d1).toBe(mine); // 삭제 아니므로 기존대로 내 수정 우선
+  });
+
   test('null/undefined 안전', () => {
     expect(mergeKeyedPull(null, null, null)).toEqual({});
     const server = { a: t1 };
@@ -96,6 +127,16 @@ describe('mergeHistoryPull', () => {
     const last = [h2, h1];
     const merged = mergeHistoryPull(server, local, last);
     expect(merged.find((h) => h.id === 'a')).toBe(h1edit);
+  });
+
+  test('🔴 다른 기기가 삭제한 이력을 내 로컬 수정이 부활시키지 않음', () => {
+    // 다른 기기가 h1(id:a) 삭제 → 서버에서 사라짐. 나는 h1 을 수정 중(dirty).
+    const h1edit = { id: 'a', total: 1500 };
+    const server = [h2]; // 다른 기기가 a 삭제
+    const local = [h2, h1edit]; // 내 로컬: a 수정본 보유
+    const last = [h2, h1]; // lastSynced: a 있었음
+    const merged = mergeHistoryPull(server, local, last);
+    expect(merged.find((h) => h.id === 'a')).toBeUndefined(); // 부활 금지
   });
 });
 
