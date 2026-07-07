@@ -118,6 +118,14 @@ export function OrderProvider({ children }) {
     return null;
   }, [storeInfoForGuard?.lat, storeInfoForGuard?.lng]);
 
+  // 2026-07-08: 🔴 완료 테이블 부활 근본처방 — 주문 로컬복원 게이트.
+  //   AsyncStorage 의 옛 주문 사본이 부팅 시 서버(첫 snapshot)를 덮어쓰고 다시 push 되어
+  //   다른 기기에서 비운 테이블이 부활했다 (주소록 entries 는 이미 6/9 에 로컬복원 차단.
+  //   주문만 비대칭으로 남아 있었다). 이 ref 는 Firestore 첫 주문 snapshot 이 도착하면
+  //   true — persistence 훅이 그 뒤엔 로컬 주문을 dispatch 하지 않는다 (서버가 단일 진실).
+  //   부팅 초기(서버 응답 전)엔 여전히 로컬 사본으로 즉시 표시 → 오프라인 부팅 표시 무손실.
+  const serverOrdersSeenRef = useRef(false);
+
   useOrderPersistence({
     orders,
     dispatch,
@@ -129,6 +137,7 @@ export function OrderProvider({ children }) {
     setRevenue,
     addressBook,
     setAddressBook,
+    serverOrdersSeenRef,
   });
 
   // 매장 단위 클라우드 동기화 — orders / splits / groups / revenue / addressBook 전부.
@@ -144,6 +153,7 @@ export function OrderProvider({ children }) {
     setRevenue,
     addressBook,
     setAddressBook,
+    serverOrdersSeenRef,
   });
 
   useDeliveryAlerts({ orders, dispatch });

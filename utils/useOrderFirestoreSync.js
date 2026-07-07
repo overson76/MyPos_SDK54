@@ -51,6 +51,7 @@ export function useOrderFirestoreSync({
   setRevenue,
   addressBook,
   setAddressBook,
+  serverOrdersSeenRef,
 }) {
   const { storeInfo } = useStore();
   const storeId = storeInfo?.storeId || null;
@@ -131,6 +132,9 @@ export function useOrderFirestoreSync({
         //   두 번째 snapshot 부터는 ref 가 서버 기준으로 잡혀 있으므로 dirty 병합이 안전.
         const isFirstSnapshot = !snapshotSeenRef.current.orders;
         snapshotSeenRef.current.orders = true;
+        // 2026-07-08: 서버가 주문을 한 번이라도 말했음을 persistence 훅에 알린다 —
+        //   그 뒤로는 AsyncStorage 옛 주문 사본이 서버를 덮지 못하게 (완료 테이블 부활 차단).
+        if (serverOrdersSeenRef) serverOrdersSeenRef.current = true;
         const next = {};
         snap.docs.forEach((d) => {
           next[d.id] = d.data();

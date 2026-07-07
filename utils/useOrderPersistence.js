@@ -16,6 +16,7 @@ export function useOrderPersistence({
   setRevenue,
   addressBook,
   setAddressBook,
+  serverOrdersSeenRef,
 }) {
   const [hydrated, setHydrated] = useState(false);
   const saver = useMemo(() => makeDebouncedSaver(300), []);
@@ -31,7 +32,17 @@ export function useOrderPersistence({
         'addressBook',
       ]);
       if (cancelled) return;
-      if (data.orders && typeof data.orders === 'object') {
+      // 2026-07-08: 🔴 완료 테이블 부활 근본처방 — 로컬 주문 복원 게이트.
+      //   Firestore 첫 주문 snapshot 이 이미 도착했으면(서버가 말했으면) AsyncStorage 의
+      //   옛 주문 사본은 버린다. 안 그러면 이 복원이 서버로 갱신된 깨끗한 state 를 통째로
+      //   덮어쓰고(hydrate 는 lastSynced 없는 전체 교체) push 게이트를 통과해 서버로 되밀려
+      //   → 다른 기기에서 비운 테이블이 전 기기에서 부활했다 (주소록 entries 6/9 처방과 동형).
+      //   await loadMany 이후 여기까진 yield 없는 동기 구간 → snapshot 콜백과 원자적:
+      //     ref=true  → 서버 이미 도착, 로컬 폐기 (부활 차단)
+      //     ref=false → 아직 서버 전 → 로컬로 즉시 표시(오프라인 부팅 무손실), 곧 올 첫
+      //                 snapshot 이 전체 교체하므로 stale 이 남지 않음.
+      const serverAlreadySpoke = !!(serverOrdersSeenRef && serverOrdersSeenRef.current);
+      if (!serverAlreadySpoke && data.orders && typeof data.orders === 'object') {
         dispatch({ type: 'orders/hydrate', payload: data.orders });
       }
       if (data.splits && typeof data.splits === 'object') setSplits(data.splits);
