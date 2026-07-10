@@ -124,6 +124,12 @@ export function detectDynamicSlotPrefix(tableId) {
 // 분할(y2#1) / 그룹은 본 helper 가 건드리지 않음 — 해당 슬롯 자체는 mapping 에서 제외돼
 // 원래 키로 유지됨. 추후 필요시 확장.
 // 반환: { orders: 새 dict, mapping: Map(oldNum → newNum) }.
+//
+// ⚠️ DEPRECATED / 프로덕션 미사용 (2026-07-10) — 절대 다시 호출부에 연결하지 말 것.
+//   이 "슬롯 번호 당기기"가 슬롯의 주인을 바꿔서, 여러 기기 동기화 시 살아있는 배달
+//   주문이 '삭제'가 아니라 '수정'으로 오인돼 소리 없이 덮여 사라졌다 (2026-07-10 꽈베기
+//   실사고 + syncMerge 재현 테스트로 증명). 슬롯은 이제 생성 자리에 고정. 순수 함수라
+//   단위 테스트만 남겨두지만, 호출하면 유실 사고가 재발한다.
 export function compactSlotsByPrefix(orders, prefix) {
   const re = new RegExp(`^${prefix}(\\d+)$`);
   const occupied = Object.keys(orders)

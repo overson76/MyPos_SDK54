@@ -17,7 +17,6 @@ import {
   buildHistoryEntry,
   computeItemsTotal,
   computeSubtotalsBySource,
-  detectDynamicSlotPrefix,
   findEmptyDeliverySlot,
   findEmptySlotForType,
   findPendingCallSlot,
@@ -337,12 +336,13 @@ export function OrderProvider({ children }) {
       const { [targetId]: _, ...nextOrders } = orders;
       dispatch({ type: 'orders/removeTable', tableId: targetId });
       maybeUnsplitAfter(targetId, nextOrders);
-      // 동적 슬롯(예약/포장/배달) 이면 빈 번호 메꿈 —
-      // 자리이동·포장결제완료·배달자동정리 경로와 동일한 처리. 분할 슬롯('y2#1') 은 prefix 매칭에서 자연 제외.
-      const prefix = detectDynamicSlotPrefix(targetId);
-      if (prefix) {
-        dispatch({ type: 'orders/compactSlots', prefix });
-      }
+      // 2026-07-10: 🔴 배달 주문 무음 유실 근본처방 — 슬롯 자동 재정렬(compactSlots) 제거.
+      //   재정렬은 빈 번호를 메꾸려고 d3→d2 처럼 슬롯을 당겼는데, 이 "슬롯 주인 바뀜"이
+      //   여러 기기 동기화에서 '삭제'가 아니라 '수정'으로 오인돼 살아있는 다른 배달 주문을
+      //   소리 없이 덮어 사라지게 했다(2026-07-10 매장 실사고 + syncMerge 재현 테스트로 증명).
+      //   이제 슬롯은 생성된 자리에 고정(life-stable) — 비운 자리는 빈칸으로 남고
+      //   findEmptySlotForType 가 다음 주문을 가장 낮은 빈칸에 채운다(자리 재사용). 화면상
+      //   차이는 "완료된 배달칸이 그 자리에서 비는 것"뿐. 유실 방아쇠(재배정)를 원천 제거.
       if (groupLeaderToDissolve) {
         setGroups((prev) => {
           if (!prev[groupLeaderToDissolve]) return prev;
@@ -539,12 +539,9 @@ export function OrderProvider({ children }) {
           (dst.confirmedItems || []).length === 0);
       if (!dstEmpty) return false;
       dispatch({ type: 'orders/moveOrder', fromId, toId });
-      // 자리이동 출처가 동적 슬롯(예약/포장/배달) 이면 빈 번호 메꿈.
-      // 예: y2 가 t05 로 이동하면 y3 → y2, y4 → y3 ... 으로 재키잉.
-      const prefix = detectDynamicSlotPrefix(fromId);
-      if (prefix) {
-        dispatch({ type: 'orders/compactSlots', prefix });
-      }
+      // 2026-07-10: 슬롯 자동 재정렬 제거 (위 removeTable 경로와 동일 처방). 자리이동으로
+      //   출처 동적 슬롯이 비어도 뒷번호를 당기지 않는다 — 재배정이 유실을 일으키므로.
+      //   빈 자리는 그대로 두고 다음 주문이 findEmptySlotForType 로 채운다.
       return true;
     };
 

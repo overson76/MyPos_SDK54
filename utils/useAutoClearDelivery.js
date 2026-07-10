@@ -142,8 +142,9 @@ export function useAutoClearDelivery({
         if (ex.deliveryAddress) bumpAddress(ex.deliveryAddress);
       }
       dispatch({ type: 'orders/autoClearDelivery', tableIds: toClear });
-      // 배달 슬롯 빈자리 메꿈 — d3 가 자동 정리되면 d4 → d3 등으로 재키잉.
-      dispatch({ type: 'orders/compactSlots', prefix: 'd' });
+      // 2026-07-10: 🔴 슬롯 자동 재정렬(compactSlots) 제거 — 배달 완료 시 뒷번호를 당기던
+      //   것이 "슬롯 주인 바뀜"→동기화 유실의 방아쇠였다(꽈베기 실사고). 정리된 자리는
+      //   빈칸으로 두고 다음 배달이 findEmptySlotForType 로 채운다. (OrderContext 동일 처방)
     };
     const interval = setInterval(check, 30000);
     check();

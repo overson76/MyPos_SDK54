@@ -467,6 +467,9 @@ export function orderReducer(state, action) {
 
     // 동적 슬롯 빈자리 메꿈 — 예약/포장/배달 prefix 의 번호를 1부터 빈자리 없이 재정렬.
     // moveOrder/markPaid/autoClearDelivery 직후 wrapper 가 호출.
+    // ⚠️ DEPRECATED (2026-07-10) — 어떤 호출부도 이 액션을 dispatch 하지 않는다.
+    //   슬롯 재정렬은 배달 주문 무음 유실의 근본원인이라 제거됨([[compactSlotsByPrefix]] 주석 참조).
+    //   케이스는 옛 데이터/외부 dispatch 안전용으로만 남겨둔다 — 재연결 금지.
     case 'orders/compactSlots': {
       const { prefix } = action;
       if (!prefix) return state;
