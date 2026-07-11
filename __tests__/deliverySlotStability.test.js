@@ -12,6 +12,7 @@
 
 import { mergeKeyedPull } from '../utils/syncMerge';
 import { orderReducer } from '../utils/orderReducer';
+import { computeSlotRankMap, findEmptySlotForType } from '../utils/orderHelpers';
 
 describe('배달 슬롯 안정화 — 무음 유실 근본처방 (2026-07-10)', () => {
   // ── (A) 재배정(옛 compaction)이 유실을 일으킨다 — 절대 되살리지 말 것 ──
@@ -58,9 +59,58 @@ describe('배달 슬롯 안정화 — 무음 유실 근본처방 (2026-07-10)', 
 
   test('✅ 빈 자리 재사용: 재정렬 없이 findEmptySlotForType 가 낮은 빈칸을 채운다', () => {
     // (동작 계약 확인 — findEmptySlotForType 은 gap 을 이미 낮은 순으로 채운다)
-    const { findEmptySlotForType } = require('../utils/orderHelpers');
     const used = () => ({ items: [{ id: 1 }] });
     // d2 가 비어 있으면(d1,d3 점유) 다음 배달은 d2 로 — 슬롯 재사용, 무한 증가 없음.
     expect(findEmptySlotForType({ d1: used(), d3: used() }, 'delivery')).toBe('d2');
+  });
+});
+
+describe('computeSlotRankMap — 배달 도착순 표시 순위 (2026-07-10)', () => {
+  const del = (ts, extra) => ({ items: [{ id: 1 }], createdAt: ts, ...(extra || {}) });
+
+  test('createdAt 오름차순 = 오래된 것이 1번 (저장 키와 무관)', () => {
+    const orders = { d1: del(300), d3: del(100), d5: del(200) };
+    expect(computeSlotRankMap(orders, 'd')).toEqual({ d3: 1, d5: 2, d1: 3 });
+  });
+
+  test('점유 안 된 슬롯은 순위에서 제외', () => {
+    const orders = { d1: del(100), d2: {}, d3: { items: [] } };
+    expect(computeSlotRankMap(orders, 'd')).toEqual({ d1: 1 });
+  });
+
+  test('발신자 정보만 있는 주문대기 슬롯도 도착으로 순위', () => {
+    const orders = {
+      d1: { deliveryPhone: '01011112222', createdAt: 50 },
+      d2: del(100),
+    };
+    expect(computeSlotRankMap(orders, 'd')).toEqual({ d1: 1, d2: 2 });
+  });
+
+  test('분할 자식(d1#1)은 부모(d1) 순위에 종속 — 최소 createdAt', () => {
+    const orders = { 'd1#1': del(500), 'd1#2': del(400), d2: del(300) };
+    expect(computeSlotRankMap(orders, 'd')).toEqual({ d2: 1, d1: 2 });
+  });
+
+  test('createdAt 없는 옛 슬롯은 맨 뒤 + 키 번호로 안정 정렬', () => {
+    const orders = { d1: del(null), d2: del(100), d4: del(null) };
+    expect(computeSlotRankMap(orders, 'd')).toEqual({ d2: 1, d1: 2, d4: 3 });
+  });
+
+  test('같은 createdAt 은 키 번호 낮은 순', () => {
+    expect(computeSlotRankMap({ d3: del(100), d1: del(100) }, 'd')).toEqual({
+      d1: 1,
+      d3: 2,
+    });
+  });
+
+  test('예약(y) prefix 동일 동작, 다른 prefix 무시', () => {
+    const orders = { y2: del(200), y1: del(100), d1: del(50) };
+    expect(computeSlotRankMap(orders, 'y')).toEqual({ y1: 1, y2: 2 });
+  });
+
+  test('빈 orders / prefix 없음 방어', () => {
+    expect(computeSlotRankMap({}, 'd')).toEqual({});
+    expect(computeSlotRankMap(null, 'd')).toEqual({});
+    expect(computeSlotRankMap({ d1: del(1) }, '')).toEqual({});
   });
 });
