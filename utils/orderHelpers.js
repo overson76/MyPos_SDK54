@@ -1,6 +1,11 @@
 // OrderContext 의 순수 helper 모음.
 // React 의존성 없이 입력 → 출력만 다루는 함수. 단위 테스트 가능.
 import { resolveAnyTable } from './tableData';
+// 2026-07-10: 슬롯 점유 판정 + 도착순위 계산을 leaf 모듈 slotRank 로 이동(순환 방지 +
+//   중앙 라벨 서비스와 단일 소스 공유). 기존 import 호환 위해 재export.
+import { slotOccupied, computeSlotRankMap } from './slotRank';
+
+export { slotOccupied, computeSlotRankMap };
 
 // 매출 history 메모리 누적 방지 — 최근 N건만 유지
 export const REVENUE_HISTORY_CAP = 1000;
@@ -168,23 +173,7 @@ export function compactSlotsByPrefix(orders, prefix) {
 const TYPE_PREFIX = { delivery: 'd', reservation: 'y', takeout: 'p' };
 const TYPE_STATIC_COUNT = { delivery: 5, reservation: 2, takeout: 2 };
 
-// 슬롯 점유 판정 — 모듈 공유 (findEmptySlotForType · computeSlotRankMap).
-// 2026-06-05: 점유 판정에 발신자 정보(전화/별칭/주소)·예약(시간/인원) 포함.
-//   기존엔 메뉴(items/cart)만 봐서, "🕐 주문대기"(발신자만) / 빈 예약(시간·인원만)
-//   슬롯을 "빈 칸" 으로 재판정 → 다음 전화·예약이 같은 칸을 덮어쓰던 사고 처방.
-export function slotOccupied(o) {
-  return (
-    !!o &&
-    ((o.items?.length || 0) > 0 ||
-      (o.cartItems?.length || 0) > 0 ||
-      !!o.deliveryPhone ||
-      !!o.deliveryAlias ||
-      !!o.deliveryAddress ||
-      !!o.deliveryTime ||
-      (o.partySize || 0) > 0)
-  );
-}
-
+// slotOccupied 는 slotRank 로 이동 (위에서 import·재export). findEmptySlotForType 이 사용.
 export function findEmptySlotForType(orders, type) {
   const prefix = TYPE_PREFIX[type];
   if (!prefix) return null;
@@ -217,42 +206,7 @@ export function findEmptyDeliverySlot(orders) {
   return findEmptySlotForType(orders, 'delivery');
 }
 
-// 2026-07-10: 동적 슬롯(배달 d / 예약 y / 포장 p)의 "도착 순서(createdAt)" 표시 순위.
-//   저장 슬롯 재정렬(compactSlots)을 유실 때문에 제거한 뒤, 화면 번호가 뒤죽박죽 되지
-//   않도록 하는 표시 계층. 저장 키(d1..d5)는 고정이지만, 화면 번호는 "받은 시각" 순으로
-//   1·2·3… 매겨 선착순(어느 전화가 먼저 왔는지)을 유지한다.
-//   반환: { [baseKey]: 순위(1-based) } — 점유된 슬롯만. 분할 자식(d1#1)은 부모(d1)에 종속
-//   (부모 순위 = 자식 중 최소 createdAt). createdAt 없는 옛 슬롯은 맨 뒤로 밀되 키 번호로 안정 정렬.
-export function computeSlotRankMap(orders, prefix) {
-  const o = orders || {};
-  if (!prefix) return {};
-  const baseRe = new RegExp(`^${prefix}\\d+$`);
-  const info = {}; // baseKey → { ts, n }
-  for (const key of Object.keys(o)) {
-    const base = key.includes('#') ? key.split('#')[0] : key;
-    if (!baseRe.test(base)) continue;
-    if (!slotOccupied(o[key])) continue;
-    const c = typeof o[key].createdAt === 'number' ? o[key].createdAt : null;
-    const n = parseInt(base.slice(prefix.length), 10);
-    if (!info[base]) {
-      info[base] = { ts: c, n: Number.isNaN(n) ? 0 : n };
-    } else if (c != null && (info[base].ts == null || c < info[base].ts)) {
-      info[base].ts = c;
-    }
-  }
-  const bases = Object.keys(info);
-  bases.sort((a, b) => {
-    const at = info[a].ts == null ? Infinity : info[a].ts;
-    const bt = info[b].ts == null ? Infinity : info[b].ts;
-    if (at !== bt) return at - bt;
-    return info[a].n - info[b].n;
-  });
-  const rank = {};
-  bases.forEach((base, i) => {
-    rank[base] = i + 1;
-  });
-  return rank;
-}
+// computeSlotRankMap 은 slotRank 로 이동 (위에서 import·재export).
 
 // 2026-06-09: 같은 발신자의 "주문대기"(메뉴 없이 발신자 정보만 박힌) 슬롯 찾기.
 //   전화 자동 stash / "주문받기" 가 멀티기기(PC·아이패드가 각자 10초 타이머) 또는 CID

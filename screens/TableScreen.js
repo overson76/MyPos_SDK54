@@ -17,6 +17,7 @@ import {
   tableSubTabs,
   tableTypeColors,
 } from '../utils/tableData';
+import { computeSlotRankMap } from '../utils/slotRank';
 import { useOrders } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
 import { useStore } from '../utils/StoreContext';
@@ -1145,51 +1146,38 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
           if (!prefixEntry) return baseSlots;
           const [prefix, def] = prefixEntry;
           const baseIds = new Set(baseSlots.map((b) => b.id));
-          const extraIds = Object.keys(orders || {})
-            .map((id) => (id.includes('#') ? id.split('#')[0] : id))
-            .filter(
-              (id) =>
-                id.startsWith(prefix) &&
-                /^\d+$/.test(id.slice(prefix.length)) &&
-                !baseIds.has(id)
+
+          // 2026-07-10: 저장 슬롯 재정렬(compactSlots)을 무음 유실 사고로 제거한 뒤 —
+          //   점유 슬롯을 "도착 순서(createdAt)"로 앞에 당겨 배치하고 빈 슬롯을 뒤에.
+          //   화면 번호(배달1·2·3…) = 위치 = 도착 순위. 저장 키(t.id)는 고정 유지하므로
+          //   주문 조회/동기화는 그대로고, 번호만 선착순으로 보인다. (renderTile 은 t.id 로
+          //   주문을 읽고 t.label 로 번호를 표시 → 저장키 무관하게 도착순 번호 노출.)
+          const rank = computeSlotRankMap(orders, prefix);
+          const occupiedIds = Object.keys(rank).sort((a, b) => rank[a] - rank[b]);
+          const occupiedSet = new Set(occupiedIds);
+          const emptyBaseIds = baseSlots
+            .map((b) => b.id)
+            .filter((id) => !occupiedSet.has(id))
+            .sort(
+              (a, b) =>
+                parseInt(a.slice(prefix.length), 10) -
+                parseInt(b.slice(prefix.length), 10)
             );
-          const extras = Array.from(new Set(extraIds)).map((id) => ({
-            id,
-            label: `${def.labelPrefix}${id.slice(prefix.length)}`,
-            type,
-            dynamic: true,
-          }));
-          let all = [...baseSlots, ...extras];
-          const isUsed = (t) => {
-            const o = orders?.[t.id];
-            if (o && (o.items?.length > 0 || o.cartItems?.length > 0))
-              return true;
-            const splitChildHas = Object.entries(orders || {}).some(
-              ([oid, oo]) =>
-                oid.startsWith(`${t.id}#`) &&
-                ((oo.items?.length || 0) > 0 || (oo.cartItems?.length || 0) > 0)
-            );
-            return splitChildHas;
-          };
-          const allUsed = all.length > 0 && all.every(isUsed);
-          if (allUsed) {
-            const maxN = all.reduce((m, t) => {
-              const n = parseInt(t.id.slice(prefix.length), 10);
+          const orderedIds = [...occupiedIds, ...emptyBaseIds];
+          // 빈 base 슬롯이 하나도 없으면(전부 점유) 다음 빈 슬롯 하나 확장 — 새 주문 받을 자리.
+          if (emptyBaseIds.length === 0) {
+            const maxN = orderedIds.reduce((m, id) => {
+              const n = parseInt(id.slice(prefix.length), 10);
               return Number.isNaN(n) ? m : Math.max(m, n);
             }, 0);
-            all.push({
-              id: `${prefix}${maxN + 1}`,
-              label: `${def.labelPrefix}${maxN + 1}`,
-              type,
-              dynamic: true,
-            });
+            orderedIds.push(`${prefix}${maxN + 1}`);
           }
-          all.sort((a, b) => {
-            const ar = orders?.[a.id]?.status === 'ready' ? 1 : 0;
-            const br = orders?.[b.id]?.status === 'ready' ? 1 : 0;
-            return ar - br;
-          });
-          return all;
+          return orderedIds.map((id, i) => ({
+            id,
+            label: `${def.labelPrefix}${i + 1}`,
+            type,
+            dynamic: !baseIds.has(id),
+          }));
         };
 
         const reservationSlots = buildDynamicSlots('reservation');

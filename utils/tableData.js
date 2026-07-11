@@ -1,3 +1,5 @@
+import { rankedSlotLabel } from './slotRank';
+
 export const tables = [
   // Row 1
   { id: 't07', label: '07', type: 'regular' },
@@ -47,8 +49,13 @@ export const DYNAMIC_SLOT_PREFIX = {
 // 분할 슬롯 ('t01#1' 등) 은 호출자가 별도 처리.
 export function resolveAnyTable(tableId) {
   if (!tableId) return null;
+  // 2026-07-10: 배달/예약/포장 슬롯은 "저장 키 번호"가 아니라 "도착 순서" 번호로 표시.
+  //   slotRank 중앙맵에 순위가 있으면 그 라벨로 덮어 전 화면(주방/영수증/음성/지도)이
+  //   같은 번호를 쓴다. 순위 없으면(빈 슬롯/미갱신) 기존 키 기반 라벨로 폴백 — label 만
+  //   바꾸고 type/id 는 그대로라 기존 로직(타입 판정 등)에 영향 없음.
+  const ranked = rankedSlotLabel(tableId);
   const t = tables.find((x) => x.id === tableId);
-  if (t) return t;
+  if (t) return ranked ? { ...t, label: ranked } : t;
   const prefix = tableId[0];
   const def = DYNAMIC_SLOT_PREFIX[prefix];
   if (!def) return null;
@@ -56,7 +63,7 @@ export function resolveAnyTable(tableId) {
   if (!/^\d+$/.test(rest)) return null;
   return {
     id: tableId,
-    label: `${def.labelPrefix}${rest}`,
+    label: ranked || `${def.labelPrefix}${rest}`,
     type: def.type,
     dynamic: true,
   };

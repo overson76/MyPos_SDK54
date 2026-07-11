@@ -31,6 +31,7 @@ import { getLastCallPhone, getLastCallTs } from './useIncomingCall';
 import { isDrivingMSane, distanceKm } from './geocode';
 import { addBreadcrumb } from './sentry';
 import { resolveAnyTable } from './tableData';
+import { setSlotRankMaps } from './slotRank';
 import { setNotifyAddressBook } from './notify';
 import {
   emptyOrder,
@@ -124,6 +125,13 @@ export function OrderProvider({ children }) {
   //   true — persistence 훅이 그 뒤엔 로컬 주문을 dispatch 하지 않는다 (서버가 단일 진실).
   //   부팅 초기(서버 응답 전)엔 여전히 로컬 사본으로 즉시 표시 → 오프라인 부팅 표시 무손실.
   const serverOrdersSeenRef = useRef(false);
+
+  // 2026-07-10: 배달/예약/포장 화면 번호를 "도착 순서(createdAt)"로 표시하기 위한 중앙
+  //   순위맵 갱신. resolveAnyTable 이 이 맵을 읽어 배달판·주방·영수증·음성·지도가 모두
+  //   같은 번호를 쓴다. 표시 전용 — 저장/동기화와 무관하고, 실패해도 코스메틱(유실 아님).
+  useEffect(() => {
+    setSlotRankMaps(orders);
+  }, [orders]);
 
   useOrderPersistence({
     orders,
