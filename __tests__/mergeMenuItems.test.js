@@ -116,6 +116,37 @@ describe('mergeMenuItems — default + Firestore 합치기 (2026-05-26 사고 �
   });
 });
 
+describe('mergeMenuItems — 삭제 표식(deletedIds) (2026-07-15 "지웠는데 다시 나타난다" 처방)', () => {
+  test('삭제 표식된 default id 는 baseline 에서 제외 — 부활 금지 핵심', () => {
+    // 옛 사고: deleteItem 이 Firestore 문서만 삭제 → merge 가 default 를 되살림
+    const out = mergeMenuItems(DEFAULTS, [], new Set([2]));
+    expect(out.map((m) => m.id)).toEqual([1, 3]);
+  });
+
+  test('삭제 표식된 Firestore id 도 제외 (안전망)', () => {
+    const fs = [{ id: 26, name: '들깨칼제비' }];
+    const out = mergeMenuItems(DEFAULTS, fs, new Set([26]));
+    expect(out.map((m) => m.id)).toEqual([1, 2, 3]);
+  });
+
+  test('같은 id 로 다시 만든 메뉴(full doc) 는 deletedIds 에 없으므로 정상 부활', () => {
+    // 표식 문서를 full set 이 덮은 뒤의 snapshot — deleted 필드 없음 → deletedIds 미포함
+    const fs = [{ id: 2, name: '수제비(재등록)', price: 8000 }];
+    const out = mergeMenuItems(DEFAULTS, fs, new Set());
+    expect(out.find((m) => m.id === 2).name).toBe('수제비(재등록)');
+  });
+
+  test('deletedIds 미전달(옛 호출) → 기존 동작 그대로', () => {
+    const out = mergeMenuItems(DEFAULTS, []);
+    expect(out).toHaveLength(3);
+  });
+
+  test('deletedIds 를 배열로 줘도 동작', () => {
+    const out = mergeMenuItems(DEFAULTS, [], [1, 3]);
+    expect(out.map((m) => m.id)).toEqual([2]);
+  });
+});
+
 describe('mergeItemForWrite — 단일 item update 시 전체 item 으로 set (가격 수정 사고 영구 처방)', () => {
   const DEFAULTS = [
     { id: 17, name: '콩국수', shortName: '콩국수', price: 8000, color: '#EEE9D5', category: '국수/만백', image: '', sizeGroup: 'deulpatkong' },

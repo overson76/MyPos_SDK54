@@ -176,11 +176,15 @@ export function MenuProvider({ children }) {
       if (!storeId) return;
       const db = getFirestore();
       if (!db) return;
+      // 2026-07-15: 실제 삭제(.delete()) 대신 삭제 표식(tombstone) — 문서를 지우면
+      // listener 의 mergeMenuItems 가 default 메뉴를 baseline 으로 즉시 되살렸다
+      // (사장님 신고 "지웠는데 다시 나타난다"). 주소록 휴지통(6/12)과 동일 패턴.
+      // 같은 id 로 새 메뉴를 만들면 full set 이 표식을 덮어 자연 부활.
       db.collection('stores')
         .doc(storeId)
         .collection('menu')
         .doc(String(id))
-        .delete()
+        .set({ id, deleted: true, deletedAt: Date.now() })
         .catch((e) => reportError(e, { ctx: 'menu.deleteMenuItem', id }));
     },
     [storeId]
@@ -232,15 +236,19 @@ export function MenuProvider({ children }) {
 
     const unsubItems = storeRef.collection('menu').onSnapshot(
       (snap) => {
-        const list = snap.docs
-          .map((d) => d.data())
-          .filter((m) => m && m.id != null);
+        const docs = snap.docs.map((d) => d.data());
+        // 2026-07-15: 삭제 표식(deleted: true) 문서는 목록에서 빼고, 그 id 는 default
+        // 합치기에서도 제외 — 지운 기본 메뉴가 되살아나지 않게 (mergeMenuItems 주석 참조).
+        const deletedIds = new Set(
+          docs.filter((m) => m && m.deleted && m.id != null).map((m) => m.id)
+        );
+        const list = docs.filter((m) => m && m.id != null && !m.deleted);
         // 2026-05-26: Firestore 와 defaultMenuItems 합치기 — Firestore 가 비거나
         // customize 적은 매장에서도 default 메뉴 baseline 보장. 같은 id 면 Firestore
         // override 우선, Firestore 신규 id (들깨칼제비 같은 케이스) 는 append.
         // 옛 동작 (setItems(list) 통째 갈아엎기) 은 사장님 매장처럼 Firestore 가 거의
         // 빈 매장에서 default 메뉴 다 사라지는 사고 일으켰음.
-        const merged = mergeMenuItems(defaultMenuItems, list);
+        const merged = mergeMenuItems(defaultMenuItems, list, deletedIds);
         // shortName 누락 마이그레이션 — 옛 데이터 호환.
         const defaultByName = new Map(
           defaultMenuItems.map((m) => [m.name, m])

@@ -51,7 +51,7 @@ export function useOrderFirestoreSync({
   setRevenue,
   addressBook,
   setAddressBook,
-  serverOrdersSeenRef,
+  serverSeenRef,
 }) {
   const { storeInfo } = useStore();
   const storeId = storeInfo?.storeId || null;
@@ -103,7 +103,11 @@ export function useOrderFirestoreSync({
   // 항목이 통째로 부활했다 (대성빨래·사하자원·하나우리들약국 좀비). 크롬↔EXE 처럼
   // 같은 PC 라도 저장소가 다르면 동일 사고. 첫 snapshot 후엔 pull 이 로컬을 서버 진실로
   // 교체하므로 그 이후의 push 만 허용한다.
-  const snapshotSeenRef = useRef({});
+  // 2026-07-15: OrderContext 가 준 serverSeenRef 와 통합 — 같은 플래그를
+  //   useOrderPersistence 의 로컬복원 게이트도 읽는다 (7/8 orders 전용 게이트를
+  //   splits/groups/revenue/addressBook 메타까지 일반화). 미주입 시 로컬 fallback.
+  const fallbackSeenRef = useRef({});
+  const snapshotSeenRef = serverSeenRef || fallbackSeenRef;
 
   // 매장 공유 음성/사운드 dispatcher 활성. storeId 가 바뀌면 listener 재등록.
   useEffect(() => {
@@ -130,11 +134,11 @@ export function useOrderFirestoreSync({
         //   결제 2건이 전 기기에서 부활했다 (7/3 카운터 PC 멈춤→재시작 사고).
         //   6/12 게이트의 계약("첫 snapshot 후엔 pull 이 로컬을 서버 진실로 교체") 복원.
         //   두 번째 snapshot 부터는 ref 가 서버 기준으로 잡혀 있으므로 dirty 병합이 안전.
+        // 2026-07-08: 이 플래그(snapshotSeenRef = serverSeenRef)는 persistence 훅의
+        //   로컬복원 게이트도 겸한다 — 서버가 한 번이라도 말한 뒤엔 AsyncStorage 옛
+        //   사본이 서버 상태를 덮지 못하게 (완료 테이블 부활 차단).
         const isFirstSnapshot = !snapshotSeenRef.current.orders;
         snapshotSeenRef.current.orders = true;
-        // 2026-07-08: 서버가 주문을 한 번이라도 말했음을 persistence 훅에 알린다 —
-        //   그 뒤로는 AsyncStorage 옛 주문 사본이 서버를 덮지 못하게 (완료 테이블 부활 차단).
-        if (serverOrdersSeenRef) serverOrdersSeenRef.current = true;
         const next = {};
         snap.docs.forEach((d) => {
           next[d.id] = d.data();

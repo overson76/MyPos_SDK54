@@ -12,10 +12,12 @@
 //     고리 변경 등). spread merge: { ...def, ...fs } — fs 가 후승.
 //   - Firestore 에만 있는 id (신규 메뉴 — 들깨칼제비 같은 케이스) 는 뒤에 append.
 //
-// 트레이드오프:
-//   사용자가 default 메뉴를 의도적으로 *삭제* 할 수는 없다 (다음 부팅 시 default 다시
-//   살아남). 사장님 매장은 default 메뉴 삭제 흔적 없음 — 안전. 향후 명시적 "default
-//   삭제" 가 필요해지면 deletedDefaultIds marker collection 추가하는 옵션 C 로 확장.
+// 2026-07-15 옵션 C 도입 (사장님 신고 "지웠는데 다시 나타난다"):
+//   deleteItem 이 Firestore 문서를 실제 삭제하면, default 메뉴는 이 합치기가 코드
+//   내장 baseline 으로 즉시 되살렸다 — 삭제가 구조적으로 불가능했던 트레이드오프가
+//   실제 사고가 됨. 이제 삭제는 { deleted: true } 표식(tombstone) 문서로 남고,
+//   표식된 id 는 deletedIds 로 넘어와 default 에서도 제외한다. 같은 id 로 메뉴를
+//   다시 만들면 full set 이 표식을 덮어 자연 부활 (주소록 휴지통 6/12 와 동일 패턴).
 
 // 단일 메뉴 update 시 Firestore 에 *전체* item 으로 쓰기 위한 합치기.
 //
@@ -44,9 +46,13 @@ export function mergeItemForWrite(id, partial, currentItems, defaults) {
   };
 }
 
-export function mergeMenuItems(defaults, fromFirestore) {
+export function mergeMenuItems(defaults, fromFirestore, deletedIds) {
   const safeDefaults = Array.isArray(defaults) ? defaults : [];
   const safeFs = Array.isArray(fromFirestore) ? fromFirestore : [];
+  const deleted =
+    deletedIds instanceof Set
+      ? deletedIds
+      : new Set(Array.isArray(deletedIds) ? deletedIds : []);
 
   const fsById = new Map();
   for (const m of safeFs) {
@@ -57,6 +63,10 @@ export function mergeMenuItems(defaults, fromFirestore) {
   const seen = new Set();
   for (const def of safeDefaults) {
     if (def == null || def.id == null) continue;
+    if (deleted.has(def.id)) {
+      seen.add(def.id); // 삭제 표식 — default 부활 금지
+      continue;
+    }
     if (fsById.has(def.id)) {
       merged.push({ ...def, ...fsById.get(def.id) });
     } else {
@@ -66,7 +76,7 @@ export function mergeMenuItems(defaults, fromFirestore) {
   }
   for (const m of safeFs) {
     if (!m || m.id == null) continue;
-    if (seen.has(m.id)) continue;
+    if (seen.has(m.id) || deleted.has(m.id)) continue;
     merged.push(m);
     seen.add(m.id);
   }

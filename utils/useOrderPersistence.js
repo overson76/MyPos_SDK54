@@ -16,7 +16,7 @@ export function useOrderPersistence({
   setRevenue,
   addressBook,
   setAddressBook,
-  serverOrdersSeenRef,
+  serverSeenRef,
 }) {
   const [hydrated, setHydrated] = useState(false);
   const saver = useMemo(() => makeDebouncedSaver(300), []);
@@ -33,26 +33,43 @@ export function useOrderPersistence({
       ]);
       if (cancelled) return;
       // 2026-07-08: 🔴 완료 테이블 부활 근본처방 — 로컬 주문 복원 게이트.
-      //   Firestore 첫 주문 snapshot 이 이미 도착했으면(서버가 말했으면) AsyncStorage 의
-      //   옛 주문 사본은 버린다. 안 그러면 이 복원이 서버로 갱신된 깨끗한 state 를 통째로
+      //   Firestore 첫 snapshot 이 이미 도착했으면(서버가 말했으면) AsyncStorage 의
+      //   옛 사본은 버린다. 안 그러면 이 복원이 서버로 갱신된 깨끗한 state 를 통째로
       //   덮어쓰고(hydrate 는 lastSynced 없는 전체 교체) push 게이트를 통과해 서버로 되밀려
       //   → 다른 기기에서 비운 테이블이 전 기기에서 부활했다 (주소록 entries 6/9 처방과 동형).
       //   await loadMany 이후 여기까진 yield 없는 동기 구간 → snapshot 콜백과 원자적:
-      //     ref=true  → 서버 이미 도착, 로컬 폐기 (부활 차단)
-      //     ref=false → 아직 서버 전 → 로컬로 즉시 표시(오프라인 부팅 무손실), 곧 올 첫
-      //                 snapshot 이 전체 교체하므로 stale 이 남지 않음.
-      const serverAlreadySpoke = !!(serverOrdersSeenRef && serverOrdersSeenRef.current);
-      if (!serverAlreadySpoke && data.orders && typeof data.orders === 'object') {
+      //     seen=true  → 서버 이미 도착, 로컬 폐기 (부활 차단)
+      //     seen=false → 아직 서버 전 → 로컬로 즉시 표시(오프라인 부팅 무손실), 곧 올 첫
+      //                  snapshot 이 전체 교체하므로 stale 이 남지 않음.
+      // 2026-07-15: 🔴 게이트를 orders 전용 → 컬렉션별 일반화 (사장님 신고 "지웠는데
+      //   다시 나타난다"). 7/8 처방이 orders 만 막아 splits(테이블 나누기)/groups(단체
+      //   묶음)/revenue/주소록 메타는 여전히 snapshot 뒤에 옛 로컬 사본으로 덮여
+      //   push 로 전 기기 부활했다. 특히 revenue 는 7/3 이후 로컬에 { total } 만
+      //   저장하므로 옛 코드의 history:[] 통째 교체가 서버 매출이력 전체 삭제로
+      //   이어질 수 있었다 — history 는 서버를 못 봤을 때만, 그것도 로컬에 실제
+      //   배열이 있을 때만 복원.
+      const seen = (serverSeenRef && serverSeenRef.current) || {};
+      if (!seen.orders && data.orders && typeof data.orders === 'object') {
         dispatch({ type: 'orders/hydrate', payload: data.orders });
       }
-      if (data.splits && typeof data.splits === 'object') setSplits(data.splits);
-      if (data.groups && typeof data.groups === 'object') setGroups(data.groups);
+      if (!seen.splits && data.splits && typeof data.splits === 'object') {
+        setSplits(data.splits);
+      }
+      if (!seen.groups && data.groups && typeof data.groups === 'object') {
+        setGroups(data.groups);
+      }
       if (data.revenue && typeof data.revenue === 'object') {
-        setRevenue({
-          total: Number(data.revenue.total) || 0,
-          history: Array.isArray(data.revenue.history)
-            ? capHistory(data.revenue.history)
-            : [],
+        const loadedTotal = Number(data.revenue.total) || 0;
+        const loadedHistory = Array.isArray(data.revenue.history)
+          ? capHistory(data.revenue.history)
+          : null;
+        setRevenue((prev) => {
+          const total = seen.revenueTotal ? prev.total : loadedTotal;
+          const history =
+            !seen.history && loadedHistory ? loadedHistory : prev.history;
+          return total === prev.total && history === prev.history
+            ? prev
+            : { total, history };
         });
       }
       if (data.addressBook && typeof data.addressBook === 'object') {
@@ -69,18 +86,25 @@ export function useOrderPersistence({
         //   기기에선 AsyncStorage 도 최신이라 안 보이고, 다기기에서만 재현(사장님 "서로 물려서").
         //   처방: entries 는 prev(초기 {} 또는 이미 도착한 listener 값) 그대로 유지하고
         //   meta 만 복원. functional update 라 entries 참조가 안 바뀌어 write effect 도 noop.
+        // 2026-07-15: 메타(todayDate/todayDeliveredKeys/autoRemember)도 서버가 이미
+        //   말했으면 로컬 복원 skip — 위 orders 게이트와 동일 원리 (오늘 배달완료 표시
+        //   등이 옛 사본으로 되돌아가 push 되는 것 차단). 무시목록은 로컬 전용이라 항상 복원.
         setAddressBook((prev) => ({
           ...prev,
-          todayDate: today,
-          todayDeliveredKeys: sameDay
-            ? Array.isArray(loaded.todayDeliveredKeys)
-              ? loaded.todayDeliveredKeys
-              : []
-            : [],
-          autoRemember:
-            typeof loaded.autoRemember === 'boolean'
-              ? loaded.autoRemember
-              : true,
+          ...(seen.addressBookMeta
+            ? {}
+            : {
+                todayDate: today,
+                todayDeliveredKeys: sameDay
+                  ? Array.isArray(loaded.todayDeliveredKeys)
+                    ? loaded.todayDeliveredKeys
+                    : []
+                  : [],
+                autoRemember:
+                  typeof loaded.autoRemember === 'boolean'
+                    ? loaded.autoRemember
+                    : true,
+              }),
           // 2026-06-10: "다른 가게" 무시목록은 Firestore 가 아니라 AsyncStorage 로 영속
           //   (union Firestore sync 무한루프 사고 후 격리). 앱 재시작 시 여기서 복원 —
           //   entries 와 달리 무시목록은 다기기 false-diff 부활 위험이 없어 로컬 복원 안전.
