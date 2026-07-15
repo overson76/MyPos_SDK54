@@ -28,6 +28,18 @@
 //   기준으로 잡힌 *두 번째 snapshot 부터만* — useOrderFirestoreSync 의
 //   isFirstSnapshot 분기가 이 계약을 지킨다 (6/12 부팅 게이트 계약의 복원).
 
+// 슬롯 재사용 판별 — 서버 값이 내 로컬 값보다 "나중에 생성된"(createdAt 큰) 주문인가.
+// 배달/포장/예약 슬롯 키(d1..)는 위치이지 주문 신원이 아니다. 완료된 주문이 빠지면
+// 같은 자리를 다음 손님이 재사용한다(2026-07-10 슬롯 재정렬 제거 이후). 따라서 같은
+// 키라도 createdAt 이 다르면 서로 "다른 주문". 서버 쪽이 더 나중(큰 createdAt) 이면
+// 내 로컬은 이미 완료돼 사라진 옛 주문이고 새 손님이 그 자리를 차지한 것 → 서버를 따른다.
+// createdAt 이 같으면(동일 주문 동시편집) 또는 한쪽이라도 없으면 false → 기존 동작 유지.
+function serverHasNewerOrder(srvVal, locVal) {
+  const s = srvVal && typeof srvVal === 'object' ? srvVal.createdAt : undefined;
+  const l = locVal && typeof locVal === 'object' ? locVal.createdAt : undefined;
+  return typeof s === 'number' && typeof l === 'number' && s > l;
+}
+
 // 키-객체 맵 병합 — orders(테이블별) / addressBook.entries(주소 키별) 공용.
 // server: snapshot 재구성 결과, local: 현재 state, lastSynced: 마지막 push/pull 시점 ref.
 export function mergeKeyedPull(server, local, lastSynced) {
@@ -46,6 +58,12 @@ export function mergeKeyedPull(server, local, lastSynced) {
       //   내 수정이 삭제를 되돌려 완료된 주문이 부활했다(매장 빈번 — 7/2 처방의 구멍).
       //   lastSynced 에도 없던 로컬 신규(내가 방금 만든, 아직 push 전 주문)만 보존.
       if (!(k in srv) && k in last) continue; // 다른 기기 삭제 — 부활 금지, 삭제 따름
+      // 2026-07-15 🔴 슬롯 재사용 부활 근본처방 (청솔서점 사고): 완료된 배달 주문이
+      //   빠진 자리를 새 손님이 재사용했는데, 내가 옛 주문을 수정 중(dirty)이었으면
+      //   옛 코드는 "같은 d1 동시편집 → 내 기기 우선"으로 오판해 옛 주문을 부활시키고
+      //   새 손님을 덮어 유실시켰다(여러 기기에서 지워도 계속 되살아남). 서버 쪽이
+      //   더 나중에 생성된 주문이면 내 로컬은 사라진 옛 주문 → 서버(새 손님)를 따른다.
+      if (serverHasNewerOrder(srv[k], loc[k])) continue;
       if (!merged) merged = { ...srv };
       merged[k] = loc[k];
     }

@@ -90,6 +90,48 @@ describe('mergeKeyedPull', () => {
     const server = { a: t1 };
     expect(mergeKeyedPull(server, undefined, undefined)).toBe(server);
   });
+
+  // 2026-07-15 🔴 청솔서점 사고 — 슬롯 재사용 부활. 7/10 슬롯 재정렬 제거 이후
+  // 배달 완료 자리를 다음 손님이 재사용하는데, 옛 주문을 dirty 로 들고 있던 기기가
+  // "같은 d1 동시편집 → 내 기기 우선"으로 오판해 옛 주문을 부활시키고 새 손님을 덮음.
+  describe('슬롯 재사용 부활 차단 (createdAt 신원)', () => {
+    const oldOrder = { items: [1], status: 'ready', createdAt: 1000 }; // 청솔서점(옛)
+    const newOrder = { items: [2], status: 'preparing', createdAt: 2000 }; // 새 손님
+
+    test('🔴 서버가 더 나중 주문(새 손님) — 내 dirty 옛 주문 부활 금지, 새 손님 유지', () => {
+      const oldDirty = { ...oldOrder, status: 'preparing' }; // 내가 옛 주문 수정 중
+      const server = { d1: newOrder }; // 완료 후 새 손님이 d1 재사용
+      const local = { d1: oldDirty }; // 내 로컬: 옛 주문 수정본(dirty)
+      const last = { d1: oldOrder }; // lastSynced: 옛 주문 있었음
+      const merged = mergeKeyedPull(server, local, last);
+      expect(merged.d1).toBe(newOrder); // 부활 금지 + 새 손님 유실 금지
+    });
+
+    test('같은 자리 내 새 주문이 더 나중 — 서버 옛 에코보다 내 새 주문 우선', () => {
+      // 같은 기기가 청솔서점 비우고 즉시 새 손님을 d1 재사용. 서버엔 아직 옛 에코.
+      const server = { d1: oldOrder }; // 옛 에코(아직 서버 미갱신)
+      const local = { d1: newOrder }; // 내 로컬: 방금 만든 새 손님
+      const last = { d1: oldOrder };
+      const merged = mergeKeyedPull(server, local, last);
+      expect(merged.d1).toBe(newOrder); // 내 새 주문(더 나중) 유지
+    });
+
+    test('같은 주문 동시편집(createdAt 동일) — 기존대로 내 기기 우선', () => {
+      const mine = { items: [1, 2], createdAt: 1000 };
+      const theirs = { items: [1, 3], createdAt: 1000 };
+      const orig = { items: [1], createdAt: 1000 };
+      const merged = mergeKeyedPull({ d1: theirs }, { d1: mine }, { d1: orig });
+      expect(merged.d1).toBe(mine); // 동일 주문 → 내 수정 우선 (변경 없음)
+    });
+
+    test('createdAt 없는 옛 데이터 — 기존 동작(내 기기 우선) 유지', () => {
+      const mine = { items: [1, 2] };
+      const theirs = { items: [1, 3] };
+      const orig = { items: [1] };
+      const merged = mergeKeyedPull({ d1: theirs }, { d1: mine }, { d1: orig });
+      expect(merged.d1).toBe(mine);
+    });
+  });
 });
 
 describe('mergeHistoryPull', () => {
