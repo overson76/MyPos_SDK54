@@ -132,6 +132,61 @@ describe('mergeKeyedPull', () => {
       expect(merged.d1).toBe(mine);
     });
   });
+
+  // 2026-07-21 🔴 홀 6번 조리완료 직후 부활 — 실제 markReady 리듀서 출력을
+  //   그대로 pull 병합에 태우는 통합 회귀. 위 유닛들은 손으로 만든 {status:'ready'}
+  //   지만, 여기선 orders/markReady 가 만든 진짜 객체(status/readyAt/cooked 슬롯 +
+  //   createdAt 보존)로 검증한다. "주방이 6번 조리완료(수정) ↔ 카운터가 6번
+  //   결제완료(삭제)" 가 push 디바운스(300ms) 창에서 겹치는 매장 실사고 재현.
+  describe('홀 6번 조리완료 직후 부활 (markReady → mergeKeyedPull 통합)', () => {
+    // 확정된 홀 6번 주문 — 조리 전(preparing). createdAt 은 신원.
+    const table6Base = {
+      items: [{ id: 'm1', qty: 1, cookState: 'cooking' }],
+      confirmedItems: [{ id: 'm1', qty: 1 }],
+      status: 'preparing',
+      paymentStatus: 'unpaid',
+      readyAt: null,
+      createdAt: 1000,
+    };
+    // 방금 누른 조리완료 = 실제 리듀서를 거친 6번의 새 객체(dirty).
+    const afterReady = orderReducer(
+      { '6': table6Base },
+      { type: 'orders/markReady', tableId: '6' }
+    );
+    const cooked6 = afterReady['6'];
+
+    // markReady 계약 확인 — 이 전제가 깨지면 아래 병합 시나리오도 무의미.
+    test('markReady 는 6번을 삭제 아닌 수정(ready + createdAt 보존)으로 만든다', () => {
+      expect(cooked6).not.toBe(table6Base); // 새 참조 = dirty
+      expect(cooked6.status).toBe('ready');
+      expect(typeof cooked6.readyAt).toBe('number');
+      expect(cooked6.createdAt).toBe(1000); // 신원 유지
+    });
+
+    test('[A] 카운터 결제완료(서버 삭제) 가 내 조리완료(수정)를 이긴다 — 부활 금지', () => {
+      const local = { '6': cooked6 }; // 주방: 방금 조리완료(dirty)
+      const last = { '6': table6Base }; // lastSynced: 6번 있었음
+      const server = {}; // 카운터가 6번 결제완료 → 서버에서 삭제
+      const merged = mergeKeyedPull(server, local, last);
+      expect(merged['6']).toBeUndefined(); // 완료 우선 — 6번 부활 금지!
+    });
+
+    test('[B] 아무도 6번 안 건드림(서버 살아있음) — 내 조리완료 유지', () => {
+      const local = { '6': cooked6 };
+      const last = { '6': table6Base };
+      const server = { '6': table6Base }; // 서버엔 조리 전 6번(에코)
+      const merged = mergeKeyedPull(server, local, last);
+      expect(merged['6']).toBe(cooked6); // 내 조리완료 우선(소멸 금지)
+    });
+
+    test('[C] 조리완료 push 반영 후(dirty 없음) — server 그대로 반환(write noop)', () => {
+      const local = { '6': cooked6 };
+      const last = { '6': cooked6 }; // push 성공 → ref 가 조리완료본으로 전진
+      const server = { '6': cooked6 };
+      const merged = mergeKeyedPull(server, local, last);
+      expect(merged).toBe(server); // 불필요한 복사/재push 없음
+    });
+  });
 });
 
 describe('mergeHistoryPull', () => {
