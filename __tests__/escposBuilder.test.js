@@ -8,6 +8,8 @@ import {
   buildDeliveryReturnText,
   buildTextBytes,
   buildTopHeaderText,
+  buildOrderSlipText,
+  withTopHeader,
   STORE_BANK_LINES,
 } from '../utils/escposBuilder';
 
@@ -449,29 +451,46 @@ describe('상단 입금 계좌 블록', () => {
     expect(header).toContain('082-02-0303057');
   });
 
-  test('여백 명령 없이 init + 정렬 직후 바로 텍스트', () => {
-    const bytes = buildReceiptBytes(sample);
-    // ESC @ (2) + ESC a 0 (3) 까지가 명령, 그 다음은 계좌 블록 텍스트
-    expect(Array.from(bytes.slice(0, 5))).toEqual([0x1B, 0x40, 0x1B, 0x61, 0x00]);
-    expect(bytes[5]).not.toBe(0x1B);
-  });
-
-  test('영수증 bytes — 계좌 텍스트가 본문보다 앞', () => {
-    const text = new TextDecoder().decode(buildReceiptBytes(sample));
+  test('영수증 텍스트 — 계좌가 맨 위, 본문보다 앞', () => {
+    const text = buildReceiptText(sample);
     expect(text).toContain('부산은행 강 태 선');
     expect(text).toContain('082-02-0303057');
     expect(text.indexOf('082-02-0303057')).toBeLessThan(text.indexOf('치킨'));
   });
 
-  test('주문지 등 rawText 출력에도 동일 적용', () => {
-    const text = new TextDecoder().decode(buildTextBytes('주문지 본문'));
+  test('주문지 텍스트에도 적용', () => {
+    const text = buildOrderSlipText({
+      tableLabel: '3번',
+      rows: [{ item: { name: '치킨', qty: 1 }, kind: 'added' }],
+      kinds: ['all'],
+    });
     expect(text).toContain('부산은행 강 태 선');
-    expect(text).toContain('082-02-0303057');
-    expect(text.indexOf('082-02-0303057')).toBeLessThan(text.indexOf('주문지 본문'));
+    expect(text.indexOf('082-02-0303057')).toBeLessThan(text.indexOf('주  문  지'));
   });
 
-  test('buildReceiptText 자체는 그대로 — 계좌는 바이트 래핑 단계에서만 추가', () => {
-    expect(buildReceiptText(sample)).not.toContain('부산은행');
+  test('배달 회수 텍스트에도 적용 — 빈 목록 포함', () => {
+    const filled = buildDeliveryReturnText({
+      ranked: [{ rank: 1, label: '진실보석', distanceM: 2300, menuSummary: [], totalDishes: 2 }],
+      unknown: [],
+      sortMode: 'far',
+    });
+    expect(filled).toContain('082-02-0303057');
+    const empty = buildDeliveryReturnText({ ranked: [], unknown: [], sortMode: 'far' });
+    expect(empty).toContain('082-02-0303057');
+  });
+
+  test('withTopHeader — 이미 붙어있으면 이중 출력 안 함', () => {
+    const once = buildReceiptText(sample);
+    const twice = withTopHeader(once);
+    expect(twice).toBe(once);
+    expect(twice.split('082-02-0303057').length - 1).toBe(1);
+  });
+
+  test('바이트 래퍼는 계좌를 또 붙이지 않음 (.exe 재빌드 후 이중 출력 방지)', () => {
+    const text = new TextDecoder().decode(buildReceiptBytes(sample));
+    expect(text.split('082-02-0303057').length - 1).toBe(1);
+    const slip = new TextDecoder().decode(buildTextBytes(buildReceiptText(sample)));
+    expect(slip.split('082-02-0303057').length - 1).toBe(1);
   });
 });
 
