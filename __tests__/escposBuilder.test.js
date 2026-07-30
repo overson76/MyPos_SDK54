@@ -434,22 +434,10 @@ describe('buildReceiptBytes', () => {
   });
 });
 
-describe('상단 여백 + 입금 계좌 블록', () => {
+describe('상단 입금 계좌 블록', () => {
   const sample = {
     items: [{ name: '치킨', qty: 1, price: 10000 }],
     total: 10000,
-  };
-
-  // 텍스트에서 명령 바이트 위치를 찾는 헬퍼 — 부분 수열 검색.
-  const indexOfSeq = (bytes, seq) => {
-    outer:
-    for (let i = 0; i <= bytes.length - seq.length; i++) {
-      for (let j = 0; j < seq.length; j++) {
-        if (bytes[i + j] !== seq[j]) continue outer;
-      }
-      return i;
-    }
-    return -1;
   };
 
   test('상단 블록에 계좌 두 줄이 들어감', () => {
@@ -461,33 +449,24 @@ describe('상단 여백 + 입금 계좌 블록', () => {
     expect(header).toContain('082-02-0303057');
   });
 
-  test('topMargin 은 ESC J 160 dot (203dpi 기준 2cm)', () => {
-    expect(Array.from(CMD.topMargin)).toEqual([0x1B, 0x4A, 160]);
+  test('여백 명령 없이 init + 정렬 직후 바로 텍스트', () => {
+    const bytes = buildReceiptBytes(sample);
+    // ESC @ (2) + ESC a 0 (3) 까지가 명령, 그 다음은 계좌 블록 텍스트
+    expect(Array.from(bytes.slice(0, 5))).toEqual([0x1B, 0x40, 0x1B, 0x61, 0x00]);
+    expect(bytes[5]).not.toBe(0x1B);
   });
 
-  test('영수증 bytes — init 직후 여백 명령이 본문보다 앞에 옴', () => {
-    const bytes = buildReceiptBytes(sample);
-    const marginAt = indexOfSeq(bytes, [0x1B, 0x4A, 160]);
-    expect(marginAt).toBeGreaterThan(-1);
-    // init(2) + alignLeft(3) 다음이 여백 명령
-    expect(marginAt).toBe(5);
-  });
-
-  test('영수증 bytes — 계좌 텍스트 포함', () => {
-    const bytes = buildReceiptBytes(sample);
-    const text = new TextDecoder().decode(bytes);
+  test('영수증 bytes — 계좌 텍스트가 본문보다 앞', () => {
+    const text = new TextDecoder().decode(buildReceiptBytes(sample));
     expect(text).toContain('부산은행 강 태 선');
     expect(text).toContain('082-02-0303057');
+    expect(text.indexOf('082-02-0303057')).toBeLessThan(text.indexOf('치킨'));
   });
 
   test('주문지 등 rawText 출력에도 동일 적용', () => {
-    const bytes = buildTextBytes('주문지 본문');
-    const text = new TextDecoder().decode(bytes);
-    expect(indexOfSeq(bytes, [0x1B, 0x4A, 160])).toBe(5);
+    const text = new TextDecoder().decode(buildTextBytes('주문지 본문'));
     expect(text).toContain('부산은행 강 태 선');
     expect(text).toContain('082-02-0303057');
-    expect(text).toContain('주문지 본문');
-    // 계좌 블록이 본문보다 앞
     expect(text.indexOf('082-02-0303057')).toBeLessThan(text.indexOf('주문지 본문'));
   });
 

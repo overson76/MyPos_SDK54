@@ -56,9 +56,9 @@ async function printReceiptIpc(receipt, options = {}) {
   try {
     if (opts.mode === 'simulate') {
       // rawText: 주문지 등 미리 만들어진 텍스트 직접 전달. 없으면 결제영수증 빌더 사용.
-      // 실 출력(bytes) 과 동일하게 상단 여백 + 계좌 블록까지 보여줘야 흐름 검증이 의미 있음.
+      // 실 출력(bytes) 과 동일하게 상단 계좌 블록까지 보여줘야 흐름 검증이 의미 있음.
       const body = receipt.rawText || buildReceiptText(receipt);
-      const text = '(상단 여백 2cm)\n' + buildTopHeaderText() + '\n' + body;
+      const text = buildTopHeaderText() + '\n' + body;
       // eslint-disable-next-line no-console
       console.log('[printer/simulate] ----- begin -----\n' + text + '\n----- end -----');
       return { ok: true, mode: 'simulate', info: { lines: text.split('\n').length } };

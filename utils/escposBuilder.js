@@ -36,11 +36,6 @@ export const CMD = {
   sizeDoubleWide: new Uint8Array([ESC, 0x21, 0x20]),
   sizeDouble: new Uint8Array([ESC, 0x21, 0x30]), // double w + h
   feed: new Uint8Array([0x0A]),
-  // 2026-07-30 사장님 요청 — 출력물 상단 2cm 여백.
-  // ESC J n = print and feed n dot. 203dpi 서멀 기준 1mm ≈ 8 dot → 20mm = 160 dot.
-  // 빈 줄 반복 대신 dot 단위로 주는 이유: 프린터별 줄간격 설정(ESC 2 / ESC 3)이 달라도
-  // 실제 종이 여백이 항상 2cm 로 일정.
-  topMargin: new Uint8Array([ESC, 0x4A, 160]),
 };
 
 // 매장 입금 계좌 — 모든 출력물(영수증 / 주문지 / 배달회수) 상단에 고정 표기.
@@ -347,7 +342,6 @@ export function buildReceiptBytes(receipt, textEncoder) {
   const parts = [
     CMD.init,
     CMD.alignLeft,
-    CMD.topMargin,
     encode(buildTopHeaderText() + '\n'),
     encode(text + '\n'),
     CMD.feed,
@@ -551,7 +545,6 @@ export function buildTextBytes(text, textEncoder) {
   const parts = [
     CMD.init,
     CMD.alignLeft,
-    CMD.topMargin,
     encode(buildTopHeaderText() + '\n'),
     encode(text + '\n'),
     CMD.feed,
