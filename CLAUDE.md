@@ -20,6 +20,8 @@ npm run web        # 웹 미리보기 (Pinch zoom 등 일부 동작은 네이티
 npm run deploy:web # PC 카운터 라이브 URL 갱신 (clean + build + grep 검증 + wrangler deploy)
 ```
 
+**자동 배포 (`.github/workflows/deploy-web.yml`)**: `main` 에 푸시되면 GitHub Actions 가 테스트 → 빌드 → Cloudflare 배포까지 자동 수행. 사장님 PC 를 켤 필요 없음 — 매장 PC 는 새로고침(Ctrl+Shift+R)만. 저장소 시크릿 2개 필요: `DOTENV`(.env 내용 통째) + `CLOUDFLARE_API_TOKEN`. 수동 실행은 Actions 탭 → Deploy web → Run workflow. 아래 로컬 절차와 **같은 스크립트**를 타므로 검증 로직이 갈라지지 않는다.
+
 **`deploy:web` 절차 (`scripts/deploy-web.sh`):**
 1. `.env` 의 `EXPO_PUBLIC_FIREBASE_API_KEY` 존재/형식 사전 확인 — 없으면 abort
 2. `dist/` + `node_modules/.cache/` 클리어

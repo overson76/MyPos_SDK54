@@ -1,0 +1,67 @@
+# PC 카운터 라이브 URL 자동 배포.
+#
+# main 에 푸시되면 GitHub 이 알아서 빌드 + Cloudflare 배포까지 한다.
+# 사장님 PC 를 켤 필요도, 터미널을 열 필요도 없다 — 매장 PC 는 새로고침만.
+#
+# 필요한 저장소 시크릿 2개 (Settings → Secrets and variables → Actions):
+#   DOTENV                — .env 파일 내용 통째로 붙여넣기 (EXPO_PUBLIC_* 전부)
+#   CLOUDFLARE_API_TOKEN  — Cloudflare 대시보드 → My Profile → API Tokens →
+#                           "Edit Cloudflare Workers" 템플릿으로 생성
+#
+# .env 를 통째로 넣는 이유: 키가 하나 늘 때마다 이 워크플로를 고칠 필요가 없다.
+# 로컬 .env 를 그대로 복사해 넣으면 끝 — 로컬과 배포가 항상 같은 값을 본다.
+#
+# 수동 실행도 가능 (Actions 탭 → Deploy web → Run workflow).
+
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포가 겹치면 나중 것만 살린다 — 옛 빌드가 새 빌드를 덮어쓰는 사고 방지.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 테스트
+        run: npm test
+
+      # deploy-web.sh 가 .env 존재 + 키 형식을 검사하므로 스크립트 실행 전에 만든다.
+      # 시크릿은 로그에 마스킹되고, 이 러너는 잡이 끝나면 폐기된다.
+      - name: .env 복원
+        run: |
+          printf '%s\n' "$DOTENV" > .env
+          if ! grep -q "EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSy" .env; then
+            echo "::error::DOTENV 시크릿에 EXPO_PUBLIC_FIREBASE_API_KEY 가 없거나 형식이 이상합니다."
+            exit 1
+          fi
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+
+      # 로컬과 똑같은 스크립트를 탄다 — 키 inline 검증 / PWA 자산 검증 / deploy-bust 전부 포함.
+      # NAS 동기화 단계는 러너에 NAS 가 없으니 스크립트가 알아서 silent skip.
+      - name: 빌드 + 배포
+        run: npm run deploy:web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: .env 정리
+        if: always()
+        run: rm -f .env
