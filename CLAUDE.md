@@ -386,6 +386,15 @@ npx electron-builder --config electron/builder.config.js --publish always
 
 코드 흐름:
 - `utils/escposBuilder.js` — ESC/POS 명령 + 영수증 텍스트/바이트 빌더 (순수 함수, RN/Electron 공통). VAT 분리, 결제수단 라벨, 80mm 32칼럼 레이아웃.
+  - **상단 고정 블록**: 모든 출력물(영수증 / 주문지 / 배달회수) 맨 위에 입금 계좌(`STORE_BANK_LINES`) 자동 삽입. 세 텍스트 빌더가 `withTopHeader()` 로 감싸며, 이미 붙어있으면 건너뛰어 이중 출력 방지. 계좌 문구 변경은 `STORE_BANK_LINES` 한 곳만 수정. 상단 여백은 미적용(계좌 문구가 그 자리를 대신함 — 사장님 판단).
+
+### 출력 양식 변경은 텍스트 빌더에서 — .exe 재빌드 회피 (중요)
+
+영수증/주문지 **양식**을 바꿀 땐 반드시 `utils/escposBuilder.js` 의 *텍스트 빌더* (`buildReceiptText` / `buildOrderSlipText` / `buildDeliveryReturnText`) 를 고친다. 바이트 래퍼(`buildReceiptBytes` / `buildTextBytes`) 와 `electron/printer/print.js` 는 **.exe 메인 프로세스에 번들된 코드**라 거기 넣으면 매장 반영에 .exe 재빌드 + 자동 업데이트 사이클(사장님이 .exe 껐다 켤 때) 이 필요하다.
+
+텍스트 빌더는 라이브 URL 번들(렌더러) 에서 도므로 `npm run deploy:web` → 매장 PC 새로고침 한 번이면 즉시 반영. `utils/printReceipt.web.js` 의 `freezeToRawText()` 가 결제 영수증 객체도 렌더러에서 텍스트로 굳혀 `rawText` 로 넘기기 때문에 **모든 출력 경로가 이 빠른 경로를 탄다**.
+
+바이트 래퍼는 ESC/POS 명령(init / cut / feed) 전담 — 양식은 넣지 않는다.
 - `electron/printer/print.js` — IPC 핸들러. 3 모드:
   - `simulate` (default): 콘솔 로그만. 매장이 프린터 결정 전 흐름 검증.
   - `network`: TCP 9100 raw bytes 송신. 별도 라이브러리 불필요.

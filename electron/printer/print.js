@@ -51,6 +51,7 @@ async function printReceiptIpc(receipt, options = {}) {
   try {
     if (opts.mode === 'simulate') {
       // rawText: 주문지 등 미리 만들어진 텍스트 직접 전달. 없으면 결제영수증 빌더 사용.
+      // rawText: 주문지 등 미리 만들어진 텍스트 직접 전달. 없으면 결제영수증 빌더 사용.
       const text = receipt.rawText || buildReceiptText(receipt);
       // eslint-disable-next-line no-console
       console.log('[printer/simulate] ----- begin -----\n' + text + '\n----- end -----');

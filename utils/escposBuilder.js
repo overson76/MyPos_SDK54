@@ -38,6 +38,27 @@ export const CMD = {
   feed: new Uint8Array([0x0A]),
 };
 
+// 매장 입금 계좌 — 모든 출력물(영수증 / 주문지 / 배달회수) 상단에 고정 표기.
+// 손님이 계좌이체할 때 영수증만 보고 바로 송금할 수 있게.
+export const STORE_BANK_LINES = ['부산은행 강 태 선', '082-02-0303057'];
+
+// 상단 고정 블록 텍스트 — 가운데 정렬된 계좌 안내 + 구분선.
+export function buildTopHeaderText() {
+  return [...STORE_BANK_LINES.map((line) => centerText(line)), divider('-')].join('\n');
+}
+
+// 완성된 본문 위에 계좌 블록을 얹는다. 이미 붙어있으면 그대로 — 이중 출력 방지.
+//
+// 2026-07-30: 계좌 블록을 *텍스트 빌더* 단계에 두는 이유 — 배포 경로.
+// 바이트 래핑(buildReceiptBytes/buildTextBytes) 은 .exe 메인 프로세스에서만 도는
+// 코드라 문구를 거기 두면 매장 반영에 .exe 재빌드가 필요하다. 텍스트 빌더는 라이브
+// URL 번들(렌더러) 에서 도므로 deploy:web 한 번이면 매장 PC 가 새로고침 시 즉시 반영.
+export function withTopHeader(text) {
+  const body = String(text ?? '');
+  if (STORE_BANK_LINES.length > 0 && body.includes(STORE_BANK_LINES[0])) return body;
+  return buildTopHeaderText() + '\n' + body;
+}
+
 // 80mm 서멀 한 줄에 한글 약 16자, 영문 32자 가량. 폭 32 칼럼 기준으로 좌/우 정렬.
 const COL_WIDTH = 32;
 
@@ -317,7 +338,7 @@ export function buildReceiptText(receipt) {
   lines.push(pad2col('합계', formatWon(Number(r.total) || 0)));
   lines.push(divider('='));
 
-  return lines.join('\n');
+  return withTopHeader(lines.join('\n'));
 }
 
 // 명령 바이트 + 텍스트 합친 raw bytes. 출력 라이브러리에 텍스트만 넘기는 게 더 흔하지만
@@ -443,7 +464,7 @@ export function buildOrderSlipText(slip) {
   }
 
   lines.push(divider('='));
-  return lines.join('\n');
+  return withTopHeader(lines.join('\n'));
 }
 
 // 배달 회수 목록 — 그릇 회수용 출력물.
@@ -503,7 +524,7 @@ export function buildDeliveryReturnText(result, opts = {}) {
   if (ranked.length === 0 && unknown.length === 0) {
     lines.push(centerText('회수할 그릇이 없습니다.'));
     lines.push(divider('='));
-    return lines.join('\n');
+    return withTopHeader(lines.join('\n'));
   }
 
   for (const it of ranked) {
@@ -518,7 +539,7 @@ export function buildDeliveryReturnText(result, opts = {}) {
   }
 
   lines.push(divider('='));
-  return lines.join('\n');
+  return withTopHeader(lines.join('\n'));
 }
 
 // 거리 m → "1.2km" / "250m" 짧은 표기.
@@ -532,7 +553,15 @@ function formatDistance(distanceM) {
 // 미리 만들어진 텍스트를 ESC/POS bytes 로 래핑. buildOrderSlipText 결과 등에 사용.
 export function buildTextBytes(text, textEncoder) {
   const encode = textEncoder || ((s) => new TextEncoder().encode(s));
-  const parts = [CMD.init, CMD.alignLeft, encode(text + '\n'), CMD.feed, CMD.feed, CMD.feed, CMD.cutPartial];
+  const parts = [
+    CMD.init,
+    CMD.alignLeft,
+    encode(text + '\n'),
+    CMD.feed,
+    CMD.feed,
+    CMD.feed,
+    CMD.cutPartial,
+  ];
   const total = parts.reduce((s, p) => s + p.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
