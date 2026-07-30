@@ -36,7 +36,21 @@ export const CMD = {
   sizeDoubleWide: new Uint8Array([ESC, 0x21, 0x20]),
   sizeDouble: new Uint8Array([ESC, 0x21, 0x30]), // double w + h
   feed: new Uint8Array([0x0A]),
+  // 2026-07-30 사장님 요청 — 출력물 상단 2cm 여백.
+  // ESC J n = print and feed n dot. 203dpi 서멀 기준 1mm ≈ 8 dot → 20mm = 160 dot.
+  // 빈 줄 반복 대신 dot 단위로 주는 이유: 프린터별 줄간격 설정(ESC 2 / ESC 3)이 달라도
+  // 실제 종이 여백이 항상 2cm 로 일정.
+  topMargin: new Uint8Array([ESC, 0x4A, 160]),
 };
+
+// 매장 입금 계좌 — 모든 출력물(영수증 / 주문지 / 배달회수) 상단에 고정 표기.
+// 손님이 계좌이체할 때 영수증만 보고 바로 송금할 수 있게.
+export const STORE_BANK_LINES = ['부산은행 강 태 선', '082-02-0303057'];
+
+// 상단 고정 블록 텍스트 — 가운데 정렬된 계좌 안내 + 구분선.
+export function buildTopHeaderText() {
+  return [...STORE_BANK_LINES.map((line) => centerText(line)), divider('-')].join('\n');
+}
 
 // 80mm 서멀 한 줄에 한글 약 16자, 영문 32자 가량. 폭 32 칼럼 기준으로 좌/우 정렬.
 const COL_WIDTH = 32;
@@ -333,6 +347,8 @@ export function buildReceiptBytes(receipt, textEncoder) {
   const parts = [
     CMD.init,
     CMD.alignLeft,
+    CMD.topMargin,
+    encode(buildTopHeaderText() + '\n'),
     encode(text + '\n'),
     CMD.feed,
     CMD.feed,
@@ -532,7 +548,17 @@ function formatDistance(distanceM) {
 // 미리 만들어진 텍스트를 ESC/POS bytes 로 래핑. buildOrderSlipText 결과 등에 사용.
 export function buildTextBytes(text, textEncoder) {
   const encode = textEncoder || ((s) => new TextEncoder().encode(s));
-  const parts = [CMD.init, CMD.alignLeft, encode(text + '\n'), CMD.feed, CMD.feed, CMD.feed, CMD.cutPartial];
+  const parts = [
+    CMD.init,
+    CMD.alignLeft,
+    CMD.topMargin,
+    encode(buildTopHeaderText() + '\n'),
+    encode(text + '\n'),
+    CMD.feed,
+    CMD.feed,
+    CMD.feed,
+    CMD.cutPartial,
+  ];
   const total = parts.reduce((s, p) => s + p.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;

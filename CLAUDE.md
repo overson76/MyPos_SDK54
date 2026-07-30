@@ -386,6 +386,7 @@ npx electron-builder --config electron/builder.config.js --publish always
 
 코드 흐름:
 - `utils/escposBuilder.js` — ESC/POS 명령 + 영수증 텍스트/바이트 빌더 (순수 함수, RN/Electron 공통). VAT 분리, 결제수단 라벨, 80mm 32칼럼 레이아웃.
+  - **상단 고정 블록**: 모든 출력물(영수증 / 주문지 / 배달회수)에 2cm 여백(`CMD.topMargin` = `ESC J 160` dot) + 입금 계좌(`STORE_BANK_LINES`) 자동 삽입. 바이트 래핑 단계(`buildReceiptBytes` / `buildTextBytes`)에서만 붙으므로 `buildReceiptText` 등 텍스트 빌더는 그대로 — 계좌 문구 변경은 `STORE_BANK_LINES` 한 곳만 수정.
 - `electron/printer/print.js` — IPC 핸들러. 3 모드:
   - `simulate` (default): 콘솔 로그만. 매장이 프린터 결정 전 흐름 검증.
   - `network`: TCP 9100 raw bytes 송신. 별도 라이브러리 불필요.

@@ -24,7 +24,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const iconv = require('iconv-lite');
-const { buildReceiptText, buildReceiptBytes, buildTextBytes } = require('../../utils/escposBuilder');
+const {
+  buildReceiptText,
+  buildReceiptBytes,
+  buildTextBytes,
+  buildTopHeaderText,
+} = require('../../utils/escposBuilder');
 
 // 한국어 텍스트를 EUC-KR(CP949) 로 인코딩 — 한국 매장 영수증 프린터(SEWOO/Bixolon/Epson) default 코드페이지.
 // 1.0.19 fix: 1.0.18 이 UTF-8 raw bytes 그대로 송신해서 한국어가 깨지던 문제 해결.
@@ -51,7 +56,9 @@ async function printReceiptIpc(receipt, options = {}) {
   try {
     if (opts.mode === 'simulate') {
       // rawText: 주문지 등 미리 만들어진 텍스트 직접 전달. 없으면 결제영수증 빌더 사용.
-      const text = receipt.rawText || buildReceiptText(receipt);
+      // 실 출력(bytes) 과 동일하게 상단 여백 + 계좌 블록까지 보여줘야 흐름 검증이 의미 있음.
+      const body = receipt.rawText || buildReceiptText(receipt);
+      const text = '(상단 여백 2cm)\n' + buildTopHeaderText() + '\n' + body;
       // eslint-disable-next-line no-console
       console.log('[printer/simulate] ----- begin -----\n' + text + '\n----- end -----');
       return { ok: true, mode: 'simulate', info: { lines: text.split('\n').length } };
