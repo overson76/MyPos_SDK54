@@ -451,6 +451,18 @@ describe('상단 입금 계좌 블록', () => {
     expect(header).toContain('082-02-0303057');
   });
 
+  test('계좌 줄은 굵게 + 가로 2배 + 프린터 가운데정렬', () => {
+    const header = buildTopHeaderText();
+    for (const line of STORE_BANK_LINES) {
+      // ESC a 1(가운데) + ESC ! 0x28(가로2배+bold) + ESC E 1(bold) 로 감싸짐
+      expect(header).toContain('\x1B\x61\x01\x1B\x21\x28\x1B\x45\x01' + line);
+      // 줄 끝에서 원래 상태로 복귀 — 뒤따르는 본문이 커지지 않게
+      expect(header).toContain(line + '\x1B\x45\x00\x1B\x21\x00\x1B\x61\x00');
+    }
+    // 공백 padding 정렬은 쓰지 않는다 (가로 2배라 폭 계산이 깨짐)
+    expect(header).not.toContain('   ' + STORE_BANK_LINES[0]);
+  });
+
   test('영수증 텍스트 — 계좌가 맨 위, 본문보다 앞', () => {
     const text = buildReceiptText(sample);
     expect(text).toContain('부산은행 강 태 선');

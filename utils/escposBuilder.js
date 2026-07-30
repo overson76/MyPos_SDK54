@@ -42,9 +42,14 @@ export const CMD = {
 // 손님이 계좌이체할 때 영수증만 보고 바로 송금할 수 있게.
 export const STORE_BANK_LINES = ['부산은행 강 태 선', '082-02-0303057'];
 
-// 상단 고정 블록 텍스트 — 가운데 정렬된 계좌 안내 + 구분선.
+// 상단 고정 블록 텍스트 — 굵고 큰 계좌 안내 + 구분선.
+//
+// 2026-07-30: 사장님 요청 "좀더 크고 진하게". 세로까지 2배('big') 로 안 가는 이유는
+// 1.0.45 헤더 피드백("2배 너무 큼") 과 같은 기준 — 가로 2배 + bold 가 상한.
+// 정렬은 공백 padding(centerText) 이 아니라 프린터의 ESC a 1 에 맡긴다.
+// 가로 2배 글씨는 32칼럼 폭 계산이 깨져서 padding 방식이면 오른쪽으로 밀린다.
 export function buildTopHeaderText() {
-  return [...STORE_BANK_LINES.map((line) => centerText(line)), divider('-')].join('\n');
+  return [...STORE_BANK_LINES.map((line) => boldCenter(line)), divider('-')].join('\n');
 }
 
 // 완성된 본문 위에 계좌 블록을 얹는다. 이미 붙어있으면 그대로 — 이중 출력 방지.
@@ -111,6 +116,11 @@ const SIZE_WIDE = ESC_S + '\x21\x20';
 const SIZE_BIG = ESC_S + '\x21\x30';
 const ALIGN_LEFT = ESC_S + '\x61\x00';
 const ALIGN_CENTER = ESC_S + '\x61\x01';
+// ESC E n — 굵게 ON/OFF. ESC ! 의 bold 비트(0x08) 와 이중으로 거는 이유:
+// 프린터 모델에 따라 둘 중 하나만 인식하는 경우가 있어 양쪽 다 걸어야 확실히 진해진다.
+const BOLD_ON = ESC_S + '\x45\x01';
+const BOLD_OFF = ESC_S + '\x45\x00';
+const SIZE_WIDE_BOLD = ESC_S + '\x21\x28'; // 가로 2배(0x20) + bold(0x08)
 
 function sizeCmd(size) {
   if (size === 'big') return SIZE_BIG;
@@ -121,6 +131,11 @@ function sizeCmd(size) {
 // 큰 글씨 + 가운데 정렬 — 프린터가 자동 정렬 (32 vs 16 폭 계산 안 해도 됨).
 function bigCenter(text, size = 'big') {
   return ALIGN_CENTER + sizeCmd(size) + text + SIZE_NORMAL + ALIGN_LEFT;
+}
+
+// 굵게 + 큰 글씨 + 가운데 정렬 — 손님이 한눈에 읽어야 하는 계좌 안내용.
+function boldCenter(text) {
+  return ALIGN_CENTER + SIZE_WIDE_BOLD + BOLD_ON + text + BOLD_OFF + SIZE_NORMAL + ALIGN_LEFT;
 }
 
 // 큰 글씨 + 왼쪽 정렬 (배달 본문 줄).
