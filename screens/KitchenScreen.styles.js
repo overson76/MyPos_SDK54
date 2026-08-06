@@ -538,6 +538,33 @@ export default function makeStyles(scale = 1) {
     justifyContent: 'center',
   },
   printSlipBtnText: { fontSize: fp(14) },
+  // 2026-08-06: 🖨️ 옆 "계좌" 체크박스 — 이 주문만 계좌번호 출력 제외.
+  // 출력 버튼과 짝이라 같은 높이(stretch) 로 붙되, 눌러도 출력은 안 되게 별도 영역.
+  bankChk: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  bankChkPhone: { paddingHorizontal: 6, gap: 3 },
+  bankChkBox: {
+    width: fp(14),
+    height: fp(14),
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: '#9ca3af',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bankChkBoxOn: { backgroundColor: '#10b981', borderColor: '#10b981' },
+  bankChkMark: { fontSize: fp(9), color: '#fff', fontWeight: '800', lineHeight: fp(11) },
+  bankChkLabel: { fontSize: fp(11), color: '#374151', fontWeight: '700' },
+  bankChkLabelPhone: { fontSize: fp(9) },
   doneBtn: {
     flex: 1,
     paddingHorizontal: 14,

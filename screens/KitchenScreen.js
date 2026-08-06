@@ -21,7 +21,7 @@ import {
 } from '../utils/notify';
 import { computeDiffRows } from '../utils/orderDiff';
 import { computeItemsTotal } from '../utils/orderHelpers';
-import { buildReceiptText } from '../utils/escposBuilder';
+import { buildReceiptText, isBankHeaderEnabled } from '../utils/escposBuilder';
 import { printReceipt, isPrinterAvailable } from '../utils/printReceipt';
 // 2026-05-27: 사장님 요구 — 주문현황에서도 시간이 표기되어야 함.
 // 배달/예약/포장 모두 같은 표기. deliveryTime 은 "420" 문자열 → parseDeliveryTime 으로 객체화.
@@ -60,6 +60,22 @@ export default function KitchenScreen() {
   // 사이드바 메뉴 클릭 시 해당 메뉴를 가진 테이블 카드를 하이라이트
   const [highlightMenuId, setHighlightMenuId] = useState(null);
   const printerAvailable = isPrinterAvailable();
+
+  // 2026-08-06: 계좌번호 출력 여부를 주문(배달지) 칸마다 따로 고른다.
+  // 손님별로 계좌이체 안내가 필요한 집과 아닌 집이 갈리기 때문 — 매장 전체 설정
+  // 하나로는 표현이 안 된다. 여기 담기는 건 *체크 해제한 주문의 tableId* 뿐이고,
+  // 기본값(미등록) 은 매장 설정값(관리자 → 시스템) 을 그대로 따른다 = 보통 체크됨.
+  const [bankOffIds, setBankOffIds] = useState(() => new Set());
+  const bankDefaultOn = isBankHeaderEnabled();
+  const isBankOn = (tableId) => bankDefaultOn && !bankOffIds.has(tableId);
+  const toggleBank = (tableId) => {
+    setBankOffIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableId)) next.delete(tableId);
+      else next.add(tableId);
+      return next;
+    });
+  };
 
   // 🖨️ 버튼 — 1.0.32 부터 모든 출력 영수증 빌더(buildReceiptText) 통일.
   // 사장님 의도: "모든 곳에서 같은 출력물" — 메뉴 / 수량 / 가격 / 옵션 / 메모 / 합계 모두.
@@ -111,6 +127,8 @@ export default function KitchenScreen() {
           ? addrEntry.drivingDurationSec
           : null,
       printedAt: Date.now(),
+      // 이 칸의 체크박스가 매장 기본 설정을 이 출력 한 건에 한해 덮어쓴다.
+      bankHeader: isBankOn(o.tableId),
     });
     printReceipt({ rawText: receiptText }).catch(() => {});
   };
@@ -229,6 +247,18 @@ export default function KitchenScreen() {
   const activeOrders = allOrders
     .filter((o) => o.status !== 'ready') // 조리완료된 주문은 주문현황 메인에서 제거
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  // 계좌 체크 해제는 그 주문에만 붙는 선택 — 주문이 화면에서 빠지면 같이 지운다.
+  // 안 지우면 같은 배달 슬롯에 들어온 *다음 손님* 이 앞 손님의 해제 상태를 물려받는다.
+  const activeIdsKey = activeOrders.map((o) => o.tableId).join('|');
+  useEffect(() => {
+    setBankOffIds((prev) => {
+      if (prev.size === 0) return prev;
+      const live = new Set(activeIdsKey ? activeIdsKey.split('|') : []);
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [activeIdsKey]);
 
   // 조리해야 하는(=pending) 항목을 메뉴+옵션 조합별로 집계 — cooking/cooked 는 제외.
   // 같은 메뉴라도 옵션이 다르면 별도 행으로 표기 (예: 칼국수 / 칼국수 안맵게).
@@ -932,15 +962,40 @@ export default function KitchenScreen() {
               </View>
               <View style={styles.footerBtnRow}>
               {printerAvailable && (
-                <TouchableOpacity
-                  style={[styles.printSlipBtn, isPhone && styles.doneBtnPhone]}
-                  onPress={() => handlePrintSlip(o)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.printSlipBtnText, isPhone && styles.doneBtnTextPhone]}>
-                    🖨️
-                  </Text>
-                </TouchableOpacity>
+                <>
+                  {/* 2026-08-06: 이 배달지만 계좌번호를 뺄 수 있는 체크박스. 기본 체크. */}
+                  <TouchableOpacity
+                    style={[styles.bankChk, isPhone && styles.bankChkPhone]}
+                    onPress={() => toggleBank(o.tableId)}
+                    activeOpacity={0.7}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isBankOn(o.tableId) }}
+                    accessibilityLabel="계좌번호 출력"
+                  >
+                    <View
+                      style={[
+                        styles.bankChkBox,
+                        isBankOn(o.tableId) && styles.bankChkBoxOn,
+                      ]}
+                    >
+                      {isBankOn(o.tableId) ? (
+                        <Text style={styles.bankChkMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <Text style={[styles.bankChkLabel, isPhone && styles.bankChkLabelPhone]}>
+                      계좌
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.printSlipBtn, isPhone && styles.doneBtnPhone]}
+                    onPress={() => handlePrintSlip(o)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.printSlipBtnText, isPhone && styles.doneBtnTextPhone]}>
+                      🖨️
+                    </Text>
+                  </TouchableOpacity>
+                </>
               )}
               {/* 2026-06-11: 사장님 요청 — 테이블 전체 메뉴를 한 번에 조리중으로.
                   active 상태에서 다시 누르면 해제. 이미 cooked 인 항목은 안 건드림. */}

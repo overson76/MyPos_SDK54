@@ -161,9 +161,10 @@ export default function PrintPolicySection() {
       {/* 2026-08-06: 계좌 표기 토글 — 출력물 양식이라 기기 종류와 무관하게 항상 노출. */}
       <View style={styles.autoRow}>
         <View style={styles.autoText}>
-          <Text style={styles.autoLabel}>계좌번호 출력</Text>
+          <Text style={styles.autoLabel}>계좌번호 출력 (기본값)</Text>
           <Text style={styles.autoHelper}>
             ON: 영수증·주문지·배달회수 맨 위에 입금 계좌 표기. OFF: 표기 없이 본문만 출력.
+            {'\n'}주문현황의 🖨️ 옆 "계좌" 체크로 배달지마다 따로 끌 수 있습니다 — 여기는 그 체크의 기본값.
             {'\n'}현재 계좌: {STORE_BANK_LINES.join(' / ')}
           </Text>
         </View>
