@@ -11,6 +11,8 @@ import {
   buildOrderSlipText,
   withTopHeader,
   STORE_BANK_LINES,
+  setBankHeaderEnabled,
+  isBankHeaderEnabled,
 } from '../utils/escposBuilder';
 
 describe('visualWidth', () => {
@@ -451,11 +453,12 @@ describe('상단 입금 계좌 블록', () => {
     expect(header).toContain('082-02-0303057');
   });
 
-  test('계좌 줄은 굵게 + 가로 2배 + 프린터 가운데정렬', () => {
+  test('계좌 줄은 굵게 + 가로 2배 + 작은 폰트 + 프린터 가운데정렬', () => {
     const header = buildTopHeaderText();
     for (const line of STORE_BANK_LINES) {
-      // ESC a 1(가운데) + ESC ! 0x28(가로2배+bold) + ESC E 1(bold) 로 감싸짐
-      expect(header).toContain('\x1B\x61\x01\x1B\x21\x28\x1B\x45\x01' + line);
+      // ESC a 1(가운데) + ESC ! 0x29(font B + 가로2배 + bold) + ESC E 1(bold) 로 감싸짐.
+      // font B 비트(0x01) 가 2026-08-06 축소 요청분 — 폭 12dot → 9dot.
+      expect(header).toContain('\x1B\x61\x01\x1B\x21\x29\x1B\x45\x01' + line);
       // 줄 끝에서 원래 상태로 복귀 — 뒤따르는 본문이 커지지 않게
       expect(header).toContain(line + '\x1B\x45\x00\x1B\x21\x00\x1B\x61\x00');
     }
@@ -503,6 +506,70 @@ describe('상단 입금 계좌 블록', () => {
     expect(text.split('082-02-0303057').length - 1).toBe(1);
     const slip = new TextDecoder().decode(buildTextBytes(buildReceiptText(sample)));
     expect(slip.split('082-02-0303057').length - 1).toBe(1);
+  });
+});
+
+describe('계좌 출력 토글', () => {
+  const sample = {
+    items: [{ name: '치킨', qty: 1, price: 10000 }],
+    total: 10000,
+  };
+
+  // 모듈 단일 플래그라 케이스마다 원복 — 다른 describe 로 새지 않게.
+  afterEach(() => setBankHeaderEnabled(true));
+
+  test('기본값은 ON — 옛 매장 동작 유지', () => {
+    expect(isBankHeaderEnabled()).toBe(true);
+  });
+
+  test('OFF 면 세 빌더 모두 계좌 블록 없이 출력', () => {
+    setBankHeaderEnabled(false);
+    const receipt = buildReceiptText(sample);
+    expect(receipt).not.toContain('082-02-0303057');
+    expect(receipt).toContain('치킨');
+
+    const slip = buildOrderSlipText({
+      tableLabel: '3번',
+      rows: [{ item: { name: '치킨', qty: 1 }, kind: 'added' }],
+      kinds: ['all'],
+    });
+    expect(slip).not.toContain('082-02-0303057');
+    expect(slip).toContain('주  문  지');
+
+    const ret = buildDeliveryReturnText({ ranked: [], unknown: [], sortMode: 'far' });
+    expect(ret).not.toContain('082-02-0303057');
+  });
+
+  test('다시 ON 하면 즉시 복귀', () => {
+    setBankHeaderEnabled(false);
+    expect(buildReceiptText(sample)).not.toContain('082-02-0303057');
+    setBankHeaderEnabled(true);
+    expect(buildReceiptText(sample)).toContain('082-02-0303057');
+  });
+
+  test('출력 단위 override 가 매장 설정보다 우선', () => {
+    setBankHeaderEnabled(true);
+    expect(buildReceiptText({ ...sample, bankHeader: false })).not.toContain('082-02-0303057');
+
+    setBankHeaderEnabled(false);
+    expect(buildReceiptText({ ...sample, bankHeader: true })).toContain('082-02-0303057');
+    expect(
+      buildOrderSlipText({
+        tableLabel: '3번',
+        rows: [{ item: { name: '치킨', qty: 1 }, kind: 'added' }],
+        kinds: ['all'],
+        bankHeader: true,
+      })
+    ).toContain('082-02-0303057');
+    expect(
+      buildDeliveryReturnText({ ranked: [], unknown: [], sortMode: 'far' }, { bankHeader: true })
+    ).toContain('082-02-0303057');
+  });
+
+  test('OFF 라도 이미 계좌가 박힌 본문은 건드리지 않음', () => {
+    const withHeader = buildReceiptText(sample);
+    setBankHeaderEnabled(false);
+    expect(withTopHeader(withHeader)).toBe(withHeader);
   });
 });
 

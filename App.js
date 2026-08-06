@@ -30,6 +30,8 @@ import { useResponsive } from './utils/useResponsive';
 import { setSpeakAddress, setupAudioSession, setVolume } from './utils/notify';
 import { loadJSON } from './utils/persistence';
 import { loadFeatureFlags } from './utils/featureFlags';
+import { loadBankHeaderOn } from './utils/printPolicy';
+import { setBankHeaderEnabled } from './utils/escposBuilder';
 import { startPerfDiag } from './utils/perfDiag';
 import { SentryErrorBoundary } from './utils/sentry';
 import { setupPwa } from './utils/pwaSetup';
@@ -339,6 +341,9 @@ function MainApp() {
     });
     // 2026-07-03: 성능 옵션(무거운 기능 온/오프) 기기별 설정 복원.
     loadFeatureFlags();
+    // 2026-08-06: 영수증 상단 계좌 표기 설정 복원. 텍스트 빌더가 순수 함수라
+    // AsyncStorage 를 직접 못 읽음 — 부팅 시 한 번 모듈 플래그에 실어준다.
+    loadBankHeaderOn().then(setBankHeaderEnabled);
     // 2026-07-03: 메인스레드 블로킹(멈춤) 자동 감지 시작 — 관찰만, 동작 무변경.
     startPerfDiag();
   }, []);

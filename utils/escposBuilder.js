@@ -42,24 +42,45 @@ export const CMD = {
 // 손님이 계좌이체할 때 영수증만 보고 바로 송금할 수 있게.
 export const STORE_BANK_LINES = ['부산은행 강 태 선', '082-02-0303057'];
 
-// 상단 고정 블록 텍스트 — 굵고 큰 계좌 안내 + 구분선.
+// 계좌 블록 출력 여부 — 모듈 단일 진실 소스 (notify.js 의 _volume 과 같은 패턴).
+// 텍스트 빌더는 순수 함수라 매 출력마다 AsyncStorage 를 읽을 수 없다. 앱 부팅 시 1회
+// hydrate(App.js) + 설정 토글이 즉시 갱신하고, 영속화는 utils/printPolicy.js 책임.
+// 기본 true — 저장값 없는 옛 매장은 지금까지의 동작(계좌 항상 출력) 그대로.
+let _bankHeaderEnabled = true;
+
+export function setBankHeaderEnabled(enabled) {
+  _bankHeaderEnabled = !!enabled;
+}
+
+export function isBankHeaderEnabled() {
+  return _bankHeaderEnabled;
+}
+
+// 상단 고정 블록 텍스트 — 굵은 계좌 안내 + 구분선.
 //
 // 2026-07-30: 사장님 요청 "좀더 크고 진하게". 세로까지 2배('big') 로 안 가는 이유는
 // 1.0.45 헤더 피드백("2배 너무 큼") 과 같은 기준 — 가로 2배 + bold 가 상한.
 // 정렬은 공백 padding(centerText) 이 아니라 프린터의 ESC a 1 에 맡긴다.
 // 가로 2배 글씨는 32칼럼 폭 계산이 깨져서 padding 방식이면 오른쪽으로 밀린다.
+//
+// 2026-08-06: 사장님 요청 "30% 정도 줄여". ESC/POS 배율은 정수(1x/2x/…) 뿐이라 0.7배가
+// 없다 — 가장 가까운 수단이 font B(ESC ! bit0). font A 12dot 대비 9dot 폭이라 약 25%
+// 작아진다. 가로 2배는 유지 — 손님이 멀리서 계좌를 읽는 게 이 블록의 존재 이유.
 export function buildTopHeaderText() {
   return [...STORE_BANK_LINES.map((line) => boldCenter(line)), divider('-')].join('\n');
 }
 
 // 완성된 본문 위에 계좌 블록을 얹는다. 이미 붙어있으면 그대로 — 이중 출력 방지.
+// opts.bankHeader 로 이 출력 한 번만 강제 ON/OFF 가능 (미지정 시 매장 설정값).
 //
 // 2026-07-30: 계좌 블록을 *텍스트 빌더* 단계에 두는 이유 — 배포 경로.
 // 바이트 래핑(buildReceiptBytes/buildTextBytes) 은 .exe 메인 프로세스에서만 도는
 // 코드라 문구를 거기 두면 매장 반영에 .exe 재빌드가 필요하다. 텍스트 빌더는 라이브
 // URL 번들(렌더러) 에서 도므로 deploy:web 한 번이면 매장 PC 가 새로고침 시 즉시 반영.
-export function withTopHeader(text) {
+export function withTopHeader(text, opts) {
   const body = String(text ?? '');
+  const enabled = typeof opts?.bankHeader === 'boolean' ? opts.bankHeader : _bankHeaderEnabled;
+  if (!enabled) return body;
   if (STORE_BANK_LINES.length > 0 && body.includes(STORE_BANK_LINES[0])) return body;
   return buildTopHeaderText() + '\n' + body;
 }
@@ -121,6 +142,9 @@ const ALIGN_CENTER = ESC_S + '\x61\x01';
 const BOLD_ON = ESC_S + '\x45\x01';
 const BOLD_OFF = ESC_S + '\x45\x00';
 const SIZE_WIDE_BOLD = ESC_S + '\x21\x28'; // 가로 2배(0x20) + bold(0x08)
+// 계좌 블록 전용 — 위 조합에 font B(0x01) 를 더해 폭 12dot → 9dot (약 25% 축소).
+// 프린터가 한글에 font B 를 지원하지 않으면 그 줄만 옛 크기로 나올 뿐 깨지지는 않는다.
+const SIZE_WIDE_BOLD_SMALL = ESC_S + '\x21\x29';
 
 function sizeCmd(size) {
   if (size === 'big') return SIZE_BIG;
@@ -135,7 +159,7 @@ function bigCenter(text, size = 'big') {
 
 // 굵게 + 큰 글씨 + 가운데 정렬 — 손님이 한눈에 읽어야 하는 계좌 안내용.
 function boldCenter(text) {
-  return ALIGN_CENTER + SIZE_WIDE_BOLD + BOLD_ON + text + BOLD_OFF + SIZE_NORMAL + ALIGN_LEFT;
+  return ALIGN_CENTER + SIZE_WIDE_BOLD_SMALL + BOLD_ON + text + BOLD_OFF + SIZE_NORMAL + ALIGN_LEFT;
 }
 
 // 큰 글씨 + 왼쪽 정렬 (배달 본문 줄).
@@ -247,6 +271,7 @@ function formatScheduledTime(rawTime, isPM) {
 //   scheduledTime?: string,        // 1.0.44 — "420" / "1220"
 //   scheduledTimeIsPM?: boolean,   // 1.0.44
 //   customerRequest?: string,      // 단골요청 — 주방·라이더가 미리 준비 (예: "다진고추, 김치많이")
+//   bankHeader?: boolean,          // 2026-08-06 — 이 출력만 계좌 블록 강제 ON/OFF. 미지정 시 매장 설정값.
 // }
 export function buildReceiptText(receipt) {
   const lines = [];
@@ -353,7 +378,7 @@ export function buildReceiptText(receipt) {
   lines.push(pad2col('합계', formatWon(Number(r.total) || 0)));
   lines.push(divider('='));
 
-  return withTopHeader(lines.join('\n'));
+  return withTopHeader(lines.join('\n'), { bankHeader: r.bankHeader });
 }
 
 // 명령 바이트 + 텍스트 합친 raw bytes. 출력 라이브러리에 텍스트만 넘기는 게 더 흔하지만
@@ -410,6 +435,7 @@ export function buildOrderSlipText(slip) {
     rows = [],
     kinds = ['all'],
     slippedAt,
+    bankHeader,
   } = slip;
   const kindSet = new Set(kinds);
   const showAll = kindSet.has('all');
@@ -479,7 +505,7 @@ export function buildOrderSlipText(slip) {
   }
 
   lines.push(divider('='));
-  return withTopHeader(lines.join('\n'));
+  return withTopHeader(lines.join('\n'), { bankHeader });
 }
 
 // 배달 회수 목록 — 그릇 회수용 출력물.
@@ -539,7 +565,7 @@ export function buildDeliveryReturnText(result, opts = {}) {
   if (ranked.length === 0 && unknown.length === 0) {
     lines.push(centerText('회수할 그릇이 없습니다.'));
     lines.push(divider('='));
-    return withTopHeader(lines.join('\n'));
+    return withTopHeader(lines.join('\n'), { bankHeader: opts.bankHeader });
   }
 
   for (const it of ranked) {
@@ -554,7 +580,7 @@ export function buildDeliveryReturnText(result, opts = {}) {
   }
 
   lines.push(divider('='));
-  return withTopHeader(lines.join('\n'));
+  return withTopHeader(lines.join('\n'), { bankHeader: opts.bankHeader });
 }
 
 // 거리 m → "1.2km" / "250m" 짧은 표기.

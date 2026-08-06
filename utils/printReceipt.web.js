@@ -7,7 +7,7 @@
 //   const result = await printReceipt(receipt, { mode: 'simulate' });
 //   if (!result.ok) showError(result.error);
 
-import { buildReceiptText } from './escposBuilder';
+import { buildReceiptText, isBankHeaderEnabled } from './escposBuilder';
 
 export function isPrinterAvailable() {
   if (typeof window === 'undefined') return false;
@@ -20,14 +20,18 @@ export function isPrinterAvailable() {
 // .exe 메인 프로세스가 *자기 안에 번들된* buildReceiptText 로 본문을 만든다.
 // 즉 영수증 양식을 고쳐도 .exe 를 재빌드할 때까지 매장에 안 들어간다.
 // 렌더러는 라이브 URL 번들이라 deploy:web 즉시 반영 — 양식 변경 전부가 이 경로를 탄다.
+// 2026-08-06: bankHeader 를 같이 실어 보내는 이유 — 메인 프로세스 폴백 대비.
+// .exe 안의 빌더는 자기 모듈 플래그(기본 ON) 만 알기 때문에, 사장님이 계좌 표기를 껐는데
+// 폴백을 타면 계좌가 다시 나온다. 객체에 실어 두면 폴백도 같은 설정으로 출력.
 function freezeToRawText(receipt) {
   const r = receipt || {};
-  if (r.rawText) return r;
+  const bankHeader = typeof r.bankHeader === 'boolean' ? r.bankHeader : isBankHeaderEnabled();
+  if (r.rawText) return { ...r, bankHeader };
   try {
-    return { ...r, rawText: buildReceiptText(r) };
+    return { ...r, bankHeader, rawText: buildReceiptText({ ...r, bankHeader }) };
   } catch {
     // 빌드 실패해도 출력은 살린다 — 메인 프로세스 폴백(구 양식) 으로 진행.
-    return r;
+    return { ...r, bankHeader };
   }
 }
 

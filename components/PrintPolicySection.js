@@ -9,16 +9,20 @@ import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useResponsive } from '../utils/useResponsive';
 import {
   DEFAULT_AUTO_TYPES,
+  DEFAULT_BANK_HEADER,
   DEFAULT_POLICY,
   loadAutoOn,
   loadAutoTypes,
+  loadBankHeaderOn,
   loadPolicy,
   ORDER_TYPES,
   POLICY_KINDS,
   saveAutoOn,
   saveAutoTypes,
+  saveBankHeaderOn,
   savePolicy,
 } from '../utils/printPolicy';
+import { setBankHeaderEnabled, STORE_BANK_LINES } from '../utils/escposBuilder';
 
 const KIND_META = {
   all:      { label: '모두',   desc: '전체 항목 출력' },
@@ -47,18 +51,21 @@ export default function PrintPolicySection() {
   const [autoOn, setAutoOn] = useState(false);
   // 1.0.41: 자동 출력할 주문 종류 (매장/배달/포장/예약 4종)
   const [autoTypes, setAutoTypes] = useState(() => new Set(DEFAULT_AUTO_TYPES));
+  // 2026-08-06: 출력물 맨 위 입금 계좌 표기 여부.
+  const [bankHeader, setBankHeader] = useState(DEFAULT_BANK_HEADER);
   const [hydrated, setHydrated] = useState(false);
 
   const electron = isElectronEnv();
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadPolicy(), loadAutoOn(), loadAutoTypes()]).then(
-      ([p, a, t]) => {
+    Promise.all([loadPolicy(), loadAutoOn(), loadAutoTypes(), loadBankHeaderOn()]).then(
+      ([p, a, t, b]) => {
         if (cancelled) return;
         setKinds(new Set(p.kinds || DEFAULT_POLICY.kinds));
         setAutoOn(!!a);
         setAutoTypes(new Set(t));
+        setBankHeader(!!b);
         setHydrated(true);
       }
     );
@@ -95,6 +102,13 @@ export default function PrintPolicySection() {
   const toggleAuto = (next) => {
     setAutoOn(next);
     saveAutoOn(next);
+  };
+
+  // 계좌 표기 토글 — 저장 + 빌더 모듈 플래그 즉시 갱신 (다음 출력부터 바로 반영).
+  const toggleBankHeader = (next) => {
+    setBankHeader(next);
+    setBankHeaderEnabled(next);
+    saveBankHeaderOn(next);
   };
 
   // 1.0.41: 주문 종류별 자동 출력 토글
@@ -142,6 +156,22 @@ export default function PrintPolicySection() {
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      {/* 2026-08-06: 계좌 표기 토글 — 출력물 양식이라 기기 종류와 무관하게 항상 노출. */}
+      <View style={styles.autoRow}>
+        <View style={styles.autoText}>
+          <Text style={styles.autoLabel}>계좌번호 출력</Text>
+          <Text style={styles.autoHelper}>
+            ON: 영수증·주문지·배달회수 맨 위에 입금 계좌 표기. OFF: 표기 없이 본문만 출력.
+            {'\n'}현재 계좌: {STORE_BANK_LINES.join(' / ')}
+          </Text>
+        </View>
+        <Switch
+          value={bankHeader}
+          onValueChange={toggleBankHeader}
+          accessibilityLabel="계좌번호 출력 토글"
+        />
       </View>
 
       {electron ? (
