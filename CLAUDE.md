@@ -389,6 +389,8 @@ npx electron-builder --config electron/builder.config.js --publish always
 코드 흐름:
 - `utils/escposBuilder.js` — ESC/POS 명령 + 영수증 텍스트/바이트 빌더 (순수 함수, RN/Electron 공통). VAT 분리, 결제수단 라벨, 80mm 32칼럼 레이아웃.
   - **상단 고정 블록**: 모든 출력물(영수증 / 주문지 / 배달회수) 맨 위에 입금 계좌(`STORE_BANK_LINES`) 자동 삽입. 세 텍스트 빌더가 `withTopHeader()` 로 감싸며, 이미 붙어있으면 건너뛰어 이중 출력 방지. 계좌 문구 변경은 `STORE_BANK_LINES` 한 곳만 수정. 상단 여백은 미적용(계좌 문구가 그 자리를 대신함 — 사장님 판단).
+  - **계좌 블록 글씨 크기**: `ESC ! 0x29` = font B + 가로 2배 + bold. ESC/POS 배율이 정수뿐이라 "30% 축소" 를 배율로는 못 만든다 — font B(12dot → 9dot, 약 25% ↓) 가 가장 가까운 수단. 더 줄여야 하면 `boldCenter()` 의 상수를 `SIZE_WIDE_BOLD_SMALL` → 가로 2배 해제(50% ↓) 로 한 줄 교체.
+  - **계좌 출력 ON/OFF**: `setBankHeaderEnabled(bool)` 모듈 플래그 (notify.js 의 `_volume` 과 같은 단일 진실 소스 패턴 — 빌더가 순수 함수라 AsyncStorage 를 직접 못 읽음). 영속화는 `utils/printPolicy.js` 의 `loadBankHeaderOn` / `saveBankHeaderOn` (`mypos:v1:print:bankHeader`, 기본 ON). `App.js` 마운트에서 1회 hydrate, 관리자 → 시스템 → "주문지 출력 정책" 의 **계좌번호 출력** 스위치가 즉시 갱신. 출력 한 건만 다르게 하려면 `bankHeader` 필드/옵션으로 override (receipt 객체 / slip 객체 / `buildDeliveryReturnText` 두번째 인자).
 
 ### 출력 양식 변경은 텍스트 빌더에서 — .exe 재빌드 회피 (중요)
 

@@ -16,6 +16,9 @@ const KEY_AUTO_ON = 'mypos:v1:print:autoOn';
 // "배달만 체크했는데 테이블 주문도 인쇄됨" — 옛 'delivery' 옵션은 배달 주소
 // 섹션 포함 의미였지 자동 출력 발화 여부와는 무관했음. 이 키로 종류별 분기.
 const KEY_AUTO_TYPES = 'mypos:v1:print:autoTypes';
+// 2026-08-06: 출력물 맨 위 입금 계좌(STORE_BANK_LINES) 표기 여부.
+// 손님에게 계좌를 안 보여도 되는 시기(카드 단말기 도입 등) 에 사장님이 끌 수 있게.
+const KEY_BANK_HEADER = 'mypos:v1:print:bankHeader';
 
 // 정책 종류 — OrderSlipPicker 의 4종과 키 일치.
 export const POLICY_KINDS = ['all', 'added', 'changed', 'delivery'];
@@ -39,6 +42,9 @@ export const DEFAULT_AUTO_TYPES = Object.freeze([
   'takeout',
   'reservation',
 ]);
+
+// 2026-08-06: 계좌 블록 기본값 — 켜짐. 사장님이 끄기 전까지는 옛 동작 유지.
+export const DEFAULT_BANK_HEADER = true;
 
 export function isValidKind(k) {
   return POLICY_KINDS.includes(k);
@@ -142,6 +148,27 @@ export async function loadAutoTypes() {
   } catch {
     return [...DEFAULT_AUTO_TYPES];
   }
+}
+
+// 계좌 블록 출력 여부. 저장값 없으면 true — 옛 매장은 지금까지의 동작 그대로.
+// 실제 반영은 escposBuilder 의 setBankHeaderEnabled (빌더가 순수 함수라 모듈 플래그로 전달).
+export async function loadBankHeaderOn() {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_BANK_HEADER);
+    if (raw == null) return DEFAULT_BANK_HEADER;
+    return raw === 'true';
+  } catch {
+    return DEFAULT_BANK_HEADER;
+  }
+}
+
+export async function saveBankHeaderOn(enabled) {
+  try {
+    await AsyncStorage.setItem(KEY_BANK_HEADER, enabled ? 'true' : 'false');
+  } catch {
+    // 침묵 — 영업 흐름 영향 X.
+  }
+  return !!enabled;
 }
 
 export async function saveAutoTypes(types) {
