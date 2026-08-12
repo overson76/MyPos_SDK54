@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useOrders } from '../utils/OrderContext';
+import { useOrders, useRevenueData } from '../utils/OrderContext';
 import { useResponsive } from '../utils/useResponsive';
 import { resolveAnyTable, tableTypeColors } from '../utils/tableData';
 import { paymentMethodLabel } from '../utils/payment';
@@ -59,7 +59,8 @@ function alertFail(text) {
 export default function UndoScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { orders, revenue, undoMarkReady, revertHistoryEntry } = useOrders();
+  const { orders, undoMarkReady, revertHistoryEntry } = useOrders();
+  const revenue = useRevenueData();
   const [tab, setTab] = useState(TAB_PAID);
 
   // 조리완료 카드의 경과 분 표시 — 30초마다 리렌더

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useOrders } from '../utils/OrderContext';
+import { useRevenueData } from '../utils/OrderContext';
 import { useMenu } from '../utils/MenuContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
@@ -42,7 +42,7 @@ function ymLabel(key) {
 export default function RevenueScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { revenue } = useOrders();
+  const revenue = useRevenueData();
   const { optionsList: OPTIONS_CATALOG } = useMenu();
   const { storeInfo } = useStore();
   const history = revenue?.history || [];

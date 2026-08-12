@@ -31,7 +31,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useOrders } from '../utils/OrderContext';
+import { useOrders, useRevenueData } from '../utils/OrderContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import {
@@ -52,7 +52,8 @@ import { reportError } from '../utils/sentry';
 export default function DeliveryReturnScreen() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
-  const { revenue, addressBook, setAddressBook, getReadyDeliveries, orders } = useOrders();
+  const { addressBook, setAddressBook, getReadyDeliveries, orders } = useOrders();
+  const revenue = useRevenueData();
   const { storeInfo } = useStore();
   const {
     rounds,

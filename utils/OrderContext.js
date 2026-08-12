@@ -49,6 +49,16 @@ import { useSplits } from './useSplits';
 import { useGroups } from './useGroups';
 
 const OrderContext = createContext(null);
+// 2026-08-12: 🔴 매출(revenue) 만 별도 context 로 분리 — 리렌더 폭 축소.
+//   옛 구조는 orders/splits/groups/revenue/addressBook 이 한 useMemo 값에 묶여 있어,
+//   결제 한 건(매출이력 변경)이 테이블·주방 화면까지 통째로 리렌더시켰다. 탭 5개가
+//   전부 mount 상태(display:none)라 안 보는 화면까지 전부. 느린 기기(안드로이드 탭·
+//   저사양 PC)에서 결제 때마다 버벅이던 몫이 여기.
+//   revenue 를 읽는 화면은 4개뿐(수익현황/되돌리기/배달회수/주문-추천)이라 이 4개만
+//   구독하게 하면 테이블·주방은 결제와 무관해진다. 액션(markPaid 등)은 setRevenue
+//   함수형 갱신이라 그대로 OrderContext 에 남는다 — 호출부 수정 0.
+const RevenueContext = createContext(null);
+const REVENUE_FALLBACK = { total: 0, history: [] };
 
 // PENDING_TABLE_ID 의 단일 진실 소스는 orderReducer. 외부 호출처가 종전대로
 // 'utils/OrderContext' 에서 import 할 수 있도록 re-export.
@@ -82,6 +92,13 @@ export function OrderProvider({ children }) {
     setGroupMode,
   } = useGroups({ orders, dispatch });
   const { revenue, setRevenue } = useRevenue();
+  // revenue 를 value 의 deps 에서 뺐으므로, value 안에서 revenue 를 *읽는* 유일한
+  // 곳(revertHistoryEntry)은 ref 로 최신값을 본다. 되돌리기는 사용자 버튼이라
+  // 커밋 직후 한 틱의 지연은 도달 불가.
+  const revenueRef = useRef(revenue);
+  useEffect(() => {
+    revenueRef.current = revenue;
+  }, [revenue]);
   const {
     addressBook,
     setAddressBook,
@@ -468,7 +485,7 @@ export function OrderProvider({ children }) {
     // history entry 는 삭제 안 함 — reverted 플래그만 박아 매출 집계에서 제외.
     // 반환: { ok: true } | { ok: false, reason: 'notFound'|'occupied'|'alreadyReverted' }
     const revertHistoryEntry = (entryId) => {
-      const entry = findHistoryEntry(revenue?.history, entryId);
+      const entry = findHistoryEntry(revenueRef.current?.history, entryId);
       if (!entry) return { ok: false, reason: 'notFound' };
       if (entry.reverted) return { ok: false, reason: 'alreadyReverted' };
       const targetId = entry.tableId;
@@ -922,7 +939,6 @@ export function OrderProvider({ children }) {
     return {
       orders,
       splits,
-      revenue,
       addressBook,
       setAddressBook,
       bumpAddress,
@@ -1017,11 +1033,20 @@ export function OrderProvider({ children }) {
       getGroupMode,
       setGroupMode,
     };
-  }, [orders, splits, revenue, groups, addressBook, getGroupMode, setGroupMode]);
+  }, [orders, splits, groups, addressBook, getGroupMode, setGroupMode]);
 
   return (
-    <OrderContext.Provider value={value}>{children}</OrderContext.Provider>
+    <OrderContext.Provider value={value}>
+      <RevenueContext.Provider value={revenue}>{children}</RevenueContext.Provider>
+    </OrderContext.Provider>
   );
+}
+
+// 매출 데이터 전용 구독 — 이 훅을 쓰는 화면만 결제/이력 변경에 리렌더된다.
+// Provider 밖(매장 떠나기 전환 중)에서도 throw 하지 않고 빈 값 반환 (useOrders 와 동일 정책).
+export function useRevenueData() {
+  const ctx = useContext(RevenueContext);
+  return ctx || REVENUE_FALLBACK;
 }
 
 // OrderProvider 언마운트 중(매장 떠나기/강퇴 → UNJOINED 전환)에 ctx가 null이 되면

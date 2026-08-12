@@ -32,6 +32,7 @@ import { useOrders } from '../utils/OrderContext';
 import { useStore } from '../utils/StoreContext';
 import { useResponsive } from '../utils/useResponsive';
 import { useFeatureFlag } from '../utils/featureFlags';
+import { createLazyEnrichQueue } from '../utils/lazyEnrichQueue';
 import {
   formatDrivingDistance,
   formatDuration,
@@ -216,14 +217,33 @@ export default function AddressBookPanel() {
   // 카카오 모빌리티 길찾기 API lazy fetch — entry 당 한 번만 호출, 영구 캐시.
   // entry.drivingFromLat/Lng 가 현재 매장좌표와 다르면 재계산 (매장 이전 대응).
   // 동시 호출 폭주 방지 — inFlightRef. 일시 실패는 failedRef (앱 재시작 시 재시도).
-  const inFlightRef = useRef(new Set());
-  const failedRef = useRef(new Set());
+  // 2026-08-12: 🔴 전수조사 B2 — 동시 호출 상한 + 결과 일괄 반영 큐로 교체.
+  //   useAddressBook 의 좌표변환(B1)과 완전 동형이었던 문제. 자세한 내용은
+  //   utils/lazyEnrichQueue.js 주석.
+  const drivingQueueRef = useRef(null);
+  if (!drivingQueueRef.current) {
+    drivingQueueRef.current = createLazyEnrichQueue({
+      apply: (batch) => {
+        setAddressBook((prev) => {
+          let entries = null;
+          for (const { key, patch } of batch) {
+            const ex = prev.entries[key];
+            if (!ex) continue;
+            if (!entries) entries = { ...prev.entries };
+            entries[key] = { ...ex, ...patch };
+          }
+          return entries ? { ...prev, entries } : prev;
+        });
+      },
+    });
+  }
   const drivingEnabled = useFeatureFlag('deliveryDrivingDistance');
   useEffect(() => {
     if (!storeCoord || !isNaviAvailable()) return;
     if (!drivingEnabled) return; // 2026-07-03: 성능 옵션 — 도로거리 계산 skip
     const fromLat = storeCoord.lat;
     const fromLng = storeCoord.lng;
+    const queue = drivingQueueRef.current;
     for (const entry of Object.values(addressBook.entries || {})) {
       if (typeof entry.lat !== 'number' || typeof entry.lng !== 'number') continue;
       // 이미 캐시돼있고 매장좌표 동일 — 스킵
@@ -234,60 +254,37 @@ export default function AddressBookPanel() {
       ) {
         continue;
       }
-      if (inFlightRef.current.has(entry.key)) continue;
-      if (failedRef.current.has(entry.key)) continue;
-      inFlightRef.current.add(entry.key);
-      getDrivingDistance(
-        { lat: fromLat, lng: fromLng },
-        { lat: entry.lat, lng: entry.lng }
-      ).then((result) => {
-        inFlightRef.current.delete(entry.key);
-        if (!result) {
-          failedRef.current.add(entry.key);
-          return;
-        }
+      const key = entry.key;
+      const to = { lat: entry.lat, lng: entry.lng };
+      queue.enqueue(key, async () => {
+        const result = await getDrivingDistance({ lat: fromLat, lng: fromLng }, to);
+        if (!result) return null;
         // 2026-05-28: 카카오모빌리티 응답 sanity check — 직선거리 대비 5배 또는 50km
         // 초과면 reject. 사장님 신고 "엄마선지 300km" 같은 잘못된 좌표 매칭 방어.
-        const straightKm = distanceKm(
-          { lat: fromLat, lng: fromLng },
-          { lat: entry.lat, lng: entry.lng }
-        );
+        const straightKm = distanceKm({ lat: fromLat, lng: fromLng }, to);
         if (!isDrivingMSane(result.distanceM, straightKm)) {
-          failedRef.current.add(entry.key);
           if (typeof console !== 'undefined') {
             console.warn('[AddressBookPanel] drivingM 비정상 — reject', {
-              key: entry.key,
+              key,
               drivingM: result.distanceM,
               straightKm,
             });
           }
-          return;
+          return null;
         }
-        setAddressBook((prev) => {
-          const ex = prev.entries[entry.key];
-          if (!ex) return prev;
-          return {
-            ...prev,
-            entries: {
-              ...prev.entries,
-              [entry.key]: {
-                ...ex,
-                drivingM: result.distanceM,
-                drivingDurationSec: result.durationSec,
-                drivingFromLat: fromLat,
-                drivingFromLng: fromLng,
-              },
-            },
-          };
-        });
+        return {
+          drivingM: result.distanceM,
+          drivingDurationSec: result.durationSec,
+          drivingFromLat: fromLat,
+          drivingFromLng: fromLng,
+        };
       });
     }
   }, [addressBook.entries, storeCoord, setAddressBook, drivingEnabled]);
 
-  // 매장 좌표가 바뀌면 inFlightRef / failedRef 도 리셋 — 옛 결과의 in-flight 무효화.
+  // 매장 좌표가 바뀌면 큐도 리셋 — 옛 결과의 in-flight 무효화.
   useEffect(() => {
-    inFlightRef.current.clear();
-    failedRef.current.clear();
+    drivingQueueRef.current?.reset();
   }, [storeCoord?.lat, storeCoord?.lng]);
 
   const items = useMemo(() => {
