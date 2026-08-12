@@ -26,10 +26,18 @@ import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 import { measurePerf, notePerfInfo } from './perfDiag';
+import { computeDebounceDelay } from './writeDebounce';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
 const ADDRESS_DEBOUNCE_MS = 500;
+// 2026-08-12: 🔴 "치우면 지워졌다가 되살아난다" 근본처방 — 디바운스 상한.
+//   snapshot 이 디바운스보다 촘촘히 오면 타이머가 매번 리셋돼 커밋이 영영 안 떴다
+//   (기아). 첫 dirty 로부터 이 시간이 지나면 더 안 미루고 즉시 보낸다.
+//   자세한 사고 경위는 utils/writeDebounce.js 주석 참조.
+const ORDERS_MAX_WAIT_MS = 2000;
+const HISTORY_MAX_WAIT_MS = 3000;
+const ADDRESS_MAX_WAIT_MS = 3000;
 // 2026-06-11: write 실패(한도 초과/네트워크) 시 lastSynced 를 전진시키지 않고 30초 후
 // 재시도한다. 이전엔 실패해도 "보낸 셈" 처리해서 차단이 풀려도 영영 안 올라갔다.
 const WRITE_RETRY_MS = 30000;
@@ -76,6 +84,10 @@ export function useOrderFirestoreSync({
   const ordersDebounceRef = useRef(null);
   const historyDebounceRef = useRef(null);
   const addressEntriesDebounceRef = useRef(null);
+  // 현재 dirty 구간이 시작된 시각 — 0 이면 "깨끗함". 디바운스 상한 계산용.
+  const ordersFirstDirtyRef = useRef(0);
+  const historyFirstDirtyRef = useRef(0);
+  const addressFirstDirtyRef = useRef(0);
 
   // ── write 실패 재시도 ────────────────────────────────────────
   // 실패 시 retryTick 을 올려 모든 write effect 를 다시 돌린다. lastSynced 가 전진하지
@@ -330,10 +342,21 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.orders) return; // 첫 pull 전 push 금지 (부팅 좀비 차단)
-    if (orders === lastSyncedOrdersRef.current) return;
+    if (orders === lastSyncedOrdersRef.current) {
+      ordersFirstDirtyRef.current = 0; // 서버와 일치 — dirty 구간 종료
+      return;
+    }
 
     if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
+    const ordersDelay = computeDebounceDelay(
+      ORDERS_DEBOUNCE_MS,
+      ORDERS_MAX_WAIT_MS,
+      ordersFirstDirtyRef.current,
+      Date.now()
+    );
+    if (!ordersFirstDirtyRef.current) ordersFirstDirtyRef.current = Date.now();
     ordersDebounceRef.current = setTimeout(() => {
+      ordersFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -372,7 +395,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedOrdersRef.current = orders;
       }
-    }, ORDERS_DEBOUNCE_MS);
+    }, ordersDelay);
 
     return () => {
       if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
@@ -452,10 +475,21 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.history) return;
-    if (revenue.history === lastSyncedHistoryRef.current) return;
+    if (revenue.history === lastSyncedHistoryRef.current) {
+      historyFirstDirtyRef.current = 0;
+      return;
+    }
 
     if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
+    const historyDelay = computeDebounceDelay(
+      HISTORY_DEBOUNCE_MS,
+      HISTORY_MAX_WAIT_MS,
+      historyFirstDirtyRef.current,
+      Date.now()
+    );
+    if (!historyFirstDirtyRef.current) historyFirstDirtyRef.current = Date.now();
     historyDebounceRef.current = setTimeout(() => {
+      historyFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -496,7 +530,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedHistoryRef.current = next;
       }
-    }, HISTORY_DEBOUNCE_MS);
+    }, historyDelay);
 
     return () => {
       if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
@@ -507,11 +541,22 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.addresses) return; // 첫 pull 전 push 금지 — 주소록 좀비 차단 핵심
-    if (addressBook.entries === lastSyncedAddressEntriesRef.current) return;
+    if (addressBook.entries === lastSyncedAddressEntriesRef.current) {
+      addressFirstDirtyRef.current = 0;
+      return;
+    }
 
     if (addressEntriesDebounceRef.current)
       clearTimeout(addressEntriesDebounceRef.current);
+    const addressDelay = computeDebounceDelay(
+      ADDRESS_DEBOUNCE_MS,
+      ADDRESS_MAX_WAIT_MS,
+      addressFirstDirtyRef.current,
+      Date.now()
+    );
+    if (!addressFirstDirtyRef.current) addressFirstDirtyRef.current = Date.now();
     addressEntriesDebounceRef.current = setTimeout(() => {
+      addressFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -558,7 +603,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedAddressEntriesRef.current = next;
       }
-    }, ADDRESS_DEBOUNCE_MS);
+    }, addressDelay);
 
     return () => {
       if (addressEntriesDebounceRef.current)
