@@ -1,0 +1,92 @@
+# 🚨 라이브 URL 긴급 롤백 — 지정한 커밋/태그를 그대로 다시 배포한다.
+#
+# 언제 쓰나:
+#   새 배포 후 매장에서 문제가 터졌을 때. 원인 분석은 나중, 일단 영업부터 살린다.
+#
+# 어떻게 쓰나 (PC 없이 폰으로도 가능):
+#   GitHub → Actions 탭 → 왼쪽 "🚨 Rollback web" → Run workflow →
+#   ref 는 기본값 그대로 두고 → 초록 Run workflow 버튼.
+#   약 1~2분 뒤 매장 PC 에서 Ctrl+Shift+R.
+#
+# 기본값 = 마지막으로 **매장에서 정상 확인된** 배포 커밋.
+#   bd79902 (2026-08-06) "영수증 계좌 블록 축소 + 배달지별 출력 체크박스"
+#   = 2026-08-12 딜레이 처방 12건이 들어가기 *직전* 상태.
+#
+# 새 배포가 매장 검증을 통과하면 아래 default 값을 그 커밋 SHA 로 한 줄 바꿔 두면 된다
+# (그래야 다음 사고 때 "정상이었던 시점" 으로 되돌아간다).
+# ref 칸에 아무 SHA/태그나 직접 넣어도 되므로 default 는 편의일 뿐이다.
+#
+# ⚠️ 이 워크플로는 Cloudflare 에 올라간 것만 되돌린다. main 브랜치는 그대로다.
+#    (급할 때 git 정리까지 기다릴 이유가 없으므로 의도한 설계.)
+#    불을 끈 뒤에는 main 도 정리해야 다음 배포가 문제 코드를 다시 올리지 않는다:
+#      git revert -m 1 <문제의 머지 커밋>  →  push origin main
+#
+# 필요한 시크릿은 deploy-web.yml 과 동일 (DOTENV / CLOUDFLARE_API_TOKEN).
+
+name: 🚨 Rollback web
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '되돌릴 커밋 SHA 또는 태그 (기본 = 8/6 매장 정상 확인분)'
+        required: true
+        default: 'bd799022b2b3f4be528bd1bf9ecdeeadddadccd9'
+
+# deploy-web 과 같은 그룹 — 롤백이 진행 중인 배포를 취소하고 이긴다 (긴급이 우선).
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: 되돌릴 대상 확인
+        run: |
+          echo "### 🚨 롤백 대상" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          git log -1 --format='%H%n%ad%n%s' --date=iso >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      # 테스트는 건너뛴다 — 이미 배포된 적 있는 정상 커밋으로 되돌리는 것이고,
+      # 매장이 멈춘 상황에서 30초도 아깝다. 검증은 deploy-web.sh 의 키/PWA 확인으로 충분.
+      - name: .env 복원
+        run: |
+          printf '%s\n' "$DOTENV" > .env
+          if ! grep -q "EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSy" .env; then
+            echo "::error::DOTENV 시크릿에 EXPO_PUBLIC_FIREBASE_API_KEY 가 없거나 형식이 이상합니다."
+            exit 1
+          fi
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+
+      - name: 빌드 + 배포
+        run: npm run deploy:web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: .env 정리
+        if: always()
+        run: rm -f .env
+
+      - name: 마무리 안내
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 롤백 배포 완료 — 매장 PC 에서 **Ctrl+Shift+R**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ main 브랜치는 아직 그대로입니다. 불 끈 뒤 \`git revert -m 1 <머지커밋>\` 으로 정리하세요." >> $GITHUB_STEP_SUMMARY

@@ -216,7 +216,7 @@ export default function AddressBookPanel() {
 
   // 카카오 모빌리티 길찾기 API lazy fetch — entry 당 한 번만 호출, 영구 캐시.
   // entry.drivingFromLat/Lng 가 현재 매장좌표와 다르면 재계산 (매장 이전 대응).
-  // 동시 호출 폭주 방지 — inFlightRef. 일시 실패는 failedRef (앱 재시작 시 재시도).
+  // 동시 호출 폭주 방지 + 일시 실패 재시도는 큐가 담당 (아래).
   // 2026-08-12: 🔴 전수조사 B2 — 동시 호출 상한 + 결과 일괄 반영 큐로 교체.
   //   useAddressBook 의 좌표변환(B1)과 완전 동형이었던 문제. 자세한 내용은
   //   utils/lazyEnrichQueue.js 주석.
