@@ -77,13 +77,22 @@ export default function TableScreen({ onSelectTable, highlightTableId }) {
   // 테이블 위 결제완료 버튼 클릭 시 부모 onPress 무시용 동일 가드.
   const payClickedAtRef = useRef(0);
   useEffect(() => {
-    const blinkId = setInterval(() => setBlinkOn((b) => !b), 600);
     const timeId = setInterval(() => setNowTick(Date.now()), 15000);
-    return () => {
-      clearInterval(blinkId);
-      clearInterval(timeId);
-    };
+    return () => clearInterval(timeId);
   }, []);
+  // 2026-08-12: 🔴 카운터 PC 상시 지연 근본 처방 — 깜빡임 타이머를 blinkActive 동안만.
+  //   옛 코드는 mount 즉시 600ms 간격 setBlinkOn 을 *영구* 돌렸다. blinkOn 은 강조
+  //   3초(blinkActive) 에만 쓰이는데, 타이머는 24시간 살아서 TableScreen 전체를
+  //   분당 100회 리렌더시킨다. 탭은 전부 mount 상태(display:none)라 테이블 탭을 안
+  //   보고 있어도 계속 돈다. 폰/아이패드(네이티브)는 리렌더가 싸서 티가 안 나지만,
+  //   카운터 PC 는 react-native-web → DOM diff 라 그리드 전체 재계산 + DOM 갱신이
+  //   상시 CPU 를 먹어 모든 조작이 느리게 느껴진다. 강조 중에만 돌리면 평소 0회.
+  useEffect(() => {
+    if (!blinkActive) return;
+    setBlinkOn(true);
+    const blinkId = setInterval(() => setBlinkOn((b) => !b), 600);
+    return () => clearInterval(blinkId);
+  }, [blinkActive]);
   // highlightTableId 가 바뀌면 3초만 활성 → 자동 소멸. 영구 깜빡임 눈 피로 방지.
   useEffect(() => {
     if (!highlightTableId) {
