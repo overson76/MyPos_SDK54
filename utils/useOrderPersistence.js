@@ -141,9 +141,31 @@ export function useOrderPersistence({
   useEffect(() => {
     if (hydrated) saver('revenue', { total: revenue.total });
   }, [revenue.total, hydrated, saver]);
+  // 2026-08-12: 🔴 카운터 PC 지연 근본 처방 — 주소록 통째 저장 제거 (7/3 revenue.history
+  //   처방과 동형). entries / deletedTombstones 는 Firestore 가 단일 진실이고, 위 hydrate
+  //   는 6/9 처방 이후 *복원하지도 않는다*. 그런데 저장만은 주소 변경 · 좌표 자동변환 ·
+  //   타 기기 snapshot 이 올 때마다 주소록 전체를 JSON 직렬화해서 써왔다 — 읽지도 않을
+  //   데이터에 매번 비용만 낸 셈. 웹(카운터 PC)의 AsyncStorage 는 localStorage = **동기**
+  //   블로킹이라 주소록이 커질수록 그 순간 화면이 통째로 멎고, 폰/아이패드의 네이티브
+  //   AsyncStorage 는 비동기라 같은 코드가 멀쩡하다 (PC 만 느린 비대칭의 정체).
+  //   실제로 복원에 쓰는 메타 4개만 저장 — 주소 데이터 손실 0 (Firestore 원본 그대로).
+  const addressMeta = useMemo(
+    () => ({
+      todayDate: addressBook.todayDate,
+      todayDeliveredKeys: addressBook.todayDeliveredKeys,
+      autoRemember: addressBook.autoRemember,
+      ignoredSimilarPairs: addressBook.ignoredSimilarPairs,
+    }),
+    [
+      addressBook.todayDate,
+      addressBook.todayDeliveredKeys,
+      addressBook.autoRemember,
+      addressBook.ignoredSimilarPairs,
+    ]
+  );
   useEffect(() => {
-    if (hydrated) saver('addressBook', addressBook);
-  }, [addressBook, hydrated, saver]);
+    if (hydrated) saver('addressBook', addressMeta);
+  }, [addressMeta, hydrated, saver]);
 
   return hydrated;
 }

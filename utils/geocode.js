@@ -11,6 +11,23 @@ const getKakaoKey = () => process.env.EXPO_PUBLIC_KAKAO_REST_KEY || '';
 const BASE = 'https://dapi.kakao.com';
 const EARTH_RADIUS_KM = 6371;
 
+// 2026-08-12: 전수조사 B6 — 카카오 호출에 타임아웃이 없었다. 응답이 안 오면 호출부의
+//   in-flight 표시가 영구히 잠겨 그 항목은 앱 재시작 전까지 재시도조차 못 했고,
+//   브라우저 연결 슬롯도 계속 물고 있어 그 뒤의 Firestore 요청까지 밀렸다.
+//   ipWatcher(8초)·latestVersion 은 이미 타임아웃이 있는데 카카오 경로만 빠져 있었음.
+const KAKAO_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, init, timeoutMs = KAKAO_TIMEOUT_MS) {
+  if (typeof AbortController === 'undefined') return fetch(url, init);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function isGeocodingAvailable() {
   return getKakaoKey().length > 0;
 }
@@ -74,7 +91,7 @@ export async function geocodeAddress(address, opts = {}) {
 async function callKakao(path, query) {
   try {
     const url = `${BASE}${path}?query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
     });
     if (!res.ok) return null;
@@ -114,7 +131,7 @@ export async function searchKeywordNearby(keyword, center, radius = 5000) {
       size: '5',
     });
     const url = `${BASE}/v2/local/search/keyword.json?${params.toString()}`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
     });
     if (!res.ok) return null;
@@ -196,7 +213,7 @@ export async function getDrivingDistance(origin, destination) {
   });
 
   try {
-    const res = await fetch(`${NAVI_BASE}/v1/directions?${params.toString()}`, {
+    const res = await fetchWithTimeout(`${NAVI_BASE}/v1/directions?${params.toString()}`, {
       headers: { Authorization: `KakaoAK ${getKakaoKey()}` },
     });
     if (!res.ok) return null;

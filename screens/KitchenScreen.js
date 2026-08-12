@@ -231,22 +231,34 @@ export default function KitchenScreen() {
     return resolveAnyTable(tableId);
   };
 
-  const allOrders = Object.entries(orders)
-    .map(([tableId, order]) => ({
-      tableId,
-      table: resolveTable(tableId),
-      ...order,
-    }))
-    .filter(
-      (o) =>
-        o.table &&
-        o.items.length > 0 &&
-        (o.confirmedItems || []).length > 0 // 주문 버튼 눌린 것만 표시
-    );
+  // 2026-08-12: 전수조사 B5 — 매 렌더마다 map/filter/sort 를 다시 돌던 것을 메모.
+  //   주문현황 탭은 항상 mount 상태(display:none)라 다른 화면의 리렌더까지 그대로
+  //   받는다. resolveTable 은 모듈 함수(resolveAnyTable)만 쓰므로 deps 는 orders 뿐.
+  const allOrders = useMemo(
+    () =>
+      Object.entries(orders)
+        .map(([tableId, order]) => ({
+          tableId,
+          table: resolveTable(tableId),
+          ...order,
+        }))
+        .filter(
+          (o) =>
+            o.table &&
+            o.items.length > 0 &&
+            (o.confirmedItems || []).length > 0 // 주문 버튼 눌린 것만 표시
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orders]
+  );
 
-  const activeOrders = allOrders
-    .filter((o) => o.status !== 'ready') // 조리완료된 주문은 주문현황 메인에서 제거
-    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const activeOrders = useMemo(
+    () =>
+      allOrders
+        .filter((o) => o.status !== 'ready') // 조리완료된 주문은 주문현황 메인에서 제거
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+    [allOrders]
+  );
 
   // 계좌 체크 해제는 그 주문에만 붙는 선택 — 주문이 화면에서 빠지면 같이 지운다.
   // 안 지우면 같은 배달 슬롯에 들어온 *다음 손님* 이 앞 손님의 해제 상태를 물려받는다.
