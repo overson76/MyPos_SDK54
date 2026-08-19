@@ -26,6 +26,7 @@ import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 import { measurePerf, notePerfInfo } from './perfDiag';
+import { checkBulkDelete, shouldLogBlock } from './deleteGuard';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -349,19 +350,42 @@ export function useOrderFirestoreSync({
           opCount++;
         }
       }
-      for (const tid of Object.keys(synced)) {
-        if (tid === PENDING_TABLE_ID) continue;
-        if (!(tid in orders)) {
+      // 2026-08-19: 🛑 대량 삭제 서킷브레이커 (utils/deleteGuard.js 주석 참조).
+      //   지울 대상을 *먼저 모아* 규모를 보고 나서 batch 에 넣는다. 로컬 state 가
+      //   한순간 비면 이 루프가 서버 테이블을 전부 지우고 전 기기로 전파됐다.
+      const toDelete = [];
+      const syncedIds = Object.keys(synced).filter((tid) => tid !== PENDING_TABLE_ID);
+      for (const tid of syncedIds) {
+        if (!(tid in orders)) toDelete.push(tid);
+      }
+      const ordersGuard = checkBulkDelete({
+        label: '주문',
+        deleteCount: toDelete.length,
+        syncedCount: syncedIds.length,
+      });
+      // 차단 시엔 삭제만 건너뛰고 set 은 그대로 보낸다 — 조작 유실 없이 삭제만 보류.
+      // lastSynced 는 전진시키지 않아, 로컬이 정상으로 돌아오면 그때 정상 규모로 나간다.
+      if (ordersGuard.allowed) {
+        for (const tid of toDelete) {
           batch.delete(storeRef.collection('orders').doc(tid));
           opCount++;
         }
+      } else if (shouldLogBlock('orders', Date.now())) {
+        notePerfInfo(ordersGuard.reason);
+        reportError(new Error(ordersGuard.reason), {
+          ctx: 'orders.bulkDelete.blocked',
+          deleteCount: toDelete.length,
+          syncedCount: syncedIds.length,
+        });
       }
 
       if (opCount > 0) {
         batch
           .commit()
           .then(() => {
-            lastSyncedOrdersRef.current = orders;
+            // 삭제가 차단된 회차는 lastSynced 를 전진시키면 안 된다 — 전진시키면
+            // 보류된 삭제가 diff 에서 사라져 영영 안 나간다.
+            if (ordersGuard.allowed) lastSyncedOrdersRef.current = orders;
             reportWriteSuccess();
           })
           .catch((e) => {
@@ -369,7 +393,8 @@ export function useOrderFirestoreSync({
             reportWriteFailure('orders.batch.write', e);
             scheduleRetry();
           });
-      } else {
+      } else if (ordersGuard.allowed) {
+        // 보낼 게 없었을 때만 전진. 차단 회차엔 diff 를 남겨둬야 나중에 정상 규모로 나간다.
         lastSyncedOrdersRef.current = orders;
       }
     }, ORDERS_DEBOUNCE_MS);
@@ -475,17 +500,35 @@ export function useOrderFirestoreSync({
           opCount++;
         }
       }
+      // 2026-08-19: 🛑 대량 삭제 서킷브레이커 — 매출이력. orders 와 동일 정책.
+      //   매출은 회계·부가세 신고의 원본이라 유실 비용이 특히 크다.
+      const histToDelete = [];
       for (const [id] of syncedById) {
-        if (!nextById.has(id)) {
+        if (!nextById.has(id)) histToDelete.push(id);
+      }
+      const historyGuard = checkBulkDelete({
+        label: '매출이력',
+        deleteCount: histToDelete.length,
+        syncedCount: syncedById.size,
+      });
+      if (historyGuard.allowed) {
+        for (const id of histToDelete) {
           batch.delete(storeRef.collection('history').doc(id));
           opCount++;
         }
+      } else if (shouldLogBlock('history', Date.now())) {
+        notePerfInfo(historyGuard.reason);
+        reportError(new Error(historyGuard.reason), {
+          ctx: 'history.bulkDelete.blocked',
+          deleteCount: histToDelete.length,
+          syncedCount: syncedById.size,
+        });
       }
       if (opCount > 0) {
         batch
           .commit()
           .then(() => {
-            lastSyncedHistoryRef.current = next;
+            if (historyGuard.allowed) lastSyncedHistoryRef.current = next;
             reportWriteSuccess();
           })
           .catch((e) => {
@@ -493,7 +536,7 @@ export function useOrderFirestoreSync({
             reportWriteFailure('history.batch.write', e);
             scheduleRetry();
           });
-      } else {
+      } else if (historyGuard.allowed) {
         lastSyncedHistoryRef.current = next;
       }
     }, HISTORY_DEBOUNCE_MS);
