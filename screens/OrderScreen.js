@@ -16,7 +16,7 @@ import {
 import makeStyles from './OrderScreen.styles';
 import { categories } from '../utils/menuData';
 import { useMenu } from '../utils/MenuContext';
-import { useOrders, useRevenueData, PENDING_TABLE_ID } from '../utils/OrderContext';
+import { useOrders, PENDING_TABLE_ID } from '../utils/OrderContext';
 import {
   computeRecommendations,
   recommendationsToGrid,
@@ -208,8 +208,8 @@ export default function OrderScreen({
     getGroupFor,
     clearTableBySource,
     computeSubtotalsBySource,
+    revenue,
   } = useOrders();
-  const revenue = useRevenueData();
 
   const genSlotId = () =>
     `s-${Date.now().toString(36)}-${Math.random()
