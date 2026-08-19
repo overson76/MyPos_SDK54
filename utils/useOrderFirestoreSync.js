@@ -26,33 +26,13 @@ import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 import { measurePerf, notePerfInfo } from './perfDiag';
-import { computeDebounceDelay } from './writeDebounce';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
 const ADDRESS_DEBOUNCE_MS = 500;
-// 2026-08-12: 🔴 "치우면 지워졌다가 되살아난다" 근본처방 — 디바운스 상한.
-//   snapshot 이 디바운스보다 촘촘히 오면 타이머가 매번 리셋돼 커밋이 영영 안 떴다
-//   (기아). 첫 dirty 로부터 이 시간이 지나면 더 안 미루고 즉시 보낸다.
-//   자세한 사고 경위는 utils/writeDebounce.js 주석 참조.
-const ORDERS_MAX_WAIT_MS = 2000;
-const HISTORY_MAX_WAIT_MS = 3000;
-const ADDRESS_MAX_WAIT_MS = 3000;
 // 2026-06-11: write 실패(한도 초과/네트워크) 시 lastSynced 를 전진시키지 않고 30초 후
 // 재시도한다. 이전엔 실패해도 "보낸 셈" 처리해서 차단이 풀려도 영영 안 올라갔다.
 const WRITE_RETRY_MS = 30000;
-
-// docChanges 접근 — Firebase JS SDK(웹)는 메서드, RNFirebase 버전에 따라 프로퍼티.
-// 어느 쪽도 아니면 null 을 반환해 호출부가 전량 재구성으로 폴백하게 한다.
-function readDocChanges(snap) {
-  try {
-    const dc = snap && snap.docChanges;
-    const list = typeof dc === 'function' ? snap.docChanges() : dc;
-    return Array.isArray(list) ? list : null;
-  } catch (_) {
-    return null;
-  }
-}
 
 // Firestore document ID 안전 인코딩 (migrateLocalToCloud 와 동일 정책).
 function safeDocId(key) {
@@ -96,12 +76,6 @@ export function useOrderFirestoreSync({
   const ordersDebounceRef = useRef(null);
   const historyDebounceRef = useRef(null);
   const addressEntriesDebounceRef = useRef(null);
-  // 매출이력 문서 캐시 (id → data). docChanges 로 바뀐 것만 갱신 — B3 처방.
-  const historyCacheRef = useRef(new Map());
-  // 현재 dirty 구간이 시작된 시각 — 0 이면 "깨끗함". 디바운스 상한 계산용.
-  const ordersFirstDirtyRef = useRef(0);
-  const historyFirstDirtyRef = useRef(0);
-  const addressFirstDirtyRef = useRef(0);
 
   // ── write 실패 재시도 ────────────────────────────────────────
   // 실패 시 retryTick 을 올려 모든 write effect 를 다시 돌린다. lastSynced 가 전진하지
@@ -260,27 +234,8 @@ export function useOrderFirestoreSync({
         if (snap.docs.length >= 500) notePerfInfo(`⚠ 매출이력 문서 ${snap.docs.length}개`);
         const isFirstSnapshot = !snapshotSeenRef.current.history;
         snapshotSeenRef.current.history = true;
-        // 2026-08-12: 🔴 전수조사 B3 — 매 snapshot 마다 문서 1,000개를 통째로 d.data()
-        //   하던 것을 증분 캐시로. Firestore 의 d.data() 는 서버 표현을 JS 값으로
-        //   변환하는 실제 작업이라 1,000건이면 결제 한 번에 전 기기가 그 비용을 다시
-        //   냈다. docChanges 로 바뀐 문서만 갱신하고 나머지는 캐시된 객체를 재사용.
-        //   순서는 snap.docs 기준 그대로 재구성 — 정렬/표시 동작 무변경.
-        //   docChanges 를 못 쓰는 SDK/상황(첫 snapshot 포함)이면 전량 재구성으로 폴백.
-        const cache = historyCacheRef.current;
-        const changes = readDocChanges(snap);
-        if (isFirstSnapshot || !changes) {
-          cache.clear();
-          snap.docs.forEach((d) => cache.set(d.id, d.data()));
-        } else {
-          for (const c of changes) {
-            const id = c?.doc?.id;
-            if (id == null) continue;
-            if (c.type === 'removed') cache.delete(id);
-            else cache.set(id, c.doc.data());
-          }
-        }
         const list = snap.docs
-          .map((d) => cache.get(d.id))
+          .map((d) => d.data())
           .filter((h) => h && h.id != null);
         // 방금 append 한 결제 기록(미push)이 echo/타 기기 snapshot 으로 증발하지 않게.
         const prevSynced = lastSyncedHistoryRef.current;
@@ -338,32 +293,24 @@ export function useOrderFirestoreSync({
           snapshotSeenRef.current.addressBookMeta = true;
           if (!snapExists(snap)) return;
           const meta = snap.data() || {};
-          // 2026-08-12: 🔴 전수조사 B8 — state 와 ref 를 *같은 식으로* 계산한다.
-          //   옛 코드는 state 엔 fallback 을 먹인 값(meta.todayDate || prev...,
-          //   Array.isArray ? : [])을 넣고 ref 엔 서버 원본을 그대로 넣었다. 서버에
-          //   그 필드가 없으면 둘이 영원히 어긋나 write effect 가 매번 dirty 로 판정
-          //   → write → echo → 또 dirty. 지금은 첫 write 후 수렴하지만, 수렴하지 않는
-          //   필드가 하나만 늘어도 무한 쓰기 루프가 된다 (6/11 한도 사고와 같은 형태).
-          //   ref 에 넣을 값을 먼저 확정하고 state 도 그 값으로 채워 구조적으로 닫는다.
-          setAddressBook((prev) => {
-            const resolved = {
-              todayDate: meta.todayDate || prev.todayDate,
-              todayDeliveredKeys: Array.isArray(meta.todayDeliveredKeys)
-                ? meta.todayDeliveredKeys
-                : [],
-              autoRemember:
-                typeof meta.autoRemember === 'boolean'
-                  ? meta.autoRemember
-                  : prev.autoRemember,
-            };
-            lastSyncedAddressMetaRef.current = resolved;
-            return {
-              ...prev,
-              ...resolved,
-              // ignoredSimilarPairs 는 의도적으로 덮지 않는다 — 로컬 무시목록 보존
-              //   (모달 닫았다 열어도 유지). Firestore sync 제외(union 무한루프 사고 후 격리).
-            };
-          });
+          setAddressBook((prev) => ({
+            ...prev,
+            todayDate: meta.todayDate || prev.todayDate,
+            todayDeliveredKeys: Array.isArray(meta.todayDeliveredKeys)
+              ? meta.todayDeliveredKeys
+              : [],
+            autoRemember:
+              typeof meta.autoRemember === 'boolean'
+                ? meta.autoRemember
+                : prev.autoRemember,
+            // ignoredSimilarPairs 는 의도적으로 덮지 않는다 — 로컬 무시목록 보존
+            //   (모달 닫았다 열어도 유지). Firestore sync 제외(union 무한루프 사고 후 격리).
+          }));
+          lastSyncedAddressMetaRef.current = {
+            todayDate: meta.todayDate,
+            todayDeliveredKeys: meta.todayDeliveredKeys,
+            autoRemember: meta.autoRemember,
+          };
         },
         (err) => reportError(err, { ctx: 'addressBookMeta.listener' })
       );
@@ -383,21 +330,10 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.orders) return; // 첫 pull 전 push 금지 (부팅 좀비 차단)
-    if (orders === lastSyncedOrdersRef.current) {
-      ordersFirstDirtyRef.current = 0; // 서버와 일치 — dirty 구간 종료
-      return;
-    }
+    if (orders === lastSyncedOrdersRef.current) return;
 
     if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
-    const ordersDelay = computeDebounceDelay(
-      ORDERS_DEBOUNCE_MS,
-      ORDERS_MAX_WAIT_MS,
-      ordersFirstDirtyRef.current,
-      Date.now()
-    );
-    if (!ordersFirstDirtyRef.current) ordersFirstDirtyRef.current = Date.now();
     ordersDebounceRef.current = setTimeout(() => {
-      ordersFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -436,7 +372,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedOrdersRef.current = orders;
       }
-    }, ordersDelay);
+    }, ORDERS_DEBOUNCE_MS);
 
     return () => {
       if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
@@ -516,21 +452,10 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.history) return;
-    if (revenue.history === lastSyncedHistoryRef.current) {
-      historyFirstDirtyRef.current = 0;
-      return;
-    }
+    if (revenue.history === lastSyncedHistoryRef.current) return;
 
     if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
-    const historyDelay = computeDebounceDelay(
-      HISTORY_DEBOUNCE_MS,
-      HISTORY_MAX_WAIT_MS,
-      historyFirstDirtyRef.current,
-      Date.now()
-    );
-    if (!historyFirstDirtyRef.current) historyFirstDirtyRef.current = Date.now();
     historyDebounceRef.current = setTimeout(() => {
-      historyFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -571,7 +496,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedHistoryRef.current = next;
       }
-    }, historyDelay);
+    }, HISTORY_DEBOUNCE_MS);
 
     return () => {
       if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
@@ -582,22 +507,11 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.addresses) return; // 첫 pull 전 push 금지 — 주소록 좀비 차단 핵심
-    if (addressBook.entries === lastSyncedAddressEntriesRef.current) {
-      addressFirstDirtyRef.current = 0;
-      return;
-    }
+    if (addressBook.entries === lastSyncedAddressEntriesRef.current) return;
 
     if (addressEntriesDebounceRef.current)
       clearTimeout(addressEntriesDebounceRef.current);
-    const addressDelay = computeDebounceDelay(
-      ADDRESS_DEBOUNCE_MS,
-      ADDRESS_MAX_WAIT_MS,
-      addressFirstDirtyRef.current,
-      Date.now()
-    );
-    if (!addressFirstDirtyRef.current) addressFirstDirtyRef.current = Date.now();
     addressEntriesDebounceRef.current = setTimeout(() => {
-      addressFirstDirtyRef.current = 0;
       const db = getFirestore();
       if (!db) return;
       const storeRef = db.collection('stores').doc(storeId);
@@ -644,7 +558,7 @@ export function useOrderFirestoreSync({
       } else {
         lastSyncedAddressEntriesRef.current = next;
       }
-    }, addressDelay);
+    }, ADDRESS_DEBOUNCE_MS);
 
     return () => {
       if (addressEntriesDebounceRef.current)

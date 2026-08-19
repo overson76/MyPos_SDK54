@@ -18,7 +18,6 @@ import {
 import { similarPairKey } from './addressBookCleanup';
 import { hasResolvableAddress } from './addressBookLookup';
 import { useFeatureFlags, getFeatureFlag } from './featureFlags';
-import { createLazyEnrichQueue } from './lazyEnrichQueue';
 
 // 배달 주소록 도메인 — 항목 CRUD + 자동 기억 토글 + 당일 완료 마크 + 자정 자동 리셋.
 // state/setter 둘 다 노출 — 외부 도메인(주문 확정/정리)이 setAddressBook 으로 인라인 갱신함.
@@ -93,35 +92,8 @@ export function useAddressBook() {
     }
     return null;
   }, [storeInfo?.lat, storeInfo?.lng]);
-  // 2026-08-12: 🔴 전수조사 B1 — 동시 호출 상한 + 결과 일괄 반영 큐로 교체.
-  //   옛 코드는 미변환 entry 전부를 한꺼번에 카카오로 발사하고, 결과 하나마다
-  //   setAddressBook 했다. 브라우저 동시 연결 한도를 카카오가 다 먹어 Firestore
-  //   요청까지 그 뒤에 줄서고(주문/결제 지연), 결과 수만큼 전체 앱 리렌더 +
-  //   Firestore write 가 터졌다. 자세한 내용은 utils/lazyEnrichQueue.js 주석.
-  const geocodeQueueRef = useRef(null);
-  if (!geocodeQueueRef.current) {
-    geocodeQueueRef.current = createLazyEnrichQueue({
-      apply: (batch) => {
-        setAddressBook((prev) => {
-          let entries = null;
-          for (const { key, patch } of batch) {
-            const ex = prev.entries[key];
-            if (!ex || typeof ex.lat === 'number') continue;
-            // 좌표 채울 때 옛 drivingM 잔재(이전 좌표 기준) 도 같이 무효화.
-            // 보통 lat 없는 entry 에 drivingM 없지만 마이그레이션/수동 편집 잔재 대응.
-            const next = { ...ex, lat: patch.lat, lng: patch.lng };
-            delete next.drivingM;
-            delete next.drivingDurationSec;
-            delete next.drivingFromLat;
-            delete next.drivingFromLng;
-            if (!entries) entries = { ...prev.entries };
-            entries[key] = next;
-          }
-          return entries ? { ...prev, entries } : prev;
-        });
-      },
-    });
-  }
+  const inFlightRef = useRef(new Set());
+  const failedRef = useRef(new Set());
   // 2026-07-03: 성능 옵션 반응값 — 토글 변경 시 effect deps 재평가로 즉시 반영.
   const flags = useFeatureFlags();
   const geocodeEnabled = flags.addressAutoGeocode;
@@ -130,46 +102,65 @@ export function useAddressBook() {
     // 2026-07-03: 성능 옵션 — 꺼두면 주소 자동 좌표변환 순회를 통째로 건너뜀
     //   (카운터 PC 멈춤 진단용 이분 탐색). 켜면 밀린 entry 를 다시 변환.
     if (!getFeatureFlag('addressAutoGeocode')) return;
-    const queue = geocodeQueueRef.current;
     for (const entry of Object.values(addressBook.entries)) {
       if (
         typeof entry.lat === 'number' ||
         // 2026-06-13: 주소 미입력(CID phone-only/placeholder) entry 는 좌표 변환
         //   대상 아님 — label 이 주소가 아니라 식별 placeholder 라 카카오가 못 찾고
         //   매번 실패 호출만 남기던 낭비(48~62건). 카운터 PC 첫 로드 지연 처방.
-        !hasResolvableAddress(entry)
+        !hasResolvableAddress(entry) ||
+        inFlightRef.current.has(entry.key) ||
+        failedRef.current.has(entry.key)
       ) {
         continue;
       }
+      inFlightRef.current.add(entry.key);
       // 2026-05-28: 사장님 사고 "신한철물 311km 박힘" 영구 처방.
       //   center 옵션 전달 → geocodeAddress 가 keyword 검색을 *반경 제한* 으로 분기.
       //   처음부터 반경 밖 결과 reject — 전국 검색 절대 금지.
       const geocodeOpts = storeCoord
         ? { center: storeCoord, radius: MAX_DELIVERY_RADIUS_KM * 1000 }
         : {};
-      const label = entry.label;
-      const key = entry.key;
-      queue.enqueue(key, async () => {
-        const result = await geocodeAddress(label, geocodeOpts);
-        if (!result) return null;
+      geocodeAddress(entry.label, geocodeOpts).then((result) => {
+        inFlightRef.current.delete(entry.key);
+        if (!result) {
+          failedRef.current.add(entry.key);
+          return;
+        }
         // 매장 좌표 기준 합리 반경 검증 (이중 가드). 매장 좌표 미설정이면 skip.
         if (!isCoordNearCenter(result, storeCoord, MAX_DELIVERY_RADIUS_KM)) {
+          failedRef.current.add(entry.key);
           if (typeof console !== 'undefined') {
             console.warn(
               `[useAddressBook] geocode 응답 ${MAX_DELIVERY_RADIUS_KM}km 반경 초과 — reject`,
-              { key, label, result, storeCoord }
+              { key: entry.key, label: entry.label, result, storeCoord }
             );
           }
-          return null;
+          return;
         }
-        return { lat: result.lat, lng: result.lng };
+        setAddressBook((prev) => {
+          const ex = prev.entries[entry.key];
+          if (!ex || typeof ex.lat === 'number') return prev;
+          // 좌표 채울 때 옛 drivingM 잔재(이전 좌표 기준) 도 같이 무효화.
+          // 보통 lat 없는 entry 에 drivingM 없지만 마이그레이션/수동 편집 잔재 대응.
+          const next = { ...ex, lat: result.lat, lng: result.lng };
+          delete next.drivingM;
+          delete next.drivingDurationSec;
+          delete next.drivingFromLat;
+          delete next.drivingFromLng;
+          return {
+            ...prev,
+            entries: { ...prev.entries, [entry.key]: next },
+          };
+        });
       });
     }
-  }, [addressBook.entries, storeCoord, geocodeEnabled, setAddressBook]);
+  }, [addressBook.entries, storeCoord, geocodeEnabled]);
 
-  // 매장 좌표 변경 시 큐 리셋 — 새 좌표 기준으로 재시도.
+  // 매장 좌표 변경 시 in-flight/failed 캐시 리셋 — 새 좌표 기준으로 재시도.
   useEffect(() => {
-    geocodeQueueRef.current?.reset();
+    inFlightRef.current.clear();
+    failedRef.current.clear();
   }, [storeCoord?.lat, storeCoord?.lng]);
 
   // 2026-05-28: 부팅 1회 — 잠복 비정상 좌표/거리 자동 청소.

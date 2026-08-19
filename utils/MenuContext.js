@@ -44,25 +44,6 @@ import { reportError } from './sentry';
 
 const MenuContext = createContext(null);
 
-// 메뉴 목록 내용 동일 판정 — snapshot echo 로 인한 헛리렌더 차단용 (B9 처방).
-// 항목이 25개 안팎이고 필드도 평면이라 얕은 비교로 충분하다.
-function sameMenuItems(a, b) {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i];
-    const y = b[i];
-    if (x === y) continue;
-    if (!x || !y) return false;
-    const kx = Object.keys(x);
-    if (kx.length !== Object.keys(y).length) return false;
-    for (const k of kx) {
-      if (x[k] !== y[k]) return false;
-    }
-  }
-  return true;
-}
-
 // 모든 카테고리에 적용되는 격자 규격 (6열 × 4행, 빈 칸은 null)
 const GRID_COLS = 6;
 const GRID_ROWS = 4;
@@ -148,8 +129,6 @@ export function MenuProvider({ children }) {
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
-  // menu_rows self-heal 되쓰기 루프 방지용 — 직전에 쓴 값의 서명 (B7 처방).
-  const rowsRecoverSigRef = useRef(null);
 
   // ── Firestore write 헬퍼 ────────────────────────────────────
   const writeMenuItemFs = useCallback(
@@ -284,11 +263,7 @@ export function MenuProvider({ children }) {
           if (def?.shortName) return { ...m, shortName: def.shortName };
           return m;
         });
-        // 2026-08-12: 전수조사 B9 — snapshot 마다 새 배열이라 내용이 같아도 items
-        //   참조가 바뀌어 MenuContext 값 교체 → 전 화면 리렌더였다. 내용이 같으면
-        //   기존 배열을 그대로 유지해 리렌더 자체를 없앤다 (메뉴는 25개 안팎이라
-        //   비교 비용이 리렌더보다 훨씬 싸다).
-        setItems((prev) => (sameMenuItems(prev, migrated) ? prev : migrated));
+        setItems(migrated);
       },
       (err) => reportError(err, { ctx: 'menu.itemsListener' })
     );
@@ -309,22 +284,11 @@ export function MenuProvider({ children }) {
         const normalized = normalizeFav(reconciled);
         setRows(normalized);
         if (recovered) {
-          // 2026-08-12: 🔴 전수조사 B7 — 되쓰기 무한루프 봉인.
-          //   여기서 쓴 값은 echo snapshot 으로 다시 이 listener 에 들어온다. 그 값이
-          //   또 recovered 로 판정되면 write → echo → write 가 끝없이 돈다 (6/11
-          //   한도 사고와 같은 형태). 지금 기본값 6종으론 1회에 수렴하지만,
-          //   defaultCategoryRows 에 전부-null 카테고리가 하나만 생겨도 조건이 성립한다.
-          //   "직전에 쓴 것과 같은 값이면 안 쓴다" 한 줄로 구조적으로 닫는다.
-          const encoded = encodeMenuRows(normalized);
-          const sig = JSON.stringify(encoded);
-          if (rowsRecoverSigRef.current !== sig) {
-            rowsRecoverSigRef.current = sig;
-            storeRef
-              .collection('state')
-              .doc('menu_rows')
-              .set({ value: encoded })
-              .catch((e) => reportError(e, { ctx: 'menu.rowsRecoverWrite' }));
-          }
+          storeRef
+            .collection('state')
+            .doc('menu_rows')
+            .set({ value: encodeMenuRows(normalized) })
+            .catch((e) => reportError(e, { ctx: 'menu.rowsRecoverWrite' }));
         }
       },
       (err) => reportError(err, { ctx: 'menu.rowsListener' })
