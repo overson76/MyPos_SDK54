@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyPos_SDK54",
     "slug": "MyPos_SDK54",
-    "version": "1.0.2",
+    "version": "1.0.55",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -23,7 +23,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cadpia.mypos",
-      "buildNumber": "13",
+      "buildNumber": "14",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -36,7 +36,6 @@
         "backgroundColor": "#1F2937"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.cadpia.mypos",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",

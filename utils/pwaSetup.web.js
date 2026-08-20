@@ -50,6 +50,9 @@ export function setupPwa() {
   // 3) iOS Safari "홈 화면에 추가" 대응
   appendOnce('link', { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }, ['rel']);
   appendOnce('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' }, ['name']);
+  // 위 apple- 접두 태그는 구형 이름. 표준 이름도 같이 박아야 최신 Chrome/Edge 가
+  // deprecation 경고 없이 standalone 으로 띄운다. iOS 는 아직 apple- 쪽만 본다.
+  appendOnce('meta', { name: 'mobile-web-app-capable', content: 'yes' }, ['name']);
   appendOnce(
     'meta',
     { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
