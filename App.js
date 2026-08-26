@@ -537,6 +537,8 @@ function MainApp() {
                   ]}
                   onPress={() => handleTabPress(key)}
                   activeOpacity={0.8}
+                  // 화면 최상단이라 손가락이 위로 빗나가기 쉽다. 위쪽 여유를 더 크게.
+                  hitSlop={{ top: 10, bottom: 4, left: 2, right: 2 }}
                 >
                   <Text
                     style={[
@@ -678,13 +680,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
+  // 2026-08-20 사장님 신고: 아이폰에서 상단 탭이 잘 안 눌리고, 핀치로 확대하면 눌림.
+  //   원인은 터치 영역 높이. 옛 값(패딩 4 + 11pt 글자 + 밑줄 2)이면 약 23pt 로,
+  //   Apple HIG 최소 44pt 의 절반이다. 확대하면 되던 건 PinchZoom 의 transform 이
+  //   터치 좌표까지 같이 키워서 그제서야 44pt 를 넘겼기 때문 — 폰 문제가 아니었다.
+  //   minHeight 로 44pt 를 보장하고, hitSlop 으로 위쪽 화면 가장자리 오차까지 흡수.
   tabBtn: {
+    minHeight: 44,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabBtnMobile: { flex: 1, paddingHorizontal: 2, paddingVertical: 4, alignItems: 'center' },
+  tabBtnMobile: { flex: 1, paddingHorizontal: 2, paddingVertical: 4 },
   tabBtnActive: { borderBottomColor: '#111827' },
   tabText: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   tabTextMobile: { fontSize: 11 },
