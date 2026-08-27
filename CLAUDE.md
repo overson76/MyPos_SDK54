@@ -451,6 +451,20 @@ MYPOS_PRINTER_TYPE=epson|star|bixolon
 
 OTA 인프라는 코드/설정만 박힘 — 실제 활성화는 **expo-updates 가 포함된 EAS 빌드** 가 폰에 깔린 후부터. 현재 폰의 빌드(c4f7ed0 시점)는 OTA 모름. 다음 EAS 빌드부터 자동 활성화.
 
+## 폰/아이패드 배포 — Ad Hoc (앱스토어 비공개)
+
+TestFlight 90일 만료를 피하는 경로. `eas.json` 의 `adhoc` 프로필 = `distribution: internal` + `channel: production`.
+
+```bash
+npm run ios:device   # 기기 등록 (QR 스캔) — 새 기기 추가 시마다
+npm run ios:adhoc    # Ad Hoc 빌드 → 설치 링크 발급
+npm run ios:ota -- --message "..."   # JS 만 고쳤을 때 (재빌드 불필요)
+```
+
+`channel: production` 이라 **정식 빌드와 같은 OTA 채널**을 탄다 — JS 수정은 `ios:ota` 한 줄이면 기기에 들어간다. 재빌드가 필요한 경우는 네이티브 의존성 / `plugins` / `version` 변경, 새 기기 추가, 1년 프로파일 만료뿐.
+
+`buildNumber` 는 `autoIncrement` 가 올리므로 손대지 않는다. 전제 조건 / 만료 대응 등 자세한 절차는 **`docs/adhoc-ios.md`**.
+
 ## 매장 멤버 진단 (utils/storeDiag.js)
 
 어제 사고 회고: 사장님 폰의 익명 uid 가 ownerId 와 어긋나서 `joinRequests` listener 가 0건 read → 가입 요청이 사장님 화면에 안 보임 → 새 매장 만들어 복구.

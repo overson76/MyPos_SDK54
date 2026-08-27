@@ -18,6 +18,9 @@
     "kis:test": "echo {\"dryRun\":true} | electron/payment/bridge/bin/x86/Release/net48/KisPaymentBridge.exe",
     "electron:build": "npm run deploy:web && electron-builder --config electron/builder.config.js --win",
     "electron:publish": "npm run deploy:web && electron-builder --config electron/builder.config.js --win --publish always",
+    "ios:device": "eas device:create",
+    "ios:adhoc": "eas build --platform ios --profile adhoc",
+    "ios:ota": "eas update --branch production",
     "test": "jest",
     "test:watch": "jest --watch"
   },

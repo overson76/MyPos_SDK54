@@ -22,6 +22,14 @@
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
+    "adhoc": {
+      "distribution": "internal",
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
+    },
     "production-apk": {
       "channel": "production",
       "distribution": "internal",
