@@ -604,12 +604,16 @@ export function OrderProvider({ children }) {
       });
     };
 
-    const setItemMemo = (tableId, slotId, memo) => {
+    // portion: 'normal' | 'large' | 'all' — 메모를 어느 포션에 붙일지.
+    //   보통/대가 한 슬롯에 섞였을 때 지정 포션만 떼어내 메모를 박는다.
+    //   미지정 = 슬롯 통째(옛 호출 호환).
+    const setItemMemo = (tableId, slotId, memo, portion) => {
       dispatch({
         type: 'orders/setItemMemo',
         tableId,
         slotId,
         memo,
+        portion,
       });
     };
 

@@ -998,6 +998,13 @@ export default function OrderScreen({
         (() => {
           const curItem = sizePrompt.items[sizePrompt.index];
           if (!curItem) return null;
+          // 2026-08-29: 보통/대가 섞인 슬롯이면 고른 포션 수량이 한도 —
+          //   옛 코드는 슬롯 전체 qty 까지 올릴 수 있어(리듀서가 조용히 clamp)
+          //   "대 2개 중" 인데 3까지 올라가는 헛손질이 됐다.
+          const sizeMaxQty = Math.max(
+            1,
+            Math.min(curItem.qty, sizePrompt.maxQty || curItem.qty)
+          );
           return (
             <View style={styles.sizeModalOverlay} pointerEvents="auto">
               <Pressable
@@ -1015,7 +1022,9 @@ export default function OrderScreen({
                     <Text style={styles.sizeModalCloseText}>✕</Text>
                   </TouchableOpacity>
                   <Text style={styles.sizeModalLine1}>
-                    {curItem.name} {curItem.qty}개 중
+                    {curItem.name}
+                    {sizePrompt.portionLabel ? ` ${sizePrompt.portionLabel}` : ''}{' '}
+                    {sizeMaxQty}개 중
                   </Text>
                   <Text style={styles.sizeModalLine2}>
                     몇 개를 {sizePrompt.sizeOption.label} 적용할까요?
@@ -1042,7 +1051,7 @@ export default function OrderScreen({
                         onPress={() =>
                           setSizePrompt((s) => ({
                             ...s,
-                            value: Math.min(curItem.qty, s.value + 1),
+                            value: Math.min(sizeMaxQty, s.value + 1),
                           }))
                         }
                       >
@@ -1071,6 +1080,18 @@ export default function OrderScreen({
       {memoPrompt && (() => {
         const targetItem = cart.find((i) => i.slotId === memoPrompt.slotId);
         if (!targetItem) return null;
+        // 보통/대가 한 슬롯에 섞여 있으면 "어디에 붙일지" 를 사장님이 직접 고른다.
+        const lqMemo = targetItem.largeQty || 0;
+        const nqMemo = targetItem.qty - lqMemo;
+        const bothMemo = lqMemo > 0 && nqMemo > 0;
+        const memoScope = bothMemo ? memoPrompt.scope || 'normal' : 'all';
+        const MEMO_SCOPES = [
+          { key: 'normal', label: `보통 ${nqMemo}개만` },
+          { key: 'large', label: `대 ${lqMemo}개만` },
+          { key: 'all', label: '전체' },
+        ];
+        const scopeSuffix =
+          memoScope === 'normal' ? ' 보통' : memoScope === 'large' ? ' 대' : '';
         return (
           <KeyboardAvoidingView
             style={styles.sizeModalOverlay}
@@ -1091,7 +1112,48 @@ export default function OrderScreen({
                 >
                   <Text style={styles.sizeModalCloseText}>✕</Text>
                 </TouchableOpacity>
-                <Text style={styles.sizeModalLine1}>{targetItem.name} 메모</Text>
+                <Text style={styles.sizeModalLine1}>
+                  {targetItem.name}
+                  {scopeSuffix} 메모
+                </Text>
+                {/* 2026-08-29: 메모 적용 범위 — 보통/대가 섞인 슬롯에서만 노출.
+                    (사장님 신고: 보통에만 넣은 '덜 맵게' 가 대에도 붙어 주방에 뜬다) */}
+                {bothMemo ? (
+                  <>
+                    <View style={styles.memoScopeRow}>
+                      {MEMO_SCOPES.map((sc) => {
+                        const on = memoScope === sc.key;
+                        return (
+                          <TouchableOpacity
+                            key={sc.key}
+                            style={[
+                              styles.memoScopeBtn,
+                              on && styles.memoScopeBtnActive,
+                            ]}
+                            onPress={() =>
+                              setMemoPrompt((pp) =>
+                                pp ? { ...pp, scope: sc.key } : pp
+                              )
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.memoScopeText,
+                                on && styles.memoScopeTextActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {sc.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.memoChipsHint}>
+                      메모가 붙을 곳을 고르세요 — 고른 쪽만 주방에 표시됩니다
+                    </Text>
+                  </>
+                ) : null}
                 {/* 자주 쓰는 메모 칩 — 누르면 입력창에 추가/제거(토글). 관리자에서 편집. */}
                 {memoTemplates.length > 0 ? (
                   <>
@@ -1138,7 +1200,7 @@ export default function OrderScreen({
                   <TouchableOpacity
                     style={styles.memoClearBtn}
                     onPress={() => {
-                      setItemMemo(tableId, memoPrompt.slotId, '');
+                      setItemMemo(tableId, memoPrompt.slotId, '', memoScope);
                       setMemoPrompt(null);
                     }}
                   >
@@ -1150,7 +1212,8 @@ export default function OrderScreen({
                       setItemMemo(
                         tableId,
                         memoPrompt.slotId,
-                        memoPrompt.value
+                        memoPrompt.value,
+                        memoScope
                       );
                       setMemoPrompt(null);
                     }}
@@ -1923,10 +1986,21 @@ export default function OrderScreen({
                 numberOfLines={1}
               >
                 {selectedSlotId
-                  ? `옵션 — ${
-                      cart.find((i) => i.slotId === selectedSlotId)
-                        ?.name || ''
-                    }`
+                  ? (() => {
+                      // 2026-08-29: 옵션/메모가 "어디에 붙는지" 를 제목에 못 박는다.
+                      //   보통·대가 한 슬롯에 섞여 있으면 고른 행의 포션까지 표기.
+                      const sel = cart.find((i) => i.slotId === selectedSlotId);
+                      if (!sel) return '옵션';
+                      const lqSel = sel.largeQty || 0;
+                      const nqSel = sel.qty - lqSel;
+                      const suffix =
+                        lqSel > 0 && nqSel > 0
+                          ? selectedIsLarge
+                            ? ` 대 ${lqSel}개`
+                            : ` 보통 ${nqSel}개`
+                          : '';
+                      return `옵션 — ${sel.name || ''}${suffix}`;
+                    })()
                   : '옵션 (장바구니에서 메뉴를 선택하세요)'}
               </Text>
               <TouchableOpacity
@@ -1939,7 +2013,20 @@ export default function OrderScreen({
                 onPress={() => {
                   const it = cart.find((i) => i.slotId === selectedSlotId);
                   if (!it) return;
-                  setMemoPrompt({ slotId: it.slotId, value: it.memo || '' });
+                  // 2026-08-29: 메모가 붙을 포션(보통/대)을 장바구니에서 고른 행 기준으로
+                  //   결정. 한 슬롯에 보통+대가 섞여 있을 때만 의미가 있고, 한 종류뿐이면
+                  //   'all'(슬롯 통째).
+                  const lqSel = it.largeQty || 0;
+                  const bothSel = lqSel > 0 && it.qty - lqSel > 0;
+                  setMemoPrompt({
+                    slotId: it.slotId,
+                    value: it.memo || '',
+                    scope: bothSel
+                      ? selectedIsLarge
+                        ? 'large'
+                        : 'normal'
+                      : 'all',
+                  });
                 }}
               >
                 <Text
@@ -1997,20 +2084,50 @@ export default function OrderScreen({
                     onPress={() => {
                       if (!tableId || !selectedItem) return;
                       if (!isSizeOpt) {
-                        // 옵션이 이미 있으면 토글 오프 → 전체에서 제거
                         const already = (
                           selectedItem.options || []
                         ).includes(opt.id);
-                        if (already || selectedItem.qty === 1) {
-                          toggleItemOption(
+                        // 2026-08-29: 보통/대가 한 슬롯에 섞였는지. 섞였으면 켜든 끄든
+                        //   "선택한 행(포션)" 에만 적용해야 한다 — 옛 코드는 토글 오프를
+                        //   슬롯 통째로 처리해서 반대 포션의 옵션까지 같이 떨어졌다.
+                        const lqSel = selectedItem.largeQty || 0;
+                        const nqSel = selectedItem.qty - lqSel;
+                        const bothSel = lqSel > 0 && nqSel > 0;
+                        const portionQty = selectedIsLarge ? lqSel : nqSel;
+                        if (!bothSel) {
+                          // 포션이 한 종류뿐 — 슬롯 통째로 켜고 끄기(옛 동작 유지).
+                          if (already || selectedItem.qty === 1) {
+                            toggleItemOption(
+                              tableId,
+                              selectedItem.slotId,
+                              opt.id
+                            );
+                            return;
+                          }
+                          // qty > 1 + 옵션 신규 적용 → 수량 분리 모달
+                          setSizePrompt({
+                            items: [selectedItem],
+                            index: 0,
+                            sizeOption: opt,
+                            value: 1,
+                            mode: 'option',
+                            isLarge: selectedIsLarge,
+                            maxQty: selectedItem.qty,
+                          });
+                          return;
+                        }
+                        // 보통+대 공존 — 고른 포션 1개뿐이면 묻지 말고 그 포션만 분리 적용.
+                        if (portionQty <= 1) {
+                          splitOffWithOptionToggle(
                             tableId,
                             selectedItem.slotId,
-                            opt.id
+                            1,
+                            opt.id,
+                            selectedIsLarge
                           );
                           return;
                         }
-                        // qty > 1 + 옵션 신규 적용 → 수량 분리 모달
-                        // isLarge: 대 행에서 골랐으면 대 portion 에 옵션 적용.
+                        // 고른 포션이 2개 이상 → 몇 개에 적용할지 물어본다(그 포션 한도).
                         setSizePrompt({
                           items: [selectedItem],
                           index: 0,
@@ -2018,6 +2135,8 @@ export default function OrderScreen({
                           value: 1,
                           mode: 'option',
                           isLarge: selectedIsLarge,
+                          maxQty: portionQty,
+                          portionLabel: selectedIsLarge ? '대' : '보통',
                         });
                         return;
                       }

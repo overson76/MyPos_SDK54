@@ -1289,6 +1289,252 @@ describe('orderReducer · splitOffWithOptionToggle (대/보통 portion)', () => 
   });
 });
 
+describe('orderReducer · setItemMemo portion (메모 적용 범위)', () => {
+  // 2026-08-29 사장님 신고: 비빔밀면 대2 + 보통1 (한 슬롯: qty 3, largeQty 2) 인데
+  //   보통 행에서 넣은 "덜 맵게" 가 대에도 붙어 주방 주문현황에 그대로 떴다.
+  const baseState = () => ({
+    t1: {
+      items: [],
+      cartItems: [
+        {
+          slotId: 's1',
+          id: 'bibim',
+          name: '비빔밀면',
+          qty: 3,
+          largeQty: 2,
+          options: [],
+          price: 7000,
+          sizeUpcharge: 1000,
+        },
+      ],
+      confirmedItems: [],
+    },
+  });
+
+  test("portion='normal' → 보통만 떼어내 메모, 대는 메모 없음", () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'normal',
+    });
+    const cart = next.t1.cartItems;
+    expect(cart).toHaveLength(2);
+    const withMemo = cart.find((i) => i.memo === '덜 맵게');
+    const without = cart.find((i) => i.memo !== '덜 맵게');
+    // 메모가 붙은 쪽 = 보통 1개
+    expect(withMemo.qty).toBe(1);
+    expect(withMemo.largeQty).toBe(0);
+    // 대 2개는 메모 없이 그대로
+    expect(without.qty).toBe(2);
+    expect(without.largeQty).toBe(2);
+    // 표시 순서는 보통 → 대
+    expect(cart[0].largeQty).toBe(0);
+  });
+
+  test("portion='large' → 대만 메모, 보통은 그대로", () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'large',
+    });
+    const cart = next.t1.cartItems;
+    expect(cart).toHaveLength(2);
+    const withMemo = cart.find((i) => i.memo === '덜 맵게');
+    const without = cart.find((i) => i.memo !== '덜 맵게');
+    expect(withMemo.qty).toBe(2);
+    expect(withMemo.largeQty).toBe(2);
+    expect(without.qty).toBe(1);
+    expect(without.largeQty).toBe(0);
+  });
+
+  test("portion='all' 은 슬롯 통째 — 분리 없음", () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'all',
+    });
+    expect(next.t1.cartItems).toHaveLength(1);
+    expect(next.t1.cartItems[0].memo).toBe('덜 맵게');
+    expect(next.t1.cartItems[0].qty).toBe(3);
+    expect(next.t1.cartItems[0].largeQty).toBe(2);
+  });
+
+  test('portion 미지정(옛 호출)은 종전대로 슬롯 통째', () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+    });
+    expect(next.t1.cartItems).toHaveLength(1);
+    expect(next.t1.cartItems[0].memo).toBe('덜 맵게');
+  });
+
+  test('포션이 한 종류뿐이면 portion 을 줘도 분리하지 않음', () => {
+    const s = {
+      t1: {
+        items: [],
+        cartItems: [
+          { slotId: 's1', id: 'bibim', qty: 3, largeQty: 0, options: [] },
+        ],
+        confirmedItems: [],
+      },
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'normal',
+    });
+    expect(next.t1.cartItems).toHaveLength(1);
+    expect(next.t1.cartItems[0].qty).toBe(3);
+  });
+
+  test('보통에 메모 → 대에도 같은 메모 = normalizeSlots 가 다시 한 슬롯으로 합침', () => {
+    let next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'normal',
+    });
+    const largeSlot = next.t1.cartItems.find((i) => i.largeQty > 0);
+    next = orderReducer(next, {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: largeSlot.slotId,
+      memo: '덜 맵게',
+      portion: 'large',
+    });
+    expect(next.t1.cartItems).toHaveLength(1);
+    expect(next.t1.cartItems[0].qty).toBe(3);
+    expect(next.t1.cartItems[0].largeQty).toBe(2);
+    expect(next.t1.cartItems[0].memo).toBe('덜 맵게');
+  });
+
+  test('분리 시 포션별 조리상태 승계 (주방 진행 안 깨짐)', () => {
+    const s = {
+      t1: {
+        items: [],
+        cartItems: [
+          {
+            slotId: 's1',
+            id: 'bibim',
+            qty: 3,
+            largeQty: 2,
+            options: [],
+            cookState: 'pending',
+            cookStateNormal: 'cooking',
+            cookStateLarge: 'cooked',
+          },
+        ],
+        confirmedItems: [],
+      },
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '덜 맵게',
+      portion: 'normal',
+    });
+    const cart = next.t1.cartItems;
+    const normal = cart.find((i) => (i.largeQty || 0) === 0);
+    const large = cart.find((i) => (i.largeQty || 0) > 0);
+    expect(normal.cookState).toBe('cooking');
+    expect(large.cookState).toBe('cooked');
+    expect(normal.cookStateNormal).toBeUndefined();
+    expect(large.cookStateLarge).toBeUndefined();
+  });
+
+  test('메모 비우기도 포션 단위 — 보통만 메모 해제', () => {
+    const s = {
+      t1: {
+        items: [],
+        cartItems: [
+          {
+            slotId: 's1',
+            id: 'bibim',
+            qty: 3,
+            largeQty: 2,
+            options: [],
+            memo: '덜 맵게',
+          },
+        ],
+        confirmedItems: [],
+      },
+    };
+    const next = orderReducer(s, {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: '',
+      portion: 'normal',
+    });
+    const cart = next.t1.cartItems;
+    expect(cart).toHaveLength(2);
+    expect(cart.find((i) => (i.largeQty || 0) === 0).memo).toBe('');
+    expect(cart.find((i) => (i.largeQty || 0) > 0).memo).toBe('덜 맵게');
+  });
+
+  test('포션 분리 후에도 60자 슬라이스 유지', () => {
+    const next = orderReducer(baseState(), {
+      type: 'orders/setItemMemo',
+      tableId: 't1',
+      slotId: 's1',
+      memo: 'x'.repeat(100),
+      portion: 'large',
+    });
+    const withMemo = next.t1.cartItems.find((i) => i.memo);
+    expect(withMemo.memo).toHaveLength(60);
+  });
+});
+
+describe('orderReducer · 옵션 토글 오프도 포션 단위', () => {
+  // 보통1 + 대2 한 슬롯에 '덜 맵게' 옵션이 통째로 붙어 있는 상태에서
+  // 보통 행에서만 옵션을 떼면 대 2개는 옵션을 유지해야 한다.
+  test('보통 포션에서만 옵션 해제 → 대는 옵션 유지', () => {
+    const s = {
+      t1: {
+        items: [],
+        cartItems: [
+          {
+            slotId: 's1',
+            id: 'bibim',
+            qty: 3,
+            largeQty: 2,
+            options: ['mild'],
+          },
+        ],
+        confirmedItems: [],
+      },
+    };
+    const next = orderReducer(s, {
+      type: 'orders/splitOffWithOptionToggle',
+      tableId: 't1',
+      slotId: 's1',
+      count: 1,
+      optionId: 'mild',
+      isLarge: false,
+    });
+    const cart = next.t1.cartItems;
+    expect(cart).toHaveLength(2);
+    const normal = cart.find((i) => (i.largeQty || 0) === 0);
+    const large = cart.find((i) => (i.largeQty || 0) > 0);
+    expect(normal.qty).toBe(1);
+    expect(normal.options).toEqual([]);
+    expect(large.qty).toBe(2);
+    expect(large.options).toEqual(['mild']);
+  });
+});
+
 describe('orderReducer · setReservationInfo (예약 빠른 등록)', () => {
   test('빈 슬롯에 인원+시간 → 메뉴 없이 새 예약 order 생성', () => {
     const next = orderReducer(
