@@ -61,6 +61,60 @@ function cartFromExisting(existing) {
   return existing?.items ? existing.items.map((i) => ({ ...i })) : [];
 }
 
+// 2026-08-29: 사장님 신고 — "비빔 대2 + 보통1 인데 보통에만 넣은 '덜 맵게' 메모가
+//   대에도 붙어서 주방 주문현황에 그대로 뜬다".
+//   원인: 한 슬롯(slot)이 보통 포션(portion, 몫)과 대 포션을 qty/largeQty 로 함께
+//   담는 구조인데 memo 는 슬롯당 한 개뿐이라, 어느 행에서 눌러도 두 포션 공용이 됐다.
+//   처방: 옵션의 splitOffWithOptionToggle 과 같은 방식 — 지정한 포션만 별도 슬롯으로
+//   떼어내고 거기에만 메모를 박는다. 포션이 한 종류뿐이면 떼어낼 것이 없으므로 통째 적용.
+//   portion: 'normal' | 'large' | 'all'(또는 미지정 = 옛 호출 호환, 통째 적용).
+function applyMemoToPortion(cart, slotId, memo, portion) {
+  const source = cart.find((i) => i.slotId === slotId);
+  if (!source) return cart;
+  const lq = source.largeQty || 0;
+  const nq = source.qty - lq;
+  const wantLarge = portion === 'large';
+  const scoped = portion === 'normal' || portion === 'large';
+  // 통째 적용 — 포션 미지정 / 'all' / 애초에 포션이 한 종류뿐인 슬롯.
+  if (!scoped || lq === 0 || nq === 0) {
+    return cart.map((i) => (i.slotId === slotId ? { ...i, memo } : i));
+  }
+  const base = source.cookState || 'pending';
+  const csNormal = source.cookStateNormal || base;
+  const csLarge = source.cookStateLarge || base;
+  const takeQty = wantLarge ? lq : nq;
+  // 떼어낸 쪽 — 지정 포션만 담고 메모를 가진다. 조리상태는 그 포션 것을 승계.
+  const moved = {
+    ...source,
+    slotId: genSlotId(),
+    qty: takeQty,
+    largeQty: wantLarge ? takeQty : 0,
+    memo,
+    cookState: wantLarge ? csLarge : csNormal,
+  };
+  delete moved.cookStateNormal;
+  delete moved.cookStateLarge;
+  // 남는 쪽 — 반대 포션 + 원래 메모 유지.
+  const rest = {
+    ...source,
+    qty: source.qty - takeQty,
+    largeQty: wantLarge ? 0 : lq,
+    cookState: wantLarge ? csNormal : csLarge,
+  };
+  delete rest.cookStateNormal;
+  delete rest.cookStateLarge;
+  // 표시 순서는 보통 → 대 (주문내역 행 순서와 동일하게).
+  const replacement = (wantLarge ? [rest, moved] : [moved, rest]).filter(
+    (i) => i.qty > 0
+  );
+  const out = [];
+  for (const i of cart) {
+    if (i.slotId === slotId) out.push(...replacement);
+    else out.push(i);
+  }
+  return out;
+}
+
 export function orderReducer(state, action) {
   switch (action.type) {
     case 'orders/hydrate': {
@@ -682,14 +736,15 @@ export function orderReducer(state, action) {
     }
 
     case 'orders/setItemMemo': {
-      const { tableId, slotId, memo } = action;
+      // portion: 'normal' | 'large' | 'all' — 메모가 붙을 포션 지정.
+      //   보통/대가 한 슬롯에 섞여 있으면 지정 포션만 떼어내 메모를 박는다.
+      //   (미지정이면 옛 동작 = 슬롯 통째. 같은 메모가 되면 normalizeSlots 가 다시 합침.)
+      const { tableId, slotId, memo, portion } = action;
       const existing = state[tableId];
       if (!existing) return state;
       const cart = cartFromExisting(existing);
       const safe = (memo || '').slice(0, 60);
-      const nextCart = cart.map((i) =>
-        i.slotId === slotId ? { ...i, memo: safe } : i
-      );
+      const nextCart = applyMemoToPortion(cart, slotId, safe, portion);
       return {
         ...state,
         [tableId]: { ...existing, cartItems: normalizeSlots(nextCart) },

@@ -448,6 +448,33 @@ export default function makeStyles(scale = 1) {
     borderColor: '#d1d5db',
   },
   memoClearBtnText: { color: '#374151', fontSize: fp(13), fontWeight: '700' },
+  // 2026-08-29: 메모 적용 범위 선택 — 보통 / 대 / 전체 (보통+대 섞인 슬롯에서만 노출)
+  memoScopeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
+  },
+  memoScopeBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  memoScopeBtnActive: {
+    backgroundColor: '#2563eb', // blue-600
+    borderColor: '#1d4ed8',
+  },
+  memoScopeText: {
+    color: '#374151',
+    fontSize: fp(13),
+    fontWeight: '700',
+  },
+  memoScopeTextActive: { color: '#fff' },
   // 메모 템플릿 칩 — 자주 쓰는 문구 원클릭 (관리자에서 편집)
   memoChipsWrap: {
     width: '100%',

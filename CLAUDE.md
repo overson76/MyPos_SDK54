@@ -77,6 +77,10 @@ SafeAreaProvider
 
 - **slot**: 한 메뉴 항목의 한 묶음. 동일 (id + 옵션 + 메모 + cookState) 가 합쳐짐 (`OrderContext` 의 `normalizeSlots`). slotId 는 `genSlotId()` 로 생성.
 - **largeQty / qty**: 한 메뉴를 "대"와 "보통"으로 동시에 주문 가능. 표시는 `utils/itemSplit.js` 가 한 행씩 분리.
+- **portion(포션, 몫)**: 한 슬롯 안의 보통 몫(`qty - largeQty`) / 대 몫(`largeQty`). 옵션·메모는 슬롯당 한 벌뿐이므로,
+  **한쪽 포션에만** 붙이려면 그 포션을 새 슬롯으로 떼어낸다 — 옵션은 `orders/splitOffWithOptionToggle`,
+  메모는 `orders/setItemMemo` 의 `portion: 'normal' | 'large' | 'all'`. 같은 값이 되면 `normalizeSlots` 가 도로 합친다.
+  (2026-08-29 사장님 신고: 비빔 대2+보통1 에서 보통에만 넣은 "덜 맵게" 가 대에도 붙어 주방 주문현황에 그대로 떴다.)
 - **confirmed vs current**: 주방으로 넘어간 확정분 vs 작업 중 장바구니. 차이는 `utils/orderDiff.js` 의 `computeDiffRows` 가 added/changed/removed/unchanged 로 분류.
 - **PENDING_TABLE_ID** = `'__pending__'`: 테이블 미선택 상태에서 먼저 담는 가상 테이블.
 
