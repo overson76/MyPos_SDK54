@@ -118,8 +118,16 @@ describe('일일 상한 — 무료 한도에 닿기 전에 멈춘다', () => {
     expect(getWriteStats().tripped).toBe('day');
   });
 
-  test('일일 상한은 무료 한도 2만보다 충분히 낮다 (복구 여유분)', () => {
-    expect(PER_DAY_LIMIT).toBeLessThanOrEqual(10000);
+  // 상한은 기기마다 따로 세는데 서버 한도(2만)는 매장 전체가 공유한다.
+  // 기기 여러 대가 각자 상한까지 써도 합계가 서버 한도를 넘으면 안 된다.
+  test('기기 5대가 각자 상한까지 써도 서버 한도 2만을 안 넘는다', () => {
+    const FIRESTORE_DAILY_WRITE_QUOTA = 20000;
+    const MAX_DEVICES = 5;
+    expect(PER_DAY_LIMIT * MAX_DEVICES).toBeLessThanOrEqual(FIRESTORE_DAILY_WRITE_QUOTA);
+  });
+
+  test('그래도 정상 영업량(기기당 하루 1천 건대)보다는 넉넉하다', () => {
+    expect(PER_DAY_LIMIT).toBeGreaterThanOrEqual(3000);
   });
 
   test('날짜가 바뀌면 일일 카운터가 리셋된다', () => {
