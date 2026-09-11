@@ -60,6 +60,11 @@ import {
   subscribePerfLog,
   summarizePerfLog,
 } from '../utils/perfDiag';
+import {
+  getWriteStats,
+  subscribeWriteStats,
+  resetWriteGuard,
+} from '../utils/writeGuard';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -112,6 +117,51 @@ function PerformanceOptionsSection({ sysStyles }) {
           />
         </View>
       ))}
+    </>
+  );
+}
+
+// 2026-09-11: 클라우드 사용량 — 하루 쓰기 2만 한도를 소진해 Firestore 가 통째로
+// 차단된 사고(읽기 6.2만/5만, 쓰기 2만/2만). 쓰기 1건이 다른 기기 수만큼 읽기
+// 에코를 유발하므로 쓰기가 터지면 읽기도 같이 터진다. 사장님이 콘솔 안 들어가고도
+// "오늘 얼마나 썼나" 를 보고, 폭주 시 앱이 스스로 멈췄다는 사실을 알 수 있게 한다.
+function CloudUsageSection({ sysStyles }) {
+  const [stats, setStats] = useState(() => getWriteStats());
+  useEffect(() => subscribeWriteStats(setStats), []);
+
+  const pct = Math.min(100, Math.round((stats.today / stats.todayLimit) * 100));
+  const warn = stats.tripped || pct >= 70;
+
+  return (
+    <>
+      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>☁️ 클라우드 사용량</Text>
+      <View style={sysStyles.note}>
+        <Text style={sysStyles.noteText}>
+          • 무료 요금제는 하루 쓰기 2만 / 읽기 5만 건이 한도이고, 넘으면 서버가
+          모든 기기를 차단합니다(기기끼리 내용이 어긋남). 앱이 그 전에 스스로 멈추도록
+          자체 상한을 두었습니다. 평소 영업으로는 절대 안 걸립니다.
+        </Text>
+      </View>
+      <View style={sysStyles.row}>
+        <View style={sysStyles.rowText}>
+          <Text style={sysStyles.label}>
+            오늘 쓰기 {stats.today.toLocaleString()} / {stats.todayLimit.toLocaleString()}건 ({pct}%)
+            {warn ? '  🔴' : '  🟢'}
+          </Text>
+          <Text style={sysStyles.helper}>
+            {stats.tripped === 'day'
+              ? '자체 일일 상한에 걸려 저장이 멈췄습니다. 원인 확인 후 아래 버튼으로 해제하세요.'
+              : stats.tripped === 'minute'
+              ? '짧은 시간에 너무 많이 저장돼 잠시 멈췄습니다. 1분 뒤 자동으로 풀립니다.'
+              : `최근 1분 ${stats.perMinute}건 (분당 상한 ${stats.perMinuteLimit}건) · 이 기기 기준`}
+          </Text>
+        </View>
+        {stats.tripped ? (
+          <TouchableOpacity style={sysStyles.btnSecondary} onPress={() => resetWriteGuard()}>
+            <Text style={sysStyles.btnSecondaryText}>해제</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </>
   );
 }
@@ -388,6 +438,9 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntri
       {/* === ⚡ 성능 옵션 (2026-07-03) — 무거운 기능 온/오프. 카운터 PC 멈춤 진단용.
            기본 전부 ON = 지금까지 동작. 사장님이 하나씩 끄며 가벼워지는지 확인. === */}
       <PerformanceOptionsSection sysStyles={sysStyles} />
+
+      {/* === ☁️ 클라우드 사용량 (2026-09-11) — 한도 소진 사고 후속. === */}
+      <CloudUsageSection sysStyles={sysStyles} />
 
       {/* === 🩺 성능 진단 (2026-07-03) — 멈춤(메인스레드 블로킹) 자동 기록. === */}
       <PerfDiagSection sysStyles={sysStyles} />

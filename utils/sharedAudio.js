@@ -13,6 +13,7 @@
 import { getFirestore, getCurrentUid } from './firebase';
 import { snapExists } from './firestoreCompat';
 import { reportError } from './sentry';
+import { getFeatureFlag } from './featureFlags';
 
 const DOC_PATH_COLLECTION = 'state';
 const DOC_PATH_ID = 'audioEvent';
@@ -39,6 +40,8 @@ export function setSharedAudioStore(storeId) {
   }
   _storeId = storeId || null;
   if (!_storeId) return;
+  // 꺼져 있으면 구독도 하지 않는다 — 리스너 하나가 붙는 것만으로도 읽기를 쓴다.
+  if (!getFeatureFlag('sharedAudioSync')) return;
 
   const db = getFirestore();
   if (!db) return;
@@ -94,6 +97,10 @@ export function triggerSharedAudio(payload) {
   }
 
   // 2) Firestore 에 박아 다른 기기들 알림
+  // 2026-09-11: 소리 1번 = 쓰기 1건 + 기기 수만큼 읽기 에코. 하루 한도를 갉아먹는
+  //   상시 트래픽이라 기본 꺼둔다(관리자 → 시스템 → ⚡ 성능 옵션에서 켤 수 있음).
+  //   꺼져 있어도 위의 _localDispatch 로 본인 기기 재생은 이미 끝났다.
+  if (!getFeatureFlag('sharedAudioSync')) return;
   if (!_storeId) return; // 매장 미가입 — 본인만 재생 (위에서 끝)
   const db = getFirestore();
   if (!db) return;

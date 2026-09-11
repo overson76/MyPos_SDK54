@@ -63,7 +63,11 @@ if (typeof __DEV__ !== 'undefined' && __DEV__ && typeof window !== 'undefined') 
 // Firestore 에러 코드 → 사장님이 읽고 행동할 수 있는 한국어 한 줄.
 export function describeCloudError(code) {
   const c = String(code || '').toLowerCase();
-  if (c.includes('resource-exhausted')) return '사용 한도 초과 — 클라우드 쓰기 차단';
+  // 2026-09-11: 앱이 스스로 멈춘 경우 — 서버 거부가 아니라 자체 보호장치다.
+  if (c.includes('write-guard-tripped'))
+    return '쓰기 폭주 차단 — 앱이 스스로 멈췄습니다 (한도 보호)';
+  if (c.includes('resource-exhausted'))
+    return '사용 한도 초과 — 서버가 차단함 (한국시간 오후 4시경 자동 해제)';
   if (c.includes('permission-denied')) return '권한 오류 — 매장 연동 상태 확인 필요';
   if (c.includes('unavailable') || c.includes('deadline')) return '네트워크 불안정';
   if (c.includes('unauthenticated')) return '로그인 끊김 — 앱 재시작 필요';

@@ -24,6 +24,8 @@ import { snapExists } from './firestoreCompat';
 import { setSharedAudioStore } from './sharedAudio';
 import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
+import { sameForSync } from './deepEqual';
+import { canWrite, noteWrites } from './writeGuard';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 import { measurePerf, notePerfInfo } from './perfDiag';
 
@@ -330,7 +332,7 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.orders) return; // 첫 pull 전 push 금지 (부팅 좀비 차단)
-    if (orders === lastSyncedOrdersRef.current) return;
+    if (orders === lastSyncedOrdersRef.current) return; // 싼 가드 — 내용 비교는 아래 문서 단위에서
 
     if (ordersDebounceRef.current) clearTimeout(ordersDebounceRef.current);
     ordersDebounceRef.current = setTimeout(() => {
@@ -344,7 +346,7 @@ export function useOrderFirestoreSync({
       for (const tid of Object.keys(orders)) {
         // 1.0.51: PENDING_TABLE_ID 는 local-only. 클라우드에 미선택 cart 남기지 않음.
         if (tid === PENDING_TABLE_ID) continue;
-        if (orders[tid] !== synced[tid]) {
+        if (!sameForSync(orders[tid], synced[tid])) {
           batch.set(storeRef.collection('orders').doc(tid), orders[tid]);
           opCount++;
         }
@@ -357,7 +359,13 @@ export function useOrderFirestoreSync({
         }
       }
 
-      if (opCount > 0) {
+      if (opCount > 0 && !canWrite(opCount)) {
+        // 쓰기 폭주 차단 — 원인이 무엇이든 한도에 닿기 전에 멈춘다(writeGuard).
+        // lastSynced 는 전진시키지 않는다 → 차단이 풀리면 재시도로 자연 복구.
+        reportWriteFailure('orders.batch.write', { code: 'write-guard-tripped' });
+        scheduleRetry();
+      } else if (opCount > 0) {
+        noteWrites(opCount);
         batch
           .commit()
           .then(() => {
@@ -383,9 +391,15 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.splits) return;
-    if (splits === lastSyncedSplitsRef.current) return;
+    if (sameForSync(splits, lastSyncedSplitsRef.current)) return;
     const db = getFirestore();
     if (!db) return;
+    if (!canWrite(1)) {
+      reportWriteFailure('splits.write', { code: 'write-guard-tripped' });
+      scheduleRetry();
+      return;
+    }
+    noteWrites(1);
     db.collection('stores')
       .doc(storeId)
       .collection('state')
@@ -406,9 +420,15 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.groups) return;
-    if (groups === lastSyncedGroupsRef.current) return;
+    if (sameForSync(groups, lastSyncedGroupsRef.current)) return;
     const db = getFirestore();
     if (!db) return;
+    if (!canWrite(1)) {
+      reportWriteFailure('groups.write', { code: 'write-guard-tripped' });
+      scheduleRetry();
+      return;
+    }
+    noteWrites(1);
     db.collection('stores')
       .doc(storeId)
       .collection('state')
@@ -432,6 +452,12 @@ export function useOrderFirestoreSync({
     if (revenue.total === lastSyncedRevenueTotalRef.current) return;
     const db = getFirestore();
     if (!db) return;
+    if (!canWrite(1)) {
+      reportWriteFailure('revenue.total.write', { code: 'write-guard-tripped' });
+      scheduleRetry();
+      return;
+    }
+    noteWrites(1);
     db.collection('stores')
       .doc(storeId)
       .collection('state')
@@ -452,7 +478,7 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.history) return;
-    if (revenue.history === lastSyncedHistoryRef.current) return;
+    if (revenue.history === lastSyncedHistoryRef.current) return; // 싼 가드 — 내용 비교는 아래 문서 단위에서
 
     if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
     historyDebounceRef.current = setTimeout(() => {
@@ -470,7 +496,7 @@ export function useOrderFirestoreSync({
       const batch = db.batch();
       let opCount = 0;
       for (const [id, item] of nextById) {
-        if (syncedById.get(id) !== item) {
+        if (!sameForSync(syncedById.get(id), item)) {
           batch.set(storeRef.collection('history').doc(id), item);
           opCount++;
         }
@@ -481,7 +507,13 @@ export function useOrderFirestoreSync({
           opCount++;
         }
       }
-      if (opCount > 0) {
+      if (opCount > 0 && !canWrite(opCount)) {
+        // 쓰기 폭주 차단 — 원인이 무엇이든 한도에 닿기 전에 멈춘다(writeGuard).
+        // lastSynced 는 전진시키지 않는다 → 차단이 풀리면 재시도로 자연 복구.
+        reportWriteFailure('history.batch.write', { code: 'write-guard-tripped' });
+        scheduleRetry();
+      } else if (opCount > 0) {
+        noteWrites(opCount);
         batch
           .commit()
           .then(() => {
@@ -507,7 +539,7 @@ export function useOrderFirestoreSync({
   useEffect(() => {
     if (!storeId) return;
     if (!snapshotSeenRef.current.addresses) return; // 첫 pull 전 push 금지 — 주소록 좀비 차단 핵심
-    if (addressBook.entries === lastSyncedAddressEntriesRef.current) return;
+    if (addressBook.entries === lastSyncedAddressEntriesRef.current) return; // 싼 가드 — 내용 비교는 아래 문서 단위에서
 
     if (addressEntriesDebounceRef.current)
       clearTimeout(addressEntriesDebounceRef.current);
@@ -520,7 +552,7 @@ export function useOrderFirestoreSync({
       const batch = db.batch();
       let opCount = 0;
       for (const key of Object.keys(next)) {
-        if (next[key] !== synced[key]) {
+        if (!sameForSync(next[key], synced[key])) {
           const docId = safeDocId(key);
           batch.set(storeRef.collection('addresses').doc(docId), {
             _key: key,
@@ -543,7 +575,13 @@ export function useOrderFirestoreSync({
           opCount++;
         }
       }
-      if (opCount > 0) {
+      if (opCount > 0 && !canWrite(opCount)) {
+        // 쓰기 폭주 차단 — 원인이 무엇이든 한도에 닿기 전에 멈춘다(writeGuard).
+        // lastSynced 는 전진시키지 않는다 → 차단이 풀리면 재시도로 자연 복구.
+        reportWriteFailure('addresses.batch.write', { code: 'write-guard-tripped' });
+        scheduleRetry();
+      } else if (opCount > 0) {
+        noteWrites(opCount);
         batch
           .commit()
           .then(() => {
@@ -574,7 +612,7 @@ export function useOrderFirestoreSync({
     if (
       synced &&
       synced.todayDate === addressBook.todayDate &&
-      synced.todayDeliveredKeys === addressBook.todayDeliveredKeys &&
+      sameForSync(synced.todayDeliveredKeys, addressBook.todayDeliveredKeys) &&
       synced.autoRemember === addressBook.autoRemember
     ) {
       return;
@@ -587,6 +625,12 @@ export function useOrderFirestoreSync({
       todayDeliveredKeys: addressBook.todayDeliveredKeys,
       autoRemember: addressBook.autoRemember,
     };
+    if (!canWrite(1)) {
+      reportWriteFailure('addressBookMeta.write', { code: 'write-guard-tripped' });
+      scheduleRetry();
+      return;
+    }
+    noteWrites(1);
     db.collection('stores')
       .doc(storeId)
       .collection('state')

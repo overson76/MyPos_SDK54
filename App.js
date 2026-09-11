@@ -44,6 +44,7 @@ import AliasPromptModal from './components/AliasPromptModal';
 import ToastBanner from './components/ToastBanner';
 import CloudHealthBanner from './components/CloudHealthBanner';
 import StoreMissingBanner from './components/StoreMissingBanner';
+import { hydrateWriteGuard } from './utils/writeGuard';
 import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
 import { matchCidEntry } from './utils/addressBookLookup';
@@ -160,6 +161,9 @@ const USE_GATE = Platform.OS !== 'web' || WEB_FIREBASE_ENABLED;
 
 export default function App() {
   useEffect(() => {
+    // 쓰기 폭주 차단기의 일일 카운터 복원 — 재시작으로 0 이 되면 상한이 무의미.
+    hydrateWriteGuard();
+
     // 웹에서만 매니페스트 / theme-color / apple-touch-icon 동적 주입.
     // 네이티브 빌드에선 utils/pwaSetup.js 가 no-op.
     setupPwa();

@@ -16,10 +16,31 @@ jest.mock('../utils/persistence', () => ({
 describe('featureFlags', () => {
   beforeEach(() => _resetFeatureFlagsForTest());
 
-  test('기본값 전부 ON (현 동작 유지)', () => {
+  // 2026-09-11 이전 계약은 "전부 기본 ON(현 동작 유지)" 이었다. 클라우드 한도
+  // 소진 사고 후, 상시 트래픽을 만드는 선택 기능은 기본 OFF 로 바꾼다.
+  // 부하 진단용 토글(무거운 계산)은 여전히 기본 ON — 끄는 건 사장님 판단.
+  const DEFAULT_OFF = ['sharedAudioSync'];
+
+  test('선언된 기본값 그대로 초기화된다', () => {
     const all = getAllFeatureFlags();
     for (const f of FEATURE_FLAGS) {
-      expect(all[f.key]).toBe(true);
+      expect(all[f.key]).toBe(f.default);
+    }
+  });
+
+  test('상시 클라우드 트래픽을 만드는 기능은 기본 OFF', () => {
+    for (const key of DEFAULT_OFF) {
+      const f = FEATURE_FLAGS.find((x) => x.key === key);
+      expect(f).toBeDefined();
+      expect(f.default).toBe(false);
+      expect(getFeatureFlag(key)).toBe(false);
+    }
+  });
+
+  test('그 외 진단용 토글은 기본 ON 유지', () => {
+    for (const f of FEATURE_FLAGS) {
+      if (DEFAULT_OFF.includes(f.key)) continue;
+      expect(f.default).toBe(true);
     }
   });
 
@@ -62,7 +83,7 @@ describe('featureFlags', () => {
       expect(typeof f.key).toBe('string');
       expect(typeof f.label).toBe('string');
       expect(typeof f.help).toBe('string');
-      expect(f.default).toBe(true); // 전부 기본 ON
+      expect(typeof f.default).toBe('boolean');
     }
   });
 });
