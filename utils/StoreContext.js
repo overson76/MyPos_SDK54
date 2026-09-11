@@ -166,6 +166,8 @@ export function StoreProvider({ children }) {
         const next = {
           storeId,
           storeDocMissing,
+          // 정상 snapshot 이 왔다 = 읽기 권한 있음. 이전 거부 표식 해제.
+          accessDenied: false,
           code: store?.code || null,
           name: store?.name || null,
           ownerId: store?.ownerId || null,
@@ -187,6 +189,22 @@ export function StoreProvider({ children }) {
       },
       (err) => {
         reportError(err, { ctx: 'StoreContext.subscribeMembership', storeId });
+        // 2026-09-11: permission-denied 는 "멤버 문서가 없다" 와 결과가 전혀 다르다.
+        //   없음(위 콜백) → 강퇴로 보고 unjoined 로 내보낸다.
+        //   거부       → 규칙상 members 문서는 멤버만 읽을 수 있으므로, 이 기기의
+        //                익명 uid 가 더 이상 멤버가 아니라는 뜻이다. 그런데 이건
+        //                에러 경로라 콜백이 아예 안 불리고, 여기서 Sentry 보고만
+        //                하고 끝나서 기기는 "가입된 상태" 그대로 남아 있었다.
+        //   그 상태의 기기는 orders/history/addresses 도 전부 거부되어 서버와
+        //   완전히 단절된 채 로컬 저장본으로만 돌아간다 → 화면은 멀쩡, 다른 기기와
+        //   영영 불일치, 재시작해도 서버가 응답을 안 주니 그대로. 증상이 딱 이것이다.
+        //   (익명 uid 손실 원인: TestFlight 새 빌드 / .exe 첫 부팅 / 브라우저 저장소 초기화)
+        const code = String((err && (err.code || err.message)) || '');
+        if (code.includes('permission-denied')) {
+          setStoreInfo((prev) =>
+            prev && !prev.accessDenied ? { ...prev, accessDenied: true } : prev
+          );
+        }
       }
     );
   }, []);

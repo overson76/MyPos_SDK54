@@ -22,7 +22,9 @@ export default function StoreMissingBanner() {
   const { scale } = useResponsive();
   const styles = useMemo(() => makeStyles(scale), [scale]);
 
-  if (!storeInfo?.storeDocMissing) return null;
+  const ghost = !!storeInfo?.storeDocMissing;
+  const denied = !!storeInfo?.accessDenied;
+  if (!ghost && !denied) return null;
 
   // 유령 매장에서는 매장 이름/코드가 비어 있다 (매장 문서가 없으므로).
   // 끝 8자리라도 띄워 어느 기기가 어디에 붙어 있는지 사장님이 대조할 수 있게 한다.
@@ -32,10 +34,14 @@ export default function StoreMissingBanner() {
     <View style={styles.overlay} pointerEvents="none">
       <View style={styles.banner}>
         <Text style={styles.title} numberOfLines={1}>
-          🔴 삭제된 매장에 연결됨 (…{tail}) — 다른 기기와 합쳐지지 않습니다
+          {ghost
+            ? `🔴 삭제된 매장에 연결됨 (…${tail}) — 다른 기기와 합쳐지지 않습니다`
+            : `🔴 이 기기가 매장 접근 권한을 잃었습니다 (…${tail}) — 서버와 단절됨`}
         </Text>
         <Text style={styles.body} numberOfLines={1}>
-          관리자 → 매장 관리 → 매장 떠나기 → 살아있는 매장 코드로 재가입
+          {ghost
+            ? '관리자 → 매장 관리 → 매장 떠나기 → 살아있는 매장 코드로 재가입'
+            : '이 기기의 주문·매출이 저장되지 않습니다. 매장 떠나기 → 매장 코드로 재가입'}
         </Text>
       </View>
     </View>

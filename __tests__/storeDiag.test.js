@@ -145,3 +145,40 @@ describe('computeMemberDiagnosis — 유령 매장 (storeDocMissing)', () => {
     expect(ok2.level).toBe('ok');
   });
 });
+
+// 2026-09-11 접근 권한 상실 — 익명 uid 가 멤버에서 빠지면 members 읽기 자체가 거부된다.
+// 그 결과 멤버 목록이 영원히 비어 'pending'(불러오는 중) 에 머물렀다. 실제로는
+// 그 기기의 주문·매출이 서버에 한 건도 안 닿는 완전 단절 상태다.
+describe('computeMemberDiagnosis — 접근 권한 상실 (accessDenied)', () => {
+  const owner = { uid: 'u-owner', role: 'owner' };
+
+  test('멤버 목록이 비어도 pending 이 아니라 error 로 명확히 말한다', () => {
+    const r = computeMemberDiagnosis([], { storeId: 's1', accessDenied: true }, 'u-me');
+    expect(r.level).toBe('error');
+    expect(r.message).toContain('접근 권한');
+  });
+
+  test('저장이 안 된다는 사실과 복구 방법을 문구에 담는다', () => {
+    const r = computeMemberDiagnosis([], { accessDenied: true }, 'u-me');
+    expect(r.message).toContain('저장되지 않');
+    expect(r.message).toContain('다시 가입');
+  });
+
+  test('유령 매장이 접근 거부보다 우선 (더 근본적인 원인)', () => {
+    const r = computeMemberDiagnosis(
+      [],
+      { storeDocMissing: true, accessDenied: true },
+      'u-me'
+    );
+    expect(r.message).toContain('서버에 없습니다');
+  });
+
+  test('accessDenied 가 false 면 기존 판정 그대로', () => {
+    const r = computeMemberDiagnosis(
+      [owner],
+      { storeId: 's1', ownerId: 'u-owner', accessDenied: false },
+      'u-owner'
+    );
+    expect(r.level).toBe('ok');
+  });
+});

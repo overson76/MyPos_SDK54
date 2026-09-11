@@ -265,7 +265,17 @@ export async function deleteStore({ storeId }) {
   addBreadcrumb('store.delete.start', { storeId });
 
   // 1) 운영 데이터 서브컬렉션 — isMember 권한이라 owner 인 동안 모두 가능.
-  const dataSubcollections = ['menu', 'orders', 'history', 'addresses', 'state'];
+  // 2026-09-11: returnRounds 가 빠져 있어 매장 삭제 때마다 배달회수 차수가 남았다.
+  //   Firestore 는 부모 문서를 지워도 하위 컬렉션을 지우지 않으므로, 여기 목록에
+  //   없는 컬렉션은 영구 고아가 된다. 컬렉션을 새로 추가하면 여기도 같이 추가할 것.
+  const dataSubcollections = [
+    'menu',
+    'orders',
+    'history',
+    'addresses',
+    'state',
+    'returnRounds',
+  ];
   for (const sub of dataSubcollections) {
     try {
       const snap = await storeRef.collection(sub).get();

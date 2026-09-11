@@ -29,6 +29,19 @@ export function computeMemberDiagnosis(members, storeInfo, myUid) {
         '매장 코드로 다시 가입하세요.',
     };
   }
+  // 2026-09-11: 익명 uid 가 멤버에서 빠지면 members 문서 읽기 자체가 거부된다.
+  //   그러면 멤버 목록이 영원히 비어 아래 'pending'(불러오는 중) 에 머물렀다 —
+  //   운영자 눈에는 "로딩이 좀 느린가" 로만 보였다. 실제로는 그 기기의 주문·매출이
+  //   서버에 한 건도 안 닿는 완전 단절 상태다.
+  if (storeInfo?.accessDenied) {
+    return {
+      level: 'error',
+      message:
+        '🔴 이 기기가 매장 접근 권한을 잃었습니다 (익명 uid 가 멤버 목록에서 빠짐). ' +
+        '주문·매출이 서버에 저장되지 않고 이 기기에만 남습니다. ' +
+        '매장을 떠난 뒤 매장 코드로 다시 가입하세요.',
+    };
+  }
   if (!members || members.length === 0) {
     return { level: 'pending', message: '멤버 정보 불러오는 중...' };
   }
