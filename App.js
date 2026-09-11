@@ -43,6 +43,7 @@ import OrderTypePicker from './components/OrderTypePicker';
 import AliasPromptModal from './components/AliasPromptModal';
 import ToastBanner from './components/ToastBanner';
 import CloudHealthBanner from './components/CloudHealthBanner';
+import StoreMissingBanner from './components/StoreMissingBanner';
 import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
 import { matchCidEntry } from './utils/addressBookLookup';
@@ -514,6 +515,8 @@ function MainApp() {
       {/* 2026-06-11: 클라우드 쓰기 실패 빨간 띠 — 한도 차단/네트워크 단절 즉시 가시화.
           무료 한도 사고를 3일간 화면에서 알 수 없었던 후속 처방. */}
       <CloudHealthBanner />
+      {/* 유령 매장(삭제된 매장에 붙어 있음) 경고 — 2026-09-11 사고. */}
+      <StoreMissingBanner />
       {/* 1.0.28: UpdateBanner 제거 — quitAndInstall silent 실패 반복돼서 "다운로드 완료"
           배너가 spam. 새 버전은 관리자 → 시스템 → "🔗 GitHub Releases" 버튼으로 직접 다운로드. */}
       <PinchZoom>

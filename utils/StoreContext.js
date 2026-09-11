@@ -87,13 +87,32 @@ export function StoreProvider({ children }) {
     if (storeUnsubRef.current) storeUnsubRef.current();
     storeUnsubRef.current = storeRef.onSnapshot(
       (snap) => {
-        if (!snapExists(snap)) return;
+        if (!snapExists(snap)) {
+          // 2026-09-11 유령 매장 사고: Firestore 는 부모 문서를 지워도 하위 컬렉션
+          //   (members/orders/history/addresses) 을 같이 지우지 않는다. 규칙의
+          //   isMember() 는 members 하위만 보므로, 매장 문서가 삭제된 뒤에도 기기는
+          //   읽기·쓰기가 전부 허용돼 아무 문제 없이 계속 장사를 한다. 여기서 그냥
+          //   `return` 하고 넘어갔던 탓에 앱도 눈치채지 못했고, 기기가 서로 다른
+          //   (하나는 삭제된) 매장에 붙어 영원히 안 합쳐졌다. 재시작해도 각자
+          //   자기 매장을 정상적으로 불러올 뿐이라 증상이 "기기끼리 다름" 뿐이었다.
+          //
+          // 여기서 강제 탈퇴시키지는 않는다 — 오탐 한 번이 영업 중 전 기기를
+          //   내쫓는 사고가 된다. 표식만 남기고 화면(배너 + 매장관리 진단)에 크게
+          //   띄워 사장님이 판단하게 한다.
+          if (snap?.metadata?.fromCache) return; // 오프라인/캐시 미스는 판정 보류
+          latestStoreDataRef.current = null;
+          setStoreInfo((prev) =>
+            prev && !prev.storeDocMissing ? { ...prev, storeDocMissing: true } : prev
+          );
+          return;
+        }
         const store = snap.data();
         latestStoreDataRef.current = store; // member 콜백 폴백용 캐시
         setStoreInfo((prev) => {
           if (!prev) return prev; // 멤버 정보 들어오기 전엔 부분 업데이트 의미 없음
           return {
             ...prev,
+            storeDocMissing: false,
             code: store.code ?? prev.code,
             name: store.name ?? prev.name,
             ownerId: store.ownerId ?? prev.ownerId,
@@ -130,14 +149,23 @@ export function StoreProvider({ children }) {
         const member = snap.data();
         // storeRef.get() 실패 시 onSnapshot 캐시로 폴백 — 코드/이름 null 방지.
         let store = latestStoreDataRef.current;
+        // 2026-09-11: 매장 문서가 "읽기 실패" 인지 "서버에 정말 없음" 인지 구분한다.
+        //   없음이 확인될 때만 유령 매장 표식 — 네트워크 오류를 삭제로 오판하면 안 된다.
+        let storeDocMissing = false;
         try {
           const storeSnap = await storeRef.get();
-          if (snapExists(storeSnap)) store = storeSnap.data();
+          if (snapExists(storeSnap)) {
+            store = storeSnap.data();
+          } else if (!storeSnap?.metadata?.fromCache) {
+            storeDocMissing = true;
+            store = null;
+          }
         } catch (e) {
-          // 매장 문서 읽기 실패 — onSnapshot 캐시 또는 null 로 진행
+          // 매장 문서 읽기 실패 — onSnapshot 캐시 또는 null 로 진행 (삭제로 단정 안 함)
         }
         const next = {
           storeId,
+          storeDocMissing,
           code: store?.code || null,
           name: store?.name || null,
           ownerId: store?.ownerId || null,

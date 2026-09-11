@@ -15,6 +15,20 @@
 //   error   → 운영 차단 가능성 (재가입 또는 콘솔 확인 필요)
 //   pending → 정보 부족 (로딩 중)
 export function computeMemberDiagnosis(members, storeInfo, myUid) {
+  // 2026-09-11 유령 매장 — 다른 어떤 판정보다 우선한다.
+  //   매장 문서가 삭제돼도 하위 컬렉션(members/orders/...)은 살아남고, 보안 규칙의
+  //   isMember() 가 members 하위만 보기 때문에 읽기·쓰기가 전부 허용된다. 그래서
+  //   멤버 진단은 전부 '정상' 으로 나오면서 기기만 서로 다른 매장에 붙어 있게 된다.
+  //   멤버가 멀쩡해 보인다는 사실 자체가 이 사고를 가려줬으므로 맨 앞에 둔다.
+  if (storeInfo?.storeDocMissing) {
+    return {
+      level: 'error',
+      message:
+        '🔴 이 기기가 보는 매장이 서버에 없습니다 (삭제된 매장의 잔존 데이터). ' +
+        '주문·매출이 다른 기기와 영영 합쳐지지 않습니다. 매장을 떠난 뒤 살아있는 ' +
+        '매장 코드로 다시 가입하세요.',
+    };
+  }
   if (!members || members.length === 0) {
     return { level: 'pending', message: '멤버 정보 불러오는 중...' };
   }

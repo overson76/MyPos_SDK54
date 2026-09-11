@@ -92,3 +92,56 @@ describe('shortId', () => {
     expect(shortId(long).length).toBe(15); // 3 dots + 12 chars
   });
 });
+
+// 2026-09-11 유령 매장 — 매장 문서가 삭제됐는데 하위 컬렉션이 살아남아
+// 기기가 계속 정상 동작하던 사고. 멤버 진단이 전부 '정상' 으로 나오는 게
+// 이 사고를 가려준 핵심이었으므로, 어떤 판정보다 먼저 나와야 한다.
+describe('computeMemberDiagnosis — 유령 매장 (storeDocMissing)', () => {
+  const owner = { uid: 'u-owner', role: 'owner' };
+  const staff = { uid: 'u-staff', role: 'staff' };
+
+  test('멤버가 완벽히 정상이어도 유령 매장이면 error 로 덮는다', () => {
+    const r = computeMemberDiagnosis(
+      [owner],
+      { storeId: 's1', ownerId: 'u-owner', storeDocMissing: true },
+      'u-owner'
+    );
+    expect(r.level).toBe('error');
+    expect(r.message).toContain('서버에 없습니다');
+  });
+
+  test('직원 기기에서도 동일하게 error', () => {
+    const r = computeMemberDiagnosis(
+      [owner, staff],
+      { storeId: 's1', ownerId: 'u-owner', storeDocMissing: true },
+      'u-staff'
+    );
+    expect(r.level).toBe('error');
+  });
+
+  test('멤버 목록이 비어 있어도 pending 이 아니라 유령 판정이 우선', () => {
+    const r = computeMemberDiagnosis([], { storeDocMissing: true }, 'u-owner');
+    expect(r.level).toBe('error');
+  });
+
+  test('합쳐지지 않는다는 사실과 복구 방법을 문구에 담는다', () => {
+    const r = computeMemberDiagnosis([owner], { storeDocMissing: true }, 'u-owner');
+    expect(r.message).toContain('합쳐지지');
+    expect(r.message).toContain('다시 가입');
+  });
+
+  test('storeDocMissing 이 false/undefined 면 기존 판정 그대로', () => {
+    const ok = computeMemberDiagnosis(
+      [owner],
+      { storeId: 's1', ownerId: 'u-owner', storeDocMissing: false },
+      'u-owner'
+    );
+    expect(ok.level).toBe('ok');
+    const ok2 = computeMemberDiagnosis(
+      [owner],
+      { storeId: 's1', ownerId: 'u-owner' },
+      'u-owner'
+    );
+    expect(ok2.level).toBe('ok');
+  });
+});
