@@ -93,6 +93,15 @@ export function canWrite(opCount = 1, now = Date.now()) {
   _rollWindow(now);
   if (_tripped) return false;
   if (_windowCount + opCount > PER_MINUTE_LIMIT) {
+    // 정상적으로 큰 배치 하나(오프라인 동안 밀린 변경 일괄 push, 주소록 일괄 정리 등)는
+    // 통과시킨다. 이걸 막으면 배치가 상한보다 큰 순간 영원히 못 보내고 교착된다 —
+    // 4시 한도 리셋 직후가 정확히 그 상황이다.
+    // 루프는 "작은 배치가 쉼 없이" 오는 모양이라 이 예외로 새지 않는다:
+    // 창을 이미 쓴 뒤면(_windowCount > 0) 예외 없이 막고, 통과시킨 뒤엔 창이
+    // 포화되어 1분간 추가 쓰기가 전부 차단된다.
+    if (_windowCount === 0 && _dayCount + opCount <= PER_DAY_LIMIT) {
+      return true;
+    }
     _tripped = 'minute';
     _emit();
     return false;

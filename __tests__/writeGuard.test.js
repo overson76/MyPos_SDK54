@@ -66,8 +66,38 @@ describe('분당 폭주는 끊는다', () => {
     expect(getWriteStats().tripped).toBe(null);
   });
 
-  test('배치 하나가 통째로 상한을 넘어도 막는다', () => {
-    expect(canWrite(PER_MINUTE_LIMIT + 1, T0)).toBe(false);
+  // 교착 방지: 상한보다 큰 "정상 배치" 하나는 통과시켜야 한다.
+  // 4시 한도 리셋 직후처럼 밀린 변경을 한꺼번에 밀어낼 때, 이걸 막으면
+  // 배치가 상한보다 큰 순간 영원히 못 보내고 동기화가 멈춰버린다.
+  test('창이 비어 있으면 상한보다 큰 배치 하나는 통과 (밀린 변경 일괄 push)', () => {
+    expect(canWrite(PER_MINUTE_LIMIT + 500, T0)).toBe(true);
+  });
+
+  test('그 큰 배치를 보내고 나면 1분간 추가 쓰기는 막힌다', () => {
+    const big = PER_MINUTE_LIMIT + 500;
+    expect(canWrite(big, T0)).toBe(true);
+    noteWrites(big, T0);
+    expect(canWrite(1, T0 + 1000)).toBe(false);
+    expect(getWriteStats().tripped).toBe('minute');
+  });
+
+  test('창을 이미 쓴 뒤라면 큰 배치도 예외 없이 막는다', () => {
+    noteWrites(10, T0);
+    expect(canWrite(PER_MINUTE_LIMIT + 500, T0 + 1000)).toBe(false);
+  });
+
+  test('큰 배치 예외도 일일 상한은 못 넘는다', () => {
+    let t = T0;
+    let sent = 0;
+    while (sent < PER_DAY_LIMIT - 100) {
+      const n = Math.min(PER_MINUTE_LIMIT, PER_DAY_LIMIT - 100 - sent);
+      canWrite(n, t);
+      noteWrites(n, t);
+      sent += n;
+      t += 61000;
+    }
+    // 창은 비었지만 일일 잔여(100)보다 큰 배치 → 거부
+    expect(canWrite(500, t + 61000)).toBe(false);
   });
 });
 
