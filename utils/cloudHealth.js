@@ -57,15 +57,119 @@ export function subscribeCloudHealth(cb) {
 // 개발/진단용: 프리뷰·DevTools 콘솔에서 배너를 강제 점등/소등 (window.__cloudHealth).
 // 운영(production) 번들에서는 __DEV__ false 라 노출 안 됨.
 if (typeof __DEV__ !== 'undefined' && __DEV__ && typeof window !== 'undefined') {
-  window.__cloudHealth = { reportWriteFailure, reportWriteSuccess, getCloudHealth };
+  // 함수 선언은 호이스팅되므로 아래쪽에 정의된 리스너 함수들도 여기서 참조 가능.
+  window.__cloudHealth = {
+    reportWriteFailure,
+    reportWriteSuccess,
+    getCloudHealth,
+    reportListenerFailure,
+    reportListenerRecovered,
+    resetListenerHealth,
+    getListenerHealth,
+  };
 }
 
 // Firestore 에러 코드 → 사장님이 읽고 행동할 수 있는 한국어 한 줄.
 export function describeCloudError(code) {
   const c = String(code || '').toLowerCase();
-  if (c.includes('resource-exhausted')) return '사용 한도 초과 — 클라우드 쓰기 차단';
+  if (c.includes('resource-exhausted')) return '사용 한도 초과 — 내일 자동 해제';
   if (c.includes('permission-denied')) return '권한 오류 — 매장 연동 상태 확인 필요';
   if (c.includes('unavailable') || c.includes('deadline')) return '네트워크 불안정';
   if (c.includes('unauthenticated')) return '로그인 끊김 — 앱 재시작 필요';
   return `오류: ${String(code || 'unknown')}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 리스너(읽기) 건강 상태 — 2026-09-11 추가.
+//
+// 위의 _state 는 *쓰기* 실패만 본다. 2026-06-11 사고가 쓰기 차단이었기 때문.
+// 그런데 같은 뿌리(한도/권한)의 반대쪽 — onSnapshot 리스너 사망 — 은 감시 대상이
+// 아니었다. 리스너가 죽으면 쓰기는 멀쩡히 성공하므로 빨간 띠가 안 뜨고, 화면도
+// 마지막 값으로 멀쩡해 보인다. 기기끼리 어긋나는 것 말고는 증상이 없다.
+// subscribeResilient(utils/resilientListener.js) 가 여기에 보고한다.
+
+// ctx → { code, since, retryAt, count }. 살아있는 리스너는 들어있지 않다.
+const _down = new Map();
+
+let _listenerState = {
+  failing: false,
+  ctxs: [],
+  code: null,
+  since: null,
+  retryAt: null, // 가장 이른 재연결 예정 시각
+  count: 0,
+};
+
+const _listenerSubs = new Set();
+
+function _emitListeners() {
+  _listenerSubs.forEach((cb) => {
+    try {
+      cb(_listenerState);
+    } catch (e) {
+      // 구독자 오류가 sync 흐름을 깨면 안 됨 — 무시.
+    }
+  });
+}
+
+function _recomputeListeners() {
+  if (_down.size === 0) {
+    _listenerState = { failing: false, ctxs: [], code: null, since: null, retryAt: null, count: 0 };
+    return;
+  }
+  let since = null;
+  let retryAt = null;
+  let code = null;
+  let count = 0;
+  const ctxs = [];
+  _down.forEach((v, ctx) => {
+    ctxs.push(ctx);
+    count += v.count;
+    if (since == null || v.since < since) since = v.since;
+    if (v.retryAt != null && (retryAt == null || v.retryAt < retryAt)) retryAt = v.retryAt;
+    // 한도 초과가 섞여 있으면 그게 대표 — 사장님이 가장 먼저 알아야 할 원인.
+    if (code == null || String(v.code).includes('resource-exhausted')) code = v.code;
+  });
+  ctxs.sort();
+  _listenerState = { failing: true, ctxs, code, since, retryAt, count };
+}
+
+export function reportListenerFailure(ctx, error, retryAt) {
+  const key = ctx || 'listener';
+  const code = error && (error.code || error.message) ? error.code || error.message : 'unknown';
+  const prev = _down.get(key);
+  _down.set(key, {
+    code: String(code),
+    since: prev ? prev.since : Date.now(),
+    retryAt: retryAt != null ? retryAt : null,
+    count: prev ? prev.count + 1 : 1,
+  });
+  _recomputeListeners();
+  _emitListeners();
+}
+
+// 정상 snapshot 마다 불린다 — 끊긴 적 없으면 즉시 빠져나가야 emit 폭주가 없다.
+export function reportListenerRecovered(ctx) {
+  const key = ctx || 'listener';
+  if (!_down.has(key)) return;
+  _down.delete(key);
+  _recomputeListeners();
+  _emitListeners();
+}
+
+export function getListenerHealth() {
+  return _listenerState;
+}
+
+export function subscribeListenerHealth(cb) {
+  _listenerSubs.add(cb);
+  return () => _listenerSubs.delete(cb);
+}
+
+// 테스트/진단용 — 전체 리셋.
+export function resetListenerHealth() {
+  if (_down.size === 0) return;
+  _down.clear();
+  _recomputeListeners();
+  _emitListeners();
 }

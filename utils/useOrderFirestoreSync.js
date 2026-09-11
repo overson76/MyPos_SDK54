@@ -26,6 +26,7 @@ import { PENDING_TABLE_ID } from './orderReducer';
 import { reportWriteFailure, reportWriteSuccess } from './cloudHealth';
 import { mergeKeyedPull, mergeHistoryPull, mergeValuePull } from './syncMerge';
 import { measurePerf, notePerfInfo } from './perfDiag';
+import { subscribeResilient } from './resilientListener';
 
 const ORDERS_DEBOUNCE_MS = 300;
 const HISTORY_DEBOUNCE_MS = 500;
@@ -124,7 +125,8 @@ export function useOrderFirestoreSync({
     // 매장(storeId) 이 바뀌면 게이트를 다시 닫는다 — 새 매장의 첫 snapshot 대기.
     snapshotSeenRef.current = {};
 
-    const unsubOrders = storeRef.collection('orders').onSnapshot(
+    const unsubOrders = subscribeResilient(
+      storeRef.collection('orders'),
       (snap) => measurePerf('리스너:주문', () => {
         if (snap.docs.length >= 100) notePerfInfo(`⚠ 주문 문서 ${snap.docs.length}개`);
         // 2026-07-03: **첫 snapshot 은 무조건 전체 교체** (병합 금지) — 매장 사고 처방.
@@ -156,14 +158,14 @@ export function useOrderFirestoreSync({
         });
         lastSyncedOrdersRef.current = next;
       }),
-      (err) => reportError(err, { ctx: 'orders.listener' })
+      { ctx: 'orders.listener' }
     );
 
-    const unsubSplits = storeRef
+    const unsubSplits = subscribeResilient(
+      storeRef
       .collection('state')
-      .doc('splits')
-      .onSnapshot(
-        (snap) => {
+      .doc('splits'),
+      (snap) => {
           // 문서가 없어도 "서버 상태를 봤다" 는 사실이 중요 — 게이트는 exists 와 무관.
           // 2026-07-03: 첫 snapshot 은 전체 교체 — 부팅 hydration 옛 사본을 dirty 로
           //   오인해 부활시키던 사고 처방 (orders listener 주석 참조. 아래 4개 동일).
@@ -182,14 +184,14 @@ export function useOrderFirestoreSync({
             lastSyncedSplitsRef.current = data.value;
           }
         },
-        (err) => reportError(err, { ctx: 'splits.listener' })
-      );
+      { ctx: 'splits.listener' }
+    );
 
-    const unsubGroups = storeRef
+    const unsubGroups = subscribeResilient(
+      storeRef
       .collection('state')
-      .doc('groups')
-      .onSnapshot(
-        (snap) => {
+      .doc('groups'),
+      (snap) => {
           const isFirstSnapshot = !snapshotSeenRef.current.groups;
           snapshotSeenRef.current.groups = true;
           if (!snapExists(snap)) return;
@@ -202,14 +204,14 @@ export function useOrderFirestoreSync({
             lastSyncedGroupsRef.current = data.value;
           }
         },
-        (err) => reportError(err, { ctx: 'groups.listener' })
-      );
+      { ctx: 'groups.listener' }
+    );
 
-    const unsubRevTotal = storeRef
+    const unsubRevTotal = subscribeResilient(
+      storeRef
       .collection('state')
-      .doc('revenueTotal')
-      .onSnapshot(
-        (snap) => {
+      .doc('revenueTotal'),
+      (snap) => {
           const isFirstSnapshot = !snapshotSeenRef.current.revenueTotal;
           snapshotSeenRef.current.revenueTotal = true;
           if (!snapExists(snap)) return;
@@ -226,10 +228,11 @@ export function useOrderFirestoreSync({
             lastSyncedRevenueTotalRef.current = data.total;
           }
         },
-        (err) => reportError(err, { ctx: 'revenue.total.listener' })
-      );
+      { ctx: 'revenue.total.listener' }
+    );
 
-    const unsubHistory = storeRef.collection('history').onSnapshot(
+    const unsubHistory = subscribeResilient(
+      storeRef.collection('history'),
       (snap) => measurePerf('리스너:매출이력', () => {
         if (snap.docs.length >= 500) notePerfInfo(`⚠ 매출이력 문서 ${snap.docs.length}개`);
         const isFirstSnapshot = !snapshotSeenRef.current.history;
@@ -247,10 +250,11 @@ export function useOrderFirestoreSync({
         });
         lastSyncedHistoryRef.current = list;
       }),
-      (err) => reportError(err, { ctx: 'history.listener' })
+      { ctx: 'history.listener' }
     );
 
-    const unsubAddrEntries = storeRef.collection('addresses').onSnapshot(
+    const unsubAddrEntries = subscribeResilient(
+      storeRef.collection('addresses'),
       (snap) => measurePerf('리스너:주소록', () => {
         if (snap.docs.length >= 500) notePerfInfo(`⚠ 주소록 문서 ${snap.docs.length}개`);
         const isFirstSnapshot = !snapshotSeenRef.current.addresses;
@@ -282,14 +286,14 @@ export function useOrderFirestoreSync({
         }));
         lastSyncedAddressEntriesRef.current = entries;
       }),
-      (err) => reportError(err, { ctx: 'addresses.listener' })
+      { ctx: 'addresses.listener' }
     );
 
-    const unsubAddrMeta = storeRef
+    const unsubAddrMeta = subscribeResilient(
+      storeRef
       .collection('state')
-      .doc('addressBookMeta')
-      .onSnapshot(
-        (snap) => {
+      .doc('addressBookMeta'),
+      (snap) => {
           snapshotSeenRef.current.addressBookMeta = true;
           if (!snapExists(snap)) return;
           const meta = snap.data() || {};
@@ -312,8 +316,8 @@ export function useOrderFirestoreSync({
             autoRemember: meta.autoRemember,
           };
         },
-        (err) => reportError(err, { ctx: 'addressBookMeta.listener' })
-      );
+      { ctx: 'addressBookMeta.listener' }
+    );
 
     return () => {
       unsubOrders();

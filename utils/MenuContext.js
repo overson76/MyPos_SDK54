@@ -41,6 +41,7 @@ import {
 import { useStore } from './StoreContext';
 import { getFirestore } from './firebase';
 import { reportError } from './sentry';
+import { subscribeResilient } from './resilientListener';
 
 const MenuContext = createContext(null);
 
@@ -234,7 +235,8 @@ export function MenuProvider({ children }) {
 
     const storeRef = db.collection('stores').doc(storeId);
 
-    const unsubItems = storeRef.collection('menu').onSnapshot(
+    const unsubItems = subscribeResilient(
+      storeRef.collection('menu'),
       (snap) => {
         const docs = snap.docs.map((d) => d.data());
         // 2026-07-15: 삭제 표식(deleted: true) 문서는 목록에서 빼고, 그 id 는 default
@@ -265,10 +267,11 @@ export function MenuProvider({ children }) {
         });
         setItems(migrated);
       },
-      (err) => reportError(err, { ctx: 'menu.itemsListener' })
+      { ctx: 'menu.itemsListener' }
     );
 
-    const unsubRows = storeRef.collection('state').doc('menu_rows').onSnapshot(
+    const unsubRows = subscribeResilient(
+      storeRef.collection('state').doc('menu_rows'),
       (snap) => {
         const data = snap.data();
         if (!data?.value || typeof data.value !== 'object') return;
@@ -291,14 +294,14 @@ export function MenuProvider({ children }) {
             .catch((e) => reportError(e, { ctx: 'menu.rowsRecoverWrite' }));
         }
       },
-      (err) => reportError(err, { ctx: 'menu.rowsListener' })
+      { ctx: 'menu.rowsListener' }
     );
 
-    const unsubOpts = storeRef
+    const unsubOpts = subscribeResilient(
+      storeRef
       .collection('state')
-      .doc('editable_options')
-      .onSnapshot(
-        (snap) => {
+      .doc('editable_options'),
+      (snap) => {
           const data = snap.data();
           if (Array.isArray(data?.value)) {
             const cleaned = data.value
@@ -310,8 +313,8 @@ export function MenuProvider({ children }) {
             if (cleaned.length > 0) setEditableOptions(cleaned);
           }
         },
-        (err) => reportError(err, { ctx: 'menu.optionsListener' })
-      );
+      { ctx: 'menu.optionsListener' }
+    );
 
     return () => {
       unsubItems();

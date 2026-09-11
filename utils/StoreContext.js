@@ -21,6 +21,7 @@ import { getFirestore, getCurrentUid } from './firebase';
 import { reportError } from './sentry';
 import { snapExists } from './firestoreCompat';
 import { rememberStore } from './lastStore';
+import { subscribeResilient } from './resilientListener';
 
 const StoreContext = createContext(null);
 
@@ -85,7 +86,8 @@ export function StoreProvider({ children }) {
     // 기존엔 멤버 변경 시점에만 .get() 했어서 다른 기기가 매장 정보 변경해도
     // 다음 멤버 변경까지 못 받음. 이제 stores 문서 변경도 추적.
     if (storeUnsubRef.current) storeUnsubRef.current();
-    storeUnsubRef.current = storeRef.onSnapshot(
+    storeUnsubRef.current = subscribeResilient(
+      storeRef,
       (snap) => {
         if (!snapExists(snap)) return;
         const store = snap.data();
@@ -105,13 +107,12 @@ export function StoreProvider({ children }) {
           };
         });
       },
-      (err) => {
-        reportError(err, { ctx: 'StoreContext.subscribeStore', storeId });
-      }
+      { ctx: 'StoreContext.subscribeStore', extra: { storeId } }
     );
 
     if (memberUnsubRef.current) memberUnsubRef.current();
-    memberUnsubRef.current = memberRef.onSnapshot(
+    memberUnsubRef.current = subscribeResilient(
+      memberRef,
       async (snap) => {
         if (!snapExists(snap)) {
           // 오프라인/캐시 미스 시 fromCache=true — 서버 응답 올 때까지 현재 상태 유지.
@@ -157,9 +158,7 @@ export function StoreProvider({ children }) {
         try { await rememberStore(next); } catch {}
         setState(STORE_STATE.JOINED);
       },
-      (err) => {
-        reportError(err, { ctx: 'StoreContext.subscribeMembership', storeId });
-      }
+      { ctx: 'StoreContext.subscribeMembership', extra: { storeId } }
     );
   }, []);
 
@@ -173,7 +172,8 @@ export function StoreProvider({ children }) {
       const memberRef = db.collection('stores').doc(storeId).collection('members').doc(uid);
 
       if (requestUnsubRef.current) requestUnsubRef.current();
-      requestUnsubRef.current = memberRef.onSnapshot(
+      requestUnsubRef.current = subscribeResilient(
+        memberRef,
         async (snap) => {
           if (snapExists(snap)) {
             // 승인됨!
@@ -185,9 +185,7 @@ export function StoreProvider({ children }) {
             subscribeMembership(storeId);
           }
         },
-        (err) => {
-          reportError(err, { ctx: 'StoreContext.subscribeJoinRequest', storeId });
-        }
+        { ctx: 'StoreContext.subscribeJoinRequest', extra: { storeId } }
       );
     },
     [subscribeMembership]

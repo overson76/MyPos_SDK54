@@ -13,6 +13,7 @@
 import { getFirestore, getCurrentUid } from './firebase';
 import { snapExists } from './firestoreCompat';
 import { reportError } from './sentry';
+import { subscribeResilient } from './resilientListener';
 
 const DOC_PATH_COLLECTION = 'state';
 const DOC_PATH_ID = 'audioEvent';
@@ -47,13 +48,13 @@ export function setSharedAudioStore(storeId) {
   _lastReceivedTs = Date.now();
 
   try {
-    _unsub = db
+    _unsub = subscribeResilient(
+      db
       .collection('stores')
       .doc(_storeId)
       .collection(DOC_PATH_COLLECTION)
-      .doc(DOC_PATH_ID)
-      .onSnapshot(
-        (snap) => {
+      .doc(DOC_PATH_ID),
+      (snap) => {
           if (!snapExists(snap)) return;
           const data = snap.data();
           if (!data || typeof data.ts !== 'number') return;
@@ -72,8 +73,8 @@ export function setSharedAudioStore(storeId) {
             }
           }
         },
-        (err) => reportError(err, { ctx: 'sharedAudio.listener', storeId: _storeId })
-      );
+      { ctx: 'sharedAudio.listener', extra: { storeId: _storeId } }
+    );
   } catch (e) {
     reportError(e, { ctx: 'sharedAudio.subscribe', storeId: _storeId });
   }

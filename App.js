@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   Platform,
   StyleSheet,
@@ -43,6 +44,7 @@ import OrderTypePicker from './components/OrderTypePicker';
 import AliasPromptModal from './components/AliasPromptModal';
 import ToastBanner from './components/ToastBanner';
 import CloudHealthBanner from './components/CloudHealthBanner';
+import { retryAllListenersNow } from './utils/resilientListener';
 import { ToastProvider, useToast } from './utils/ToastContext';
 import { resolveAnyTable } from './utils/tableData';
 import { matchCidEntry } from './utils/addressBookLookup';
@@ -158,6 +160,17 @@ const WEB_FIREBASE_ENABLED = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
 const USE_GATE = Platform.OS !== 'web' || WEB_FIREBASE_ENABLED;
 
 export default function App() {
+  // 앱이 포그라운드로 돌아오면 백오프 대기 중인 리스너를 즉시 깨운다.
+  // 2026-09-11: 리스너가 죽어도 자동 재연결하게 고쳤지만(utils/resilientListener.js),
+  // 한도 초과는 최대 5분을 기다린다. 사장님이 폰을 다시 켠 그 순간이야말로 "지금 맞춰줘"
+  // 라는 신호 — 남은 대기를 건너뛴다. 자정 한도 리셋 / 결제 문제 해결 직후에도 즉효.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') retryAllListenersNow();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     // 웹에서만 매니페스트 / theme-color / apple-touch-icon 동적 주입.
     // 네이티브 빌드에선 utils/pwaSetup.js 가 no-op.
