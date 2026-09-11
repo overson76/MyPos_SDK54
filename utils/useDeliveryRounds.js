@@ -26,7 +26,6 @@ import {
   fillAllReturned,
   clearAllReturned,
 } from './returnsState';
-import { subscribeResilient } from './resilientListener';
 
 export { getRoundReturnProgress } from './returnsState';
 
@@ -40,12 +39,12 @@ export function useDeliveryRounds() {
     if (!storeId) return;
     const db = getFirestore();
     if (!db) return;
-    const unsub = subscribeResilient(
-      db
+    const unsub = db
       .collection('stores')
       .doc(storeId)
-      .collection('returnRounds'),
-      (snap) => {
+      .collection('returnRounds')
+      .onSnapshot(
+        (snap) => {
           const map = {};
           snap.forEach((doc) => {
             const d = doc.data();
@@ -53,8 +52,12 @@ export function useDeliveryRounds() {
           });
           setRounds(map);
         },
-      { ctx: 'returnRounds.listener' }
-    );
+        (err) => {
+          try {
+            reportError(err, { ctx: 'returnRounds.listener' });
+          } catch (_) {}
+        }
+      );
     return () => {
       try {
         unsub();

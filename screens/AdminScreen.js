@@ -60,8 +60,6 @@ import {
   subscribePerfLog,
   summarizePerfLog,
 } from '../utils/perfDiag';
-import { describeCloudError, getListenerHealth, subscribeListenerHealth } from '../utils/cloudHealth';
-import { retryAllListenersNow } from '../utils/resilientListener';
 
 // Electron(.exe) 환경에서 앱 종료 — 키오스크 모드에 X 버튼 없을 때 사용.
 function isElectron() {
@@ -114,53 +112,6 @@ function PerformanceOptionsSection({ sysStyles }) {
           />
         </View>
       ))}
-    </>
-  );
-}
-
-// 2026-09-11: 클라우드 연결 상태 — 실시간 구독(리스너)이 살아있는지.
-// 리스너가 죽으면 "화면은 멀쩡한데 기기끼리 안 맞는" 증상만 남아 사장님이 원인을
-// 짚을 수가 없었다. 여기서 끊긴 목록 + 원인 + 재연결 예정 시각을 그대로 보여주고,
-// 앱 재시작 대신 버튼 한 번으로 남은 대기를 건너뛴다.
-function CloudConnectionSection({ sysStyles }) {
-  const [health, setHealth] = useState(() => getListenerHealth());
-  const [woke, setWoke] = useState(null);
-  useEffect(() => subscribeListenerHealth(setHealth), []);
-
-  const onRetry = () => {
-    const n = retryAllListenersNow();
-    setWoke(n);
-    setTimeout(() => setWoke(null), 3000);
-  };
-
-  const ok = !health.failing;
-  return (
-    <>
-      <Text style={[sysStyles.sectionTitle, { marginTop: 20 }]}>🔌 클라우드 연결</Text>
-      <View style={sysStyles.note}>
-        <Text style={sysStyles.noteText}>
-          • 다른 기기의 변경(주문·메뉴·주소록)을 실시간으로 받아오는 통로입니다.
-          끊기면 내 기기 저장은 되지만 다른 기기와 내용이 어긋납니다. 끊겨도 스스로
-          다시 붙지만, 급하면 아래 "지금 재연결" 을 누르세요.
-        </Text>
-      </View>
-      <View style={sysStyles.row}>
-        <View style={sysStyles.rowText}>
-          <Text style={sysStyles.label}>
-            {ok ? '정상 — 실시간 연결됨  🟢' : `끊김 ${health.ctxs.length}건  🔴`}
-          </Text>
-          <Text style={sysStyles.helper}>
-            {ok
-              ? '모든 기기가 같은 내용을 보고 있습니다.'
-              : `${describeCloudError(health.code)} · ${health.ctxs.join(', ')}`}
-          </Text>
-        </View>
-        <TouchableOpacity style={sysStyles.btnSecondary} onPress={onRetry}>
-          <Text style={sysStyles.btnSecondaryText}>
-            {woke == null ? '🔄 지금 재연결' : woke > 0 ? `${woke}건 재연결` : '대기 없음'}
-          </Text>
-        </TouchableOpacity>
-      </View>
     </>
   );
 }
@@ -437,9 +388,6 @@ function SystemSettingsView({ onSimulateCall, onClearAllSlots, onCleanupSimEntri
       {/* === ⚡ 성능 옵션 (2026-07-03) — 무거운 기능 온/오프. 카운터 PC 멈춤 진단용.
            기본 전부 ON = 지금까지 동작. 사장님이 하나씩 끄며 가벼워지는지 확인. === */}
       <PerformanceOptionsSection sysStyles={sysStyles} />
-
-      {/* === 🔌 클라우드 연결 (2026-09-11) — 리스너 생사 + 즉시 재연결. === */}
-      <CloudConnectionSection sysStyles={sysStyles} />
 
       {/* === 🩺 성능 진단 (2026-07-03) — 멈춤(메인스레드 블로킹) 자동 기록. === */}
       <PerfDiagSection sysStyles={sysStyles} />
