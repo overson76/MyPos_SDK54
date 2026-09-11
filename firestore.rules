@@ -108,8 +108,17 @@ service cloud.firestore {
       match /addresses/{addrKey} {
         allow read, write: if isMember(storeId);
       }
-      // 매장 단위 단일 문서 상태들 (splits/groups/revenueTotal/menu_rows/editable_options/addressBookMeta).
-      // useOrderFirestoreSync.js 와 MenuContext.js 가 사용.
+      // 배달 회수 차수 (useDeliveryRounds.js).
+      // 2026-09-11: 이 규칙이 빠져 있었다. Firestore 는 명시 안 된 경로를 전부 거부하므로
+      //   returnRounds 리스너가 계속 permission-denied 로 죽고 있었는데, 리스너 에러가
+      //   Sentry 로만 갔던 탓에 1년 가까이 아무도 몰랐다. 배달회수 탭이 멀쩡해 보인 건
+      //   "진행중 차수" 가 history 로부터 로컬 계산되기 때문 — 확정 저장만 조용히 실패.
+      //   리스너 사망을 화면에 띄우자마자(f5582f6) 사장님 화면에서 바로 드러났다.
+      match /returnRounds/{roundId} {
+        allow read, write: if isMember(storeId);
+      }
+      // 매장 단위 단일 문서 상태들 (splits/groups/revenueTotal/menu_rows/editable_options/
+      // addressBookMeta/audioEvent). useOrderFirestoreSync.js / MenuContext.js / sharedAudio.js.
       match /state/{stateId} {
         allow read, write: if isMember(storeId);
       }

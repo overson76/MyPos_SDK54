@@ -54,9 +54,12 @@ export default function CloudHealthBanner() {
       {listeners.failing ? (
         <View style={[styles.banner, styles.read]}>
           <Text style={styles.text} numberOfLines={1}>
-            🔌 실시간 동기화 끊김 {listeners.ctxs.length}건 —{' '}
+            🔌 실시간 동기화 끊김 {listeners.ctxs.length}건
+            {/* 1건이면 어느 통로인지까지 띄운다 — 2026-09-11 사고 때 "권한 오류 1건" 만
+                보여서 어느 컬렉션인지 알아내려고 코드를 뒤져야 했다. */}
+            {listeners.ctxs.length === 1 ? ` (${listeners.ctxs[0]})` : ''} —{' '}
             {describeCloudError(listeners.code)} · 자동 재연결
-            {secsLeft != null ? ` ${secsLeft}초 전` : ' 중'}
+            {secsLeft != null ? ` ${secsLeft}초 후` : ' 중'}
           </Text>
         </View>
       ) : null}
